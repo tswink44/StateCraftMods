@@ -1,0 +1,268 @@
+package com.statecraft.event;
+
+import com.statecraft.StateCraft;
+import com.statecraft.core.*;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
+import net.minecraftforge.event.entity.player.AttackEntityEvent;
+import net.minecraftforge.event.entity.player.PlayerInteractEvent;
+import net.minecraftforge.event.level.BlockEvent;
+import net.minecraftforge.event.level.ExplosionEvent;
+import net.minecraftforge.eventbus.api.Event;
+import net.minecraftforge.eventbus.api.EventPriority;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
+
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
+
+/**
+ * Handles chunk protection - prevents unauthorized actions in claimed chunks
+ */
+@Mod.EventBusSubscriber(modid = StateCraft.MOD_ID)
+public class ProtectionHandler {
+
+    // Players with admin bypass enabled (ops who used /sc admin bypass)
+    private static final Set<UUID> bypassPlayers = new HashSet<>();
+
+    /**
+     * Check if a player has bypass enabled
+     */
+    public static boolean hasBypass(UUID playerId) {
+        return bypassPlayers.contains(playerId);
+    }
+
+    /**
+     * Toggle bypass for a player
+     */
+    public static boolean toggleBypass(UUID playerId) {
+        if (bypassPlayers.contains(playerId)) {
+            bypassPlayers.remove(playerId);
+            return false;
+        } else {
+            bypassPlayers.add(playerId);
+            return true;
+        }
+    }
+
+    /**
+     * Set bypass state for a player
+     */
+    public static void setBypass(UUID playerId, boolean enabled) {
+        if (enabled) {
+            bypassPlayers.add(playerId);
+        } else {
+            bypassPlayers.remove(playerId);
+        }
+    }
+
+    // ==================== Block Break Protection ====================
+
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onBlockBreak(BlockEvent.BreakEvent event) {
+        if (event.getPlayer() == null) return;
+        if (!(event.getPlayer() instanceof ServerPlayer player)) return;
+
+        if (!canInteract(player, event.getPos(), Permission.BREAK)) {
+            event.setCanceled(true);
+            sendDeniedMessage(player, "break blocks");
+        }
+    }
+
+    // ==================== Block Place Protection ====================
+
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onBlockPlace(BlockEvent.EntityPlaceEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+
+        if (!canInteract(player, event.getPos(), Permission.BUILD)) {
+            event.setCanceled(true);
+            sendDeniedMessage(player, "place blocks");
+        }
+    }
+
+    // ==================== Right-Click Block Protection ====================
+
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+
+        // Check for container access
+        if (isContainer(event)) {
+            if (!canInteract(player, event.getPos(), Permission.CONTAINER)) {
+                event.setCanceled(true);
+                event.setUseBlock(Event.Result.DENY);
+                sendDeniedMessage(player, "access containers");
+                return;
+            }
+        }
+
+        // Check for general interaction (buttons, levers, doors, etc.)
+        if (!canInteract(player, event.getPos(), Permission.INTERACT)) {
+            event.setCanceled(true);
+            event.setUseBlock(Event.Result.DENY);
+            sendDeniedMessage(player, "interact here");
+        }
+    }
+
+    // ==================== Entity Interaction Protection ====================
+
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onEntityInteract(PlayerInteractEvent.EntityInteract event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+
+        BlockPos pos = event.getTarget().blockPosition();
+
+        if (!canInteract(player, pos, Permission.INTERACT)) {
+            event.setCanceled(true);
+            sendDeniedMessage(player, "interact with entities");
+        }
+    }
+
+    // ==================== Entity Attack Protection ====================
+
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onAttackEntity(AttackEntityEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+
+        Entity target = event.getTarget();
+        BlockPos pos = target.blockPosition();
+
+        // Allow PvP based on nation relationships (future enhancement)
+        // For now, protect non-player entities (animals, item frames, etc.)
+        if (!(target instanceof Player)) {
+            if (!canInteract(player, pos, Permission.INTERACT)) {
+                event.setCanceled(true);
+                sendDeniedMessage(player, "attack entities");
+            }
+        }
+    }
+
+    // ==================== Explosion Protection ====================
+
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onExplosion(ExplosionEvent.Detonate event) {
+        if (event.getLevel().isClientSide()) return;
+
+        ChunkClaimManager manager = ChunkClaimManager.getInstance();
+
+        // Remove blocks in claimed chunks from explosion
+        event.getAffectedBlocks().removeIf(pos -> {
+            ChunkPos chunkPos = new ChunkPos(pos);
+            ClaimedChunk chunk = manager.getClaimedChunk(chunkPos, event.getLevel().dimension());
+            return chunk != null; // Remove from explosion if claimed
+        });
+
+        // Remove entities in claimed chunks from explosion damage
+        event.getAffectedEntities().removeIf(entity -> {
+            ChunkPos chunkPos = new ChunkPos(entity.blockPosition());
+            ClaimedChunk chunk = manager.getClaimedChunk(chunkPos, entity.level().dimension());
+            return chunk != null;
+        });
+    }
+
+    // ==================== Farmland Trampling Protection ====================
+
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onFarmlandTrample(BlockEvent.FarmlandTrampleEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+
+        if (!canInteract(player, event.getPos(), Permission.BUILD)) {
+            event.setCanceled(true);
+        }
+    }
+
+    // ==================== Helper Methods ====================
+
+    /**
+     * Check if a player can perform an action at a position
+     */
+    private static boolean canInteract(ServerPlayer player, BlockPos pos, Permission permission) {
+        // Bypass check first
+        if (hasBypass(player.getUUID())) {
+            return true;
+        }
+
+        ChunkClaimManager manager = ChunkClaimManager.getInstance();
+        ChunkPos chunkPos = new ChunkPos(pos);
+
+        ClaimedChunk chunk = manager.getClaimedChunk(chunkPos, player.level().dimension());
+
+        // WILDERNESS PROTECTION: Unclaimed chunks are protected
+        // Players must claim land to build
+        if (chunk == null) {
+            // Check if player is in ANY nation - nation members can interact in wilderness
+            // This encourages claiming while not completely blocking nation members
+            Nation playerNation = manager.getPlayerNation(player.getUUID());
+            if (playerNation != null) {
+                // Nation members can interact in wilderness (to claim and expand)
+                return true;
+            }
+            // Players not in a nation cannot interact in wilderness
+            return false;
+        }
+
+        // Get player's role in this chunk
+        PermissionLevel role = manager.getPlayerRoleInChunk(player.getUUID(), chunk);
+
+        // Check permission based on role
+        return chunk.hasPermission(player.getUUID(), permission, role);
+    }
+
+    /**
+     * Check if the interaction is with a container block
+     */
+    private static boolean isContainer(PlayerInteractEvent.RightClickBlock event) {
+        if (event.getLevel().isClientSide()) return false;
+
+        var state = event.getLevel().getBlockState(event.getPos());
+        var block = state.getBlock();
+        String blockName = block.getDescriptionId().toLowerCase();
+
+        // Common container blocks
+        return blockName.contains("chest") ||
+               blockName.contains("barrel") ||
+               blockName.contains("shulker") ||
+               blockName.contains("hopper") ||
+               blockName.contains("dropper") ||
+               blockName.contains("dispenser") ||
+               blockName.contains("furnace") ||
+               blockName.contains("smoker") ||
+               blockName.contains("blast") ||
+               blockName.contains("brewing") ||
+               blockName.contains("anvil") ||
+               blockName.contains("enchanting") ||
+               blockName.contains("beacon") ||
+               blockName.contains("lectern");
+    }
+
+    /**
+     * Send a permission denied message to the player
+     */
+    private static void sendDeniedMessage(ServerPlayer player, String action) {
+        ChunkClaimManager manager = ChunkClaimManager.getInstance();
+        ChunkPos chunkPos = new ChunkPos(player.blockPosition());
+        ClaimedChunk chunk = manager.getClaimedChunk(chunkPos, player.level().dimension());
+
+        if (chunk == null) {
+            // Wilderness - player needs to join a nation
+            player.displayClientMessage(
+                Component.literal("§cJoin a nation to interact here! §7Use §e/sc nation list§7 or §e/sc gui"),
+                true
+            );
+        } else {
+            // Claimed chunk - no permission
+            player.displayClientMessage(
+                Component.literal("§cYou don't have permission to " + action + " here!"),
+                true
+            );
+        }
+    }
+}
+

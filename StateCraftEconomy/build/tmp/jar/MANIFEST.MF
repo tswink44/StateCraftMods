@@ -1,0 +1,9 @@
+Manifest-Version: 1.0
+Specification-Title: StateCraft Economy
+Specification-Vendor: StateCraft
+Specification-Version: 1
+Implementation-Title: StateCraftEconomy
+Implementation-Version: 1.0.0
+Implementation-Vendor: StateCraft
+Implementation-Timestamp: 2026-02-12T19:46:44-0500
+

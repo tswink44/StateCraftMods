@@ -1,0 +1,36 @@
+modLoader="javafml"
+loaderVersion="[47,)"
+license="All Rights Reserved"
+issueTrackerURL=""
+
+[[mods]]
+modId="statecraft_economy"
+version="${file.jarVersion}"
+displayName="StateCraft Economy"
+authors="StateCraft Team"
+description='''
+An economy mod for Minecraft that integrates with StateCraft.
+Features currency items, ATM blocks, bank accounts, and nation treasuries.
+'''
+
+[[dependencies.statecraft_economy]]
+modId="forge"
+mandatory=true
+versionRange="[47,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.statecraft_economy]]
+modId="minecraft"
+mandatory=true
+versionRange="[1.20.1,1.21)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.statecraft_economy]]
+modId="statecraft"
+mandatory=false
+versionRange="[1.0,)"
+ordering="AFTER"
+side="BOTH"
+

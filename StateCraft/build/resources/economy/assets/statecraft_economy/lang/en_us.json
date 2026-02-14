@@ -1,0 +1,30 @@
+{
+  "item.statecraft_economy.bill_1": "$1 Bill",
+  "item.statecraft_economy.bill_10": "$10 Bill",
+  "item.statecraft_economy.bill_100": "$100 Bill",
+  "item.statecraft_economy.bill_1000": "$1,000 Bill",
+  "item.statecraft_economy.bill_10000": "$10,000 Bill",
+  "item.statecraft_economy.bill_100000": "$100,000 Bill",
+  "item.statecraft_economy.bill_1000000": "$1,000,000 Bill",
+  "item.statecraft_economy.bank_card": "Bank Card",
+  "block.statecraft_economy.atm": "ATM",
+
+  "gui.statecraft_economy.atm.title": "ATM",
+  "gui.statecraft_economy.atm.main_menu": "Main Menu",
+  "gui.statecraft_economy.atm.bank_select": "Select Bank",
+  "gui.statecraft_economy.atm.account_select": "Select Account",
+  "gui.statecraft_economy.atm.deposit": "Deposit",
+  "gui.statecraft_economy.atm.withdraw": "Withdraw",
+  "gui.statecraft_economy.atm.transfer": "Transfer",
+  "gui.statecraft_economy.atm.check_balance": "Check Balance",
+  "gui.statecraft_economy.atm.balance": "Balance: %s",
+  "gui.statecraft_economy.atm.back": "< Back",
+  "gui.statecraft_economy.atm.confirm": "Confirm",
+  "gui.statecraft_economy.atm.cancel": "Cancel",
+
+  "gui.statecraft_economy.account.personal": "Personal Account",
+  "gui.statecraft_economy.account.nation": "Nation Treasury",
+  "gui.statecraft_economy.account.state": "State Treasury",
+  "gui.statecraft_economy.account.city": "City Treasury"
+}
+

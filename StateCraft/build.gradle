@@ -1,0 +1,124 @@
+plugins {
+    id 'eclipse'
+    id 'idea'
+    id 'maven-publish'
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+}
+
+version = '1.0.0'
+group = 'com.statecraft'
+
+base {
+    archivesName = 'statecraft'
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+println "Java: ${System.getProperty 'java.version'}, JVM: ${System.getProperty 'java.vm.version'} (${System.getProperty 'java.vendor'}), Arch: ${System.getProperty 'os.arch'}"
+
+// Economy mod source directories (for combined dev runs)
+def economyJava = file('../StateCraftEconomy/src/main/java')
+def economyResources = file('../StateCraftEconomy/src/main/resources')
+
+// Create a source set for Economy mod
+sourceSets {
+    economy {
+        java {
+            srcDirs = [economyJava]
+        }
+        resources {
+            srcDirs = [economyResources]
+        }
+        // Economy compiles against the same classpath as main
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.runtimeClasspath
+    }
+}
+
+minecraft {
+    mappings channel: 'official', version: '1.20.1'
+
+    copyIdeResources = true
+
+    runs {
+        configureEach {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+
+            mods {
+                statecraft {
+                    source sourceSets.main
+                }
+                // Include Economy mod in all runs
+                statecraft_economy {
+                    source sourceSets.economy
+                }
+            }
+        }
+
+        client {
+            property 'forge.enabledGameTestNamespaces', 'statecraft'
+        }
+
+        server {
+            property 'forge.enabledGameTestNamespaces', 'statecraft'
+            args '--nogui'
+        }
+
+        gameTestServer {
+            property 'forge.enabledGameTestNamespaces', 'statecraft'
+        }
+
+        data {
+            workingDirectory project.file('run-data')
+            args '--mod', 'statecraft', '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
+        }
+    }
+}
+
+sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+repositories {
+    maven {
+        name = 'Minecraft Forge'
+        url = 'https://maven.minecraftforge.net/'
+    }
+}
+
+dependencies {
+    minecraft 'net.minecraftforge:forge:1.20.1-47.2.0'
+}
+
+tasks.named('jar', Jar).configure {
+    manifest {
+        attributes([
+            'Specification-Title'     : 'StateCraft',
+            'Specification-Vendor'    : 'StateCraft',
+            'Specification-Version'   : '1',
+            'Implementation-Title'    : project.name,
+            'Implementation-Version'  : project.jar.archiveVersion,
+            'Implementation-Vendor'   : 'StateCraft',
+            'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+        ])
+    }
+    finalizedBy 'reobfJar'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            artifact jar
+        }
+    }
+    repositories {
+        maven {
+            url "file://${project.projectDir}/mcmodsrepo"
+        }
+    }
+}
+

@@ -1,0 +1,26 @@
+// Root build file for StateCraft Mods workspace
+// This allows running both mods together in development
+
+plugins {
+    id 'base'
+}
+
+// Task to build both mods
+tasks.register('buildAll') {
+    dependsOn ':StateCraft:build'
+    dependsOn ':StateCraftEconomy:build'
+}
+
+// Task to run client with both mods
+tasks.register('runCombinedClient') {
+    group = 'forgegradle runs'
+    description = 'Runs the client with both StateCraft and StateCraftEconomy loaded'
+
+    doFirst {
+        println "To run both mods together, run from StateCraft directory:"
+        println "  cd StateCraft && ./gradlew runClient"
+        println ""
+        println "Make sure StateCraftEconomy is included in StateCraft's run configuration."
+    }
+}
+

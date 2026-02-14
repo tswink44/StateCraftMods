@@ -1,0 +1,47 @@
+{
+  "key.categories.statecraft": "StateCraft",
+  "key.statecraft.open_menu": "Open StateCraft Menu",
+  "key.statecraft.toggle_borders": "Toggle Chunk Borders",
+
+  "commands.statecraft.nation.created": "Nation %s created successfully!",
+  "commands.statecraft.nation.disbanded": "Nation %s has been disbanded!",
+  "commands.statecraft.nation.not_found": "Nation not found!",
+  "commands.statecraft.nation.already_in": "You are already in a nation!",
+  "commands.statecraft.nation.not_in": "You are not in a nation!",
+  "commands.statecraft.nation.no_permission": "You don't have permission to do this!",
+
+  "commands.statecraft.state.created": "State %s created successfully!",
+  "commands.statecraft.state.not_found": "State not found!",
+
+  "commands.statecraft.city.created": "City %s created successfully!",
+  "commands.statecraft.city.not_found": "City not found!",
+
+  "commands.statecraft.chunk.claimed": "Chunk claimed successfully!",
+  "commands.statecraft.chunk.unclaimed": "Chunk unclaimed successfully!",
+  "commands.statecraft.chunk.already_claimed": "This chunk is already claimed!",
+  "commands.statecraft.chunk.not_claimed": "This chunk is not claimed!",
+  "commands.statecraft.chunk.no_permission": "You don't have permission here!",
+
+  "commands.statecraft.permit.granted": "Building permit granted to %s",
+  "commands.statecraft.permit.revoked": "Building permit revoked from %s",
+  "commands.statecraft.permit.no_permission": "You don't have permission to manage permits here!",
+
+  "message.statecraft.no_break": "You don't have permission to break blocks here!",
+  "message.statecraft.no_build": "You don't have permission to build here!",
+  "message.statecraft.no_interact": "You don't have permission to interact here!",
+  "message.statecraft.no_container": "You don't have permission to access containers here!",
+
+  "message.statecraft.welcome": "Welcome back to %s!",
+
+  "gui.statecraft.title": "StateCraft",
+  "gui.statecraft.nation_info": "Nation Info",
+  "gui.statecraft.create_nation": "Create Nation",
+  "gui.statecraft.manage_claims": "Manage Claims",
+  "gui.statecraft.chunk_map": "Chunk Map",
+  "gui.statecraft.chunk_permits": "Chunk Permits",
+  "gui.statecraft.invitations": "Invitations",
+  "gui.statecraft.members": "Members",
+  "gui.statecraft.states": "States",
+  "gui.statecraft.settings": "Settings"
+}
+

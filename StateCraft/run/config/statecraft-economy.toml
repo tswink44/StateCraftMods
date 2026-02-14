@@ -1,0 +1,44 @@
+
+#StateCraft Economy Configuration
+[economy]
+	#Currency Items
+	#Format: 'modid:itemname=value'
+	#Example: 'minecraft:gold_ingot=100' means 1 gold ingot = 100 units
+	#Default currency bills:
+	currencyItems = ["statecraft_economy:bill_1=1", "statecraft_economy:bill_10=10", "statecraft_economy:bill_100=100", "statecraft_economy:bill_1000=1000", "statecraft_economy:bill_10000=10000", "statecraft_economy:bill_100000=100000", "statecraft_economy:bill_1000000=1000000"]
+	#Starting balance for new players
+	#Range: 0.0 ~ 1000000.0
+	startingBalance = 100.0
+	#Maximum transfers per day per player (0 = unlimited)
+	#Range: 0 ~ 1000
+	maxTransfersPerDay = 0
+	#Transfer fee percentage (0.0 = no fee, 0.05 = 5% fee)
+	#Range: 0.0 ~ 0.5
+	transferFeePercent = 0.0
+	#Enable daily interest on bank accounts
+	enableInterest = false
+	#Daily interest rate (0.01 = 1% per day)
+	#Range: 0.0 ~ 0.1
+	dailyInterestRate = 0.001
+	#Maximum balance a player can have (0 = unlimited)
+	#Range: 0.0 ~ 1.7976931348623157E308
+	maxBalance = 0.0
+
+#ATM Block Settings
+[atm]
+	#Whether ATM requires redstone power to function
+	requiresPower = false
+	#Range in blocks that ATM can be accessed from
+	#Range: 1 ~ 16
+	range = 5
+
+#StateCraft Integration Settings
+[statecraft]
+	#Enable nation treasury integration (requires StateCraft mod)
+	enableNationTreasury = true
+	#Default nation tax rate on transactions (0.0 = no tax)
+	#Range: 0.0 ~ 0.5
+	nationTaxRate = 0.0
+	#Allow cities to have their own treasury
+	cityCanHaveTreasury = true
+
