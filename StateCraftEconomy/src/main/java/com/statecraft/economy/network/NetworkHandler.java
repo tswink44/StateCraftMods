@@ -109,6 +109,32 @@ public class NetworkHandler {
             .consumerMainThread(ClientPacketHandler::handleSyncTransferRecipients)
             .add();
 
+        // Chunk market packets
+        CHANNEL.messageBuilder(ChunkMarketPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(ChunkMarketPacket::encode)
+            .decoder(ChunkMarketPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleChunkMarket)
+            .add();
+
+        CHANNEL.messageBuilder(SyncChunkMarketInfoPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncChunkMarketInfoPacket::encode)
+            .decoder(SyncChunkMarketInfoPacket::new)
+            .consumerMainThread(ClientPacketHandler::handleSyncChunkMarketInfo)
+            .add();
+
+        // Chunk valuation packets
+        CHANNEL.messageBuilder(RequestChunkValuationPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestChunkValuationPacket::encode)
+            .decoder(RequestChunkValuationPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestChunkValuation)
+            .add();
+
+        CHANNEL.messageBuilder(SyncChunkValuationPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncChunkValuationPacket::encode)
+            .decoder(SyncChunkValuationPacket::new)
+            .consumerMainThread(ClientPacketHandler::handleSyncChunkValuation)
+            .add();
+
         StateCraftEconomy.LOGGER.info("StateCraft Economy network packets registered");
     }
 

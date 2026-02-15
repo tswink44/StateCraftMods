@@ -22,11 +22,19 @@ public class SyncChunkInfoPacket {
     private final String stateName;
     private final String cityName;
     private final boolean canManagePermits;
+    private final boolean isOwner;
     private final List<String> permitHolders;
 
     public SyncChunkInfoPacket(int chunkX, int chunkZ, String ownershipType, String ownerName,
                                 String nationName, String stateName, String cityName,
                                 boolean canManagePermits, List<String> permitHolders) {
+        this(chunkX, chunkZ, ownershipType, ownerName, nationName, stateName, cityName,
+             canManagePermits, permitHolders, false);
+    }
+
+    public SyncChunkInfoPacket(int chunkX, int chunkZ, String ownershipType, String ownerName,
+                                String nationName, String stateName, String cityName,
+                                boolean canManagePermits, List<String> permitHolders, boolean isOwner) {
         this.chunkX = chunkX;
         this.chunkZ = chunkZ;
         this.ownershipType = ownershipType;
@@ -36,6 +44,7 @@ public class SyncChunkInfoPacket {
         this.cityName = cityName;
         this.canManagePermits = canManagePermits;
         this.permitHolders = permitHolders;
+        this.isOwner = isOwner;
     }
 
     public SyncChunkInfoPacket(FriendlyByteBuf buf) {
@@ -47,6 +56,7 @@ public class SyncChunkInfoPacket {
         this.stateName = buf.readUtf();
         this.cityName = buf.readUtf();
         this.canManagePermits = buf.readBoolean();
+        this.isOwner = buf.readBoolean();
 
         int count = buf.readInt();
         this.permitHolders = new ArrayList<>();
@@ -64,6 +74,7 @@ public class SyncChunkInfoPacket {
         buf.writeUtf(stateName);
         buf.writeUtf(cityName);
         buf.writeBoolean(canManagePermits);
+        buf.writeBoolean(isOwner);
 
         buf.writeInt(permitHolders.size());
         for (String name : permitHolders) {
@@ -82,7 +93,8 @@ public class SyncChunkInfoPacket {
                     packet.stateName,
                     packet.cityName,
                     packet.canManagePermits,
-                    packet.permitHolders
+                    packet.permitHolders,
+                    packet.isOwner
                 );
             } else if (mc.screen instanceof ClaimsManagementScreen screen) {
                 screen.updateChunkInfo(

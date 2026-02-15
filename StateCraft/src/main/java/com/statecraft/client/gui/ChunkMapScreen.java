@@ -69,6 +69,12 @@ public class ChunkMapScreen extends StateCraftScreen {
     private Button infoButton;
     private Button toggleModeButton;
 
+    // Double-click tracking
+    private long lastClickTime = 0;
+    private int lastClickChunkX = Integer.MIN_VALUE;
+    private int lastClickChunkZ = Integer.MIN_VALUE;
+    private static final long DOUBLE_CLICK_TIME = 400; // milliseconds
+
     public ChunkMapScreen() {
         super(Component.literal("Chunk Map"));
         // Initial size - will be recalculated in init() based on screen size
@@ -493,25 +499,27 @@ public class ChunkMapScreen extends StateCraftScreen {
         int[] colors = terrainCache.get(key);
 
         if (colors != null) {
-            // Render terrain pixels
-            int pixelSize = Math.max(1, cellSize / TERRAIN_RESOLUTION);
+            // Render terrain pixels - ensure we fill the entire cell
             for (int tz = 0; tz < TERRAIN_RESOLUTION; tz++) {
                 for (int tx = 0; tx < TERRAIN_RESOLUTION; tx++) {
                     int color = colors[tz * TERRAIN_RESOLUTION + tx];
-                    int px = cellX + tx * pixelSize;
-                    int py = cellY + tz * pixelSize;
-                    graphics.fill(px, py, px + pixelSize, py + pixelSize, color);
+                    // Calculate pixel bounds - ensure last pixel extends to cell edge
+                    int px1 = cellX + (tx * cellSize) / TERRAIN_RESOLUTION;
+                    int py1 = cellY + (tz * cellSize) / TERRAIN_RESOLUTION;
+                    int px2 = cellX + ((tx + 1) * cellSize) / TERRAIN_RESOLUTION;
+                    int py2 = cellY + ((tz + 1) * cellSize) / TERRAIN_RESOLUTION;
+                    graphics.fill(px1, py1, px2, py2, color);
                 }
             }
         } else {
-            // Fallback to gray if terrain not loaded
-            graphics.fill(cellX, cellY, cellX + cellSize - 1, cellY + cellSize - 1, 0xFF555555);
+            // Fallback to gray if terrain not loaded - fill entire cell
+            graphics.fill(cellX, cellY, cellX + cellSize, cellY + cellSize, 0xFF555555);
         }
 
-        // Draw semi-transparent claim overlay
+        // Draw semi-transparent claim overlay - fill entire cell
         if (data != null) {
             int overlayColor = getClaimOverlayColor(data);
-            graphics.fill(cellX, cellY, cellX + cellSize - 1, cellY + cellSize - 1, overlayColor);
+            graphics.fill(cellX, cellY, cellX + cellSize, cellY + cellSize, overlayColor);
         }
 
         // Pending action flash
@@ -520,7 +528,7 @@ public class ChunkMapScreen extends StateCraftScreen {
             if (elapsed < 2000) {
                 boolean flash = (elapsed / 200) % 2 == 0;
                 int flashColor = flash ? 0x88FFFF00 : 0x44888800;
-                graphics.fill(cellX, cellY, cellX + cellSize - 1, cellY + cellSize - 1, flashColor);
+                graphics.fill(cellX, cellY, cellX + cellSize, cellY + cellSize, flashColor);
             } else {
                 pendingActionChunkKey = -1;
             }
@@ -641,15 +649,57 @@ public class ChunkMapScreen extends StateCraftScreen {
             int clickedCellX = (int) ((mouseX - mapX) / cellSize) - halfSize;
             int clickedCellZ = (int) ((mouseY - mapY) / cellSize) - halfSize;
 
-            selectedChunkX = playerChunkX + clickedCellX;
-            selectedChunkZ = playerChunkZ + clickedCellZ;
-            hasSelection = true;
+            int clickedChunkX = playerChunkX + clickedCellX;
+            int clickedChunkZ = playerChunkZ + clickedCellZ;
+
+            long currentTime = System.currentTimeMillis();
+
+            // Check for double-click on the same chunk
+            if (clickedChunkX == lastClickChunkX && clickedChunkZ == lastClickChunkZ &&
+                currentTime - lastClickTime < DOUBLE_CLICK_TIME) {
+                // Double-click detected - perform claim/unclaim action
+                handleDoubleClick(clickedChunkX, clickedChunkZ);
+                lastClickTime = 0; // Reset to prevent triple-click
+                lastClickChunkX = Integer.MIN_VALUE;
+                lastClickChunkZ = Integer.MIN_VALUE;
+            } else {
+                // Single click - select the chunk
+                selectedChunkX = clickedChunkX;
+                selectedChunkZ = clickedChunkZ;
+                hasSelection = true;
+
+                // Track for potential double-click
+                lastClickTime = currentTime;
+                lastClickChunkX = clickedChunkX;
+                lastClickChunkZ = clickedChunkZ;
+            }
 
             updateButtonStates();
             return true;
         }
 
         return false;
+    }
+
+    private void handleDoubleClick(int chunkX, int chunkZ) {
+        if (!dataLoaded || playerNation == null) return;
+
+        ChunkData chunkData = chunkMap.get(chunkKey(chunkX, chunkZ));
+
+        if (chunkData == null) {
+            // Wilderness - claim it
+            selectedChunkX = chunkX;
+            selectedChunkZ = chunkZ;
+            hasSelection = true;
+            claimSelectedChunk();
+        } else if (chunkData.isPlayerNation && chunkData.canManage) {
+            // Our chunk that we can manage - unclaim it
+            selectedChunkX = chunkX;
+            selectedChunkZ = chunkZ;
+            hasSelection = true;
+            unclaimSelectedChunk();
+        }
+        // If it's someone else's chunk, do nothing on double-click
     }
 
     private void updateButtonStates() {

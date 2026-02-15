@@ -2,10 +2,12 @@ package com.statecraft.economy.command;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
+import com.mojang.brigadier.arguments.LongArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.statecraft.economy.StateCraftEconomy;
 import com.statecraft.economy.core.EconomyManager;
+import com.statecraft.economy.core.TaxationManager;
 import com.statecraft.economy.core.TransactionResult;
 import com.statecraft.economy.integration.StateCraftIntegration;
 import net.minecraft.commands.CommandSourceStack;
@@ -50,7 +52,20 @@ public class EconomyCommands {
                 .executes(EconomyCommands::showTop))
             .then(Commands.literal("reload")
                 .requires(src -> src.hasPermission(2))
-                .executes(EconomyCommands::reload));
+                .executes(EconomyCommands::reload))
+            .then(Commands.literal("tax")
+                .requires(src -> src.hasPermission(2))
+                .then(Commands.literal("collect")
+                    .executes(EconomyCommands::forceCollectTax))
+                .then(Commands.literal("status")
+                    .executes(EconomyCommands::showTaxStatus))
+                .then(Commands.literal("enable")
+                    .executes(ctx -> setTaxEnabled(ctx, true)))
+                .then(Commands.literal("disable")
+                    .executes(ctx -> setTaxEnabled(ctx, false)))
+                .then(Commands.literal("period")
+                    .then(Commands.argument("ticks", LongArgumentType.longArg(1200))
+                        .executes(EconomyCommands::setTaxPeriod))));
 
         // Nation treasury commands (only if StateCraft is loaded)
         if (StateCraftEconomy.isStateCraftLoaded()) {
@@ -298,6 +313,62 @@ public class EconomyCommands {
             context.getSource().sendFailure(Component.literal("Error: " + e.getMessage()));
             return 0;
         }
+    }
+
+    // ==================== Tax Commands ====================
+
+    private static int forceCollectTax(CommandContext<CommandSourceStack> context) {
+        TaxationManager taxManager = TaxationManager.getInstance();
+        context.getSource().sendSuccess(() -> Component.literal("§eForcing tax collection..."), true);
+        taxManager.forceCollectNow(context.getSource().getServer());
+        context.getSource().sendSuccess(() -> Component.literal("§aTax collection complete!"), true);
+        return 1;
+    }
+
+    private static int showTaxStatus(CommandContext<CommandSourceStack> context) {
+        TaxationManager taxManager = TaxationManager.getInstance();
+
+        boolean enabled = taxManager.isEnabled();
+        long periodTicks = taxManager.getTaxPeriodTicks();
+        long ticksUntilNext = taxManager.getTicksUntilNextCollection(context.getSource().getServer());
+
+        // Convert ticks to readable time
+        long periodSeconds = periodTicks / 20;
+        long periodMinutes = periodSeconds / 60;
+        long periodHours = periodMinutes / 60;
+
+        long nextSeconds = ticksUntilNext / 20;
+        long nextMinutes = nextSeconds / 60;
+
+        context.getSource().sendSuccess(() -> Component.literal("§6=== Tax System Status ==="), false);
+        context.getSource().sendSuccess(() -> Component.literal(
+            "§7Status: " + (enabled ? "§aEnabled" : "§cDisabled")), false);
+        context.getSource().sendSuccess(() -> Component.literal(
+            "§7Tax Period: §f" + periodHours + "h " + (periodMinutes % 60) + "m (" + periodTicks + " ticks)"), false);
+        context.getSource().sendSuccess(() -> Component.literal(
+            "§7Next Collection: §f" + nextMinutes + "m " + (nextSeconds % 60) + "s"), false);
+
+        return 1;
+    }
+
+    private static int setTaxEnabled(CommandContext<CommandSourceStack> context, boolean enabled) {
+        TaxationManager.getInstance().setEnabled(enabled);
+        String status = enabled ? "§aenabled" : "§cdisabled";
+        context.getSource().sendSuccess(() -> Component.literal("§7Tax collection " + status), true);
+        return 1;
+    }
+
+    private static int setTaxPeriod(CommandContext<CommandSourceStack> context) {
+        long ticks = LongArgumentType.getLong(context, "ticks");
+        TaxationManager.getInstance().setTaxPeriodTicks(ticks);
+
+        long seconds = ticks / 20;
+        long minutes = seconds / 60;
+        long hours = minutes / 60;
+
+        context.getSource().sendSuccess(() -> Component.literal(
+            "§aTax period set to " + hours + "h " + (minutes % 60) + "m (" + ticks + " ticks)"), true);
+        return 1;
     }
 
     private static String getPlayerName(CommandSourceStack source, java.util.UUID playerId) {

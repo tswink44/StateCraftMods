@@ -26,7 +26,7 @@ public class ChunkBorderCache {
     private static int ticksSinceRefresh = 0;
 
     // Cache radius (chunks)
-    private static final int CACHE_RADIUS = 6;
+    private static final int CACHE_RADIUS = 10;
 
     /**
      * Called every client tick to check if cache needs refresh

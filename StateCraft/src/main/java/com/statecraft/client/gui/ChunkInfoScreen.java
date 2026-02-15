@@ -1,6 +1,7 @@
 package com.statecraft.client.gui;
 
 import com.statecraft.network.NetworkHandler;
+import com.statecraft.network.packets.AbandonChunkPacket;
 import com.statecraft.network.packets.RequestChunkInfoPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -27,13 +28,16 @@ public class ChunkInfoScreen extends StateCraftScreen {
     private String stateName = "";
     private String cityName = "";
     private boolean canManagePermits = false;
+    private boolean isOwner = false; // True if current player owns this chunk
     private List<String> permitHolders = new ArrayList<>();
+
+    private Button abandonButton;
 
     public ChunkInfoScreen(int chunkX, int chunkZ) {
         super(Component.literal("Chunk Info"));
         this.chunkX = chunkX;
         this.chunkZ = chunkZ;
-        this.guiWidth = 260; this.guiHeight = 260;
+        this.guiWidth = 260; this.guiHeight = 280;
     }
 
     @Override
@@ -44,20 +48,56 @@ public class ChunkInfoScreen extends StateCraftScreen {
         NetworkHandler.sendToServer(new RequestChunkInfoPacket(chunkX, chunkZ));
 
         int centerX = this.width / 2;
-        int buttonY = guiTop + guiHeight - 55;
+        int buttonY = guiTop + guiHeight - 75;
+        int buttonWidth = 75;
+        int spacing = 80;
 
+        // Row 1: Permits | Claims | Buy/Sell
         // Manage Permits button
-        Button permitsBtn = this.addRenderableWidget(createButton(
-            guiLeft + 15, buttonY,
-            100, 20,
-            Component.literal("Manage Permits"),
+        this.addRenderableWidget(createButton(
+            guiLeft + 10, buttonY,
+            buttonWidth, 18,
+            Component.literal("Permits"),
             btn -> openPermitsScreen()
         ));
 
+        // Manage Claims button
+        this.addRenderableWidget(createButton(
+            guiLeft + 10 + buttonWidth + 5, buttonY,
+            buttonWidth, 18,
+            Component.literal("Claims"),
+            btn -> openClaimsScreen()
+        ));
+
+        // Buy/Sell button - opens chunk market screen
+        this.addRenderableWidget(createButton(
+            guiLeft + 10 + (buttonWidth + 5) * 2, buttonY,
+            buttonWidth, 18,
+            Component.literal("Buy/Sell"),
+            btn -> openMarketScreen()
+        ));
+
+        // Row 2: Valuation button (only if Economy mod is loaded)
+        this.addRenderableWidget(createButton(
+            guiLeft + 10, buttonY + 22,
+            guiWidth - 20, 18,
+            Component.literal("§e$ View Valuation"),
+            btn -> openValuationScreen()
+        ));
+
+        // Row 3: Abandon button (only visible if player owns the chunk)
+        abandonButton = this.addRenderableWidget(createButton(
+            guiLeft + 10, buttonY + 44,
+            guiWidth - 20, 18,
+            Component.literal("§cAbandon Chunk"),
+            btn -> abandonChunk()
+        ));
+        abandonButton.visible = false; // Hidden until we know if player owns it
+
         // Back button
         this.addRenderableWidget(createButton(
-            guiLeft + guiWidth - 75, buttonY,
-            60, 20,
+            centerX - 40, guiTop + guiHeight - 28,
+            80, 20,
             Component.literal("Back"),
             btn -> goBack()
         ));
@@ -143,8 +183,45 @@ public class ChunkInfoScreen extends StateCraftScreen {
         this.minecraft.setScreen(new ChunkPermitsScreen(chunkX, chunkZ));
     }
 
-    private void goBack() {
+    private void openClaimsScreen() {
         this.minecraft.setScreen(new ClaimsManagementScreen());
+    }
+
+    private void openValuationScreen() {
+        this.minecraft.setScreen(new ChunkValuationScreen(chunkX, chunkZ));
+    }
+
+    private void abandonChunk() {
+        // Send abandon request to server
+        NetworkHandler.sendToServer(new AbandonChunkPacket(chunkX, chunkZ));
+        // Return to main menu (the chunk info will be stale)
+        this.minecraft.setScreen(new MainMenuScreen());
+    }
+
+    private void openMarketScreen() {
+        // Open the chunk market screen from StateCraftEconomy mod
+        // Uses reflection to avoid hard dependency
+        try {
+            Class<?> screenClass = Class.forName("com.statecraft.economy.client.screen.ChunkMarketScreen");
+            var constructor = screenClass.getConstructor(int.class, int.class);
+            var screen = constructor.newInstance(chunkX, chunkZ);
+            this.minecraft.setScreen((net.minecraft.client.gui.screens.Screen) screen);
+        } catch (ClassNotFoundException e) {
+            // Economy mod not loaded
+            if (this.minecraft.player != null) {
+                this.minecraft.player.sendSystemMessage(
+                    net.minecraft.network.chat.Component.literal("§cStateCraft Economy mod required for chunk trading"));
+            }
+        } catch (Exception e) {
+            if (this.minecraft.player != null) {
+                this.minecraft.player.sendSystemMessage(
+                    net.minecraft.network.chat.Component.literal("§cError opening market screen"));
+            }
+        }
+    }
+
+    private void goBack() {
+        this.minecraft.setScreen(new MainMenuScreen());
     }
 
     @Override
@@ -156,6 +233,13 @@ public class ChunkInfoScreen extends StateCraftScreen {
     public void updateData(String ownershipType, String ownerName, String nationName,
                            String stateName, String cityName, boolean canManagePermits,
                            List<String> permitHolders) {
+        updateData(ownershipType, ownerName, nationName, stateName, cityName, canManagePermits, permitHolders, false);
+    }
+
+    // Overload with isOwner parameter
+    public void updateData(String ownershipType, String ownerName, String nationName,
+                           String stateName, String cityName, boolean canManagePermits,
+                           List<String> permitHolders, boolean isOwner) {
         this.ownershipType = ownershipType;
         this.ownerName = ownerName;
         this.nationName = nationName;
@@ -163,7 +247,13 @@ public class ChunkInfoScreen extends StateCraftScreen {
         this.cityName = cityName;
         this.canManagePermits = canManagePermits;
         this.permitHolders = new ArrayList<>(permitHolders);
+        this.isOwner = isOwner;
         this.dataLoaded = true;
+
+        // Show abandon button only if player owns this chunk
+        if (abandonButton != null) {
+            abandonButton.visible = isOwner;
+        }
     }
 }
 

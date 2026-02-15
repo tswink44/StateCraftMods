@@ -23,13 +23,14 @@ public class ChunkBorderRenderer {
 
     private static final float BORDER_HEIGHT = 256.0f; // Full world height
     private static final float LINE_WIDTH = 2.0f;
-    private static final int RENDER_DISTANCE = 4; // Chunks to render
+    private static final int RENDER_DISTANCE = 8; // Chunks to render (should match or be less than cache radius)
 
     // Colors (RGBA 0-1 range)
     private static final float[] COLOR_OWN = {0.2f, 0.8f, 0.2f, 0.6f};      // Green
     private static final float[] COLOR_ALLY = {0.2f, 0.6f, 1.0f, 0.6f};     // Blue
     private static final float[] COLOR_ENEMY = {1.0f, 0.2f, 0.2f, 0.6f};    // Red
     private static final float[] COLOR_OTHER = {1.0f, 0.6f, 0.0f, 0.5f};    // Orange
+    private static final float[] COLOR_UNCLAIMED = {0.5f, 0.5f, 0.5f, 0.3f}; // Gray for unclaimed chunks
 
     private static boolean enabled = true;
 
@@ -48,6 +49,7 @@ public class ChunkBorderRenderer {
         if (mc.player == null || mc.level == null) return;
 
         boolean myNationOnly = (mode == TerritoryBorderRenderer.BorderMode.MY_NATION_CHUNKS);
+        boolean showAllChunks = (mode == TerritoryBorderRenderer.BorderMode.ALL_CHUNKS);
 
         // Get camera position
         Vec3 cameraPos = event.getCamera().getPosition();
@@ -79,13 +81,24 @@ public class ChunkBorderRenderer {
                 int chunkZ = playerChunkZ + dz;
 
                 ChunkBorderCache.ChunkClaimInfo info = ChunkBorderCache.getChunkInfo(chunkX, chunkZ);
-                if (info == null || !info.isClaimed()) continue;
 
-                // Filter: if my nation only mode, skip chunks that aren't ours
-                if (myNationOnly && !info.isOwn()) continue;
+                // In ALL_CHUNKS mode, render every chunk with appropriate color
+                if (showAllChunks) {
+                    float[] color;
+                    if (info != null && info.isClaimed()) {
+                        color = getColorForChunk(info);
+                    } else {
+                        color = COLOR_UNCLAIMED; // Gray for unclaimed
+                    }
+                    renderChunkBorder(buffer, matrix, chunkX, chunkZ, color, cameraPos.y);
+                } else {
+                    // MY_NATION_CHUNKS mode - only show claimed chunks that are ours
+                    if (info == null || !info.isClaimed()) continue;
+                    if (myNationOnly && !info.isOwn()) continue;
 
-                float[] color = getColorForChunk(info);
-                renderChunkBorder(buffer, matrix, chunkX, chunkZ, color, cameraPos.y);
+                    float[] color = getColorForChunk(info);
+                    renderChunkBorder(buffer, matrix, chunkX, chunkZ, color, cameraPos.y);
+                }
             }
         }
 

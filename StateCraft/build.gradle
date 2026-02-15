@@ -61,6 +61,13 @@ minecraft {
             property 'forge.enabledGameTestNamespaces', 'statecraft'
         }
 
+        // Second client for multiplayer testing
+        client2 {
+            parent runs.client
+            workingDirectory project.file('run-client2')
+            args '--username', 'Player2'
+        }
+
         server {
             property 'forge.enabledGameTestNamespaces', 'statecraft'
             args '--nogui'

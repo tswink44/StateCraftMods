@@ -30,6 +30,8 @@ public class EconomyConfig {
     public static final ForgeConfigSpec.BooleanValue ENABLE_NATION_TREASURY;
     public static final ForgeConfigSpec.DoubleValue NATION_TAX_RATE;
     public static final ForgeConfigSpec.BooleanValue CITY_CAN_HAVE_TREASURY;
+    public static final ForgeConfigSpec.DoubleValue CHUNK_CLAIM_FEE;
+    public static final ForgeConfigSpec.BooleanValue CHUNK_CLAIM_FEE_ENABLED;
 
     static {
         BUILDER.comment("StateCraft Economy Configuration").push("economy");
@@ -91,6 +93,12 @@ public class EconomyConfig {
 
         BUILDER.comment("Allow cities to have their own treasury");
         CITY_CAN_HAVE_TREASURY = BUILDER.define("cityCanHaveTreasury", true);
+
+        BUILDER.comment("Enable chunk claim fee (cities must pay to claim chunks)");
+        CHUNK_CLAIM_FEE_ENABLED = BUILDER.define("chunkClaimFeeEnabled", true);
+
+        BUILDER.comment("Fee amount cities must pay to claim each chunk");
+        CHUNK_CLAIM_FEE = BUILDER.defineInRange("chunkClaimFee", 100.0, 0.0, 1000000.0);
 
         BUILDER.pop();
 

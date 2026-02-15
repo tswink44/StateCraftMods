@@ -19,6 +19,7 @@ public class SyncNationDataPacket {
     private final int members;
     private final boolean isLeader;
     private final boolean isAdmin;
+    private final boolean isMember; // Is the player a member of THIS nation
 
     // Detailed data
     private final boolean detailedData;
@@ -43,6 +44,7 @@ public class SyncNationDataPacket {
         this.members = 0;
         this.isLeader = false;
         this.isAdmin = false;
+        this.isMember = false;
         this.detailedData = false;
         this.states = 0;
         this.maxStates = 0;
@@ -67,6 +69,7 @@ public class SyncNationDataPacket {
         this.members = members;
         this.isLeader = isLeader;
         this.isAdmin = isAdmin;
+        this.isMember = true; // Basic constructor implies membership
         this.detailedData = false;
         this.states = 0;
         this.maxStates = 0;
@@ -83,7 +86,7 @@ public class SyncNationDataPacket {
     // Detailed data constructor
     public SyncNationDataPacket(String nationName, int states, int maxStates, int cities, int chunks,
                                  int members, long balance, boolean open, String description,
-                                 String leaderName, boolean isLeader, boolean isAdmin,
+                                 String leaderName, boolean isLeader, boolean isAdmin, boolean isMember,
                                  List<String> stateNames, List<String> allyNames, List<String> enemyNames) {
         this.inNation = true;
         this.nationName = nationName;
@@ -93,6 +96,7 @@ public class SyncNationDataPacket {
         this.members = members;
         this.isLeader = isLeader;
         this.isAdmin = isAdmin;
+        this.isMember = isMember;
         this.detailedData = true;
         this.states = states;
         this.maxStates = maxStates;
@@ -115,6 +119,7 @@ public class SyncNationDataPacket {
         this.members = buf.readInt();
         this.isLeader = buf.readBoolean();
         this.isAdmin = buf.readBoolean();
+        this.isMember = buf.readBoolean();
         this.detailedData = buf.readBoolean();
         this.states = buf.readInt();
         this.maxStates = buf.readInt();
@@ -152,6 +157,7 @@ public class SyncNationDataPacket {
         buf.writeInt(members);
         buf.writeBoolean(isLeader);
         buf.writeBoolean(isAdmin);
+        buf.writeBoolean(isMember);
         buf.writeBoolean(detailedData);
         buf.writeInt(states);
         buf.writeInt(maxStates);
@@ -186,6 +192,7 @@ public class SyncNationDataPacket {
     public int getMembers() { return members; }
     public boolean isLeader() { return isLeader; }
     public boolean isAdmin() { return isAdmin; }
+    public boolean isMember() { return isMember; }
     public boolean isDetailedData() { return detailedData; }
     public int getStates() { return states; }
     public int getMaxStates() { return maxStates; }

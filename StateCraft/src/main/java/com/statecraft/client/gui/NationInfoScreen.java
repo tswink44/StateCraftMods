@@ -1,10 +1,13 @@
 package com.statecraft.client.gui;
 
+import com.statecraft.client.FlagTextureManager;
 import com.statecraft.network.NetworkHandler;
+import com.statecraft.network.packets.LeaveCitizenshipPacket;
 import com.statecraft.network.packets.RequestNationDetailsPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -13,6 +16,8 @@ import java.util.List;
  * Screen showing detailed nation information
  */
 public class NationInfoScreen extends StateCraftScreen {
+
+    private static final int FLAG_SIZE = 24;
 
     private final String nationName;
 
@@ -29,6 +34,8 @@ public class NationInfoScreen extends StateCraftScreen {
     private String leaderName = "Unknown";
     private boolean isLeader = false;
     private boolean isAdmin = false;
+    private boolean isMember = false;
+    private String flagUrl = "";
     private List<String> stateNames = new ArrayList<>();
     private List<String> allyNames = new ArrayList<>();
     private List<String> enemyNames = new ArrayList<>();
@@ -39,6 +46,10 @@ public class NationInfoScreen extends StateCraftScreen {
         this.guiWidth = 300; this.guiHeight = 240;
     }
 
+    private Button settingsButton;
+    private Button mailButton;
+    private Button leaveButton;
+
     @Override
     protected void init() {
         super.init();
@@ -47,33 +58,50 @@ public class NationInfoScreen extends StateCraftScreen {
         NetworkHandler.sendToServer(new RequestNationDetailsPacket(nationName));
 
         int buttonY = guiTop + guiHeight - 30;
-        int buttonSpacing = 65;
-        int startX = guiLeft + 15;
+        int buttonSpacing = 45;
+        int startX = guiLeft + 8;
 
         // Members button
         this.addRenderableWidget(createButton(
-            startX, buttonY, 60, 20,
+            startX, buttonY, 44, 20,
             Component.literal("Members"),
             btn -> openMembersScreen()
         ));
 
         // States button
         this.addRenderableWidget(createButton(
-            startX + buttonSpacing, buttonY, 60, 20,
+            startX + buttonSpacing, buttonY, 44, 20,
             Component.literal("States"),
             btn -> openStatesScreen()
         ));
 
-        // Settings button (admin only)
-        Button settingsBtn = this.addRenderableWidget(createButton(
-            startX + buttonSpacing * 2, buttonY, 60, 20,
+        // Mailbox button (admin only) - hidden until we know permissions
+        mailButton = this.addRenderableWidget(createButton(
+            startX + buttonSpacing * 2, buttonY, 44, 20,
+            Component.literal("§eMail"),
+            btn -> openMailboxScreen()
+        ));
+        mailButton.visible = false;
+
+        // Settings button (admin only) - hidden until we know permissions
+        settingsButton = this.addRenderableWidget(createButton(
+            startX + buttonSpacing * 3, buttonY, 44, 20,
             Component.literal("Settings"),
             btn -> openSettingsScreen()
         ));
+        settingsButton.visible = false;
+
+        // Leave button (hidden for leaders) - hidden until we know permissions
+        leaveButton = this.addRenderableWidget(createButton(
+            startX + buttonSpacing * 4, buttonY, 44, 20,
+            Component.literal("§cLeave"),
+            btn -> leaveNation()
+        ));
+        leaveButton.visible = false;
 
         // Back button
         this.addRenderableWidget(createButton(
-            guiLeft + guiWidth - 75, buttonY, 60, 20,
+            guiLeft + guiWidth - 50, buttonY, 42, 20,
             Component.literal("Back"),
             btn -> goBack()
         ));
@@ -81,6 +109,9 @@ public class NationInfoScreen extends StateCraftScreen {
 
     @Override
     protected void renderContent(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        // Render flag in top-left corner above the title bar
+        renderFlag(graphics);
+
         // Divider under title
         renderDivider(graphics, guiLeft + 10, guiTop + 22, guiWidth - 20);
 
@@ -188,8 +219,45 @@ public class NationInfoScreen extends StateCraftScreen {
         this.minecraft.setScreen(new NationSettingsScreen(nationName));
     }
 
+    private void openMailboxScreen() {
+        this.minecraft.setScreen(new GovMailboxScreen(GovMailboxScreen.EntityType.NATION, nationName, ""));
+    }
+
+    private void leaveNation() {
+        // Send leave request to server
+        NetworkHandler.sendToServer(LeaveCitizenshipPacket.leaveNation(nationName));
+        // Return to nations list
+        this.minecraft.setScreen(new NationsListScreen());
+    }
+
     private void goBack() {
-        this.minecraft.setScreen(new MainMenuScreen());
+        this.minecraft.setScreen(new NationsListScreen());
+    }
+
+    private void renderFlag(GuiGraphics graphics) {
+        int flagX = guiLeft - FLAG_SIZE - 4;
+        int flagY = guiTop - FLAG_SIZE - 4;
+
+        // Draw flag border/background
+        graphics.fill(flagX - 2, flagY - 2, flagX + FLAG_SIZE + 2, flagY + FLAG_SIZE + 2, 0xFF333333);
+        graphics.fill(flagX - 1, flagY - 1, flagX + FLAG_SIZE + 1, flagY + FLAG_SIZE + 1, 0xFF1A1A2E);
+
+        if (flagUrl != null && !flagUrl.isEmpty()) {
+            ResourceLocation texture = FlagTextureManager.getInstance().getFlagTexture(flagUrl);
+            if (texture != null) {
+                // Draw the flag texture
+                graphics.blit(texture, flagX, flagY, 0, 0, FLAG_SIZE, FLAG_SIZE, FLAG_SIZE, FLAG_SIZE);
+            } else if (FlagTextureManager.getInstance().isLoading(flagUrl)) {
+                // Show loading indicator
+                graphics.drawCenteredString(this.font, "...", flagX + FLAG_SIZE / 2, flagY + FLAG_SIZE / 2 - 4, 0xFF888888);
+            } else {
+                // No flag or failed to load
+                graphics.drawCenteredString(this.font, "?", flagX + FLAG_SIZE / 2, flagY + FLAG_SIZE / 2 - 4, 0xFF666666);
+            }
+        } else {
+            // No flag URL set - show placeholder
+            graphics.drawCenteredString(this.font, "N", flagX + FLAG_SIZE / 2, flagY + FLAG_SIZE / 2 - 4, 0xFF4A90D9);
+        }
     }
 
     @Override
@@ -200,8 +268,9 @@ public class NationInfoScreen extends StateCraftScreen {
     // Called by network handler when data is received
     public void updateData(int states, int maxStates, int cities, int chunks, int members,
                            long balance, boolean open, String desc, String leader,
-                           boolean isLeader, boolean isAdmin,
-                           List<String> stateNames, List<String> allies, List<String> enemies) {
+                           boolean isLeader, boolean isAdmin, boolean isMember,
+                           List<String> stateNames, List<String> allies, List<String> enemies,
+                           String flagUrl) {
         this.stateCount = states;
         this.maxStates = maxStates;
         this.cityCount = cities;
@@ -213,10 +282,52 @@ public class NationInfoScreen extends StateCraftScreen {
         this.leaderName = leader;
         this.isLeader = isLeader;
         this.isAdmin = isAdmin;
+        this.isMember = isMember;
         this.stateNames = stateNames;
         this.allyNames = allies;
         this.enemyNames = enemies;
+        this.flagUrl = flagUrl != null ? flagUrl : "";
         this.dataLoaded = true;
+
+        // Show settings and mail buttons only for admins
+        if (settingsButton != null) {
+            settingsButton.visible = isAdmin;
+        }
+        if (mailButton != null) {
+            mailButton.visible = isAdmin;
+        }
+        // Show leave button only for members who are not the leader
+        if (leaveButton != null) {
+            leaveButton.visible = isMember && !isLeader;
+        }
+    }
+
+    // Overload for backward compatibility (without isMember)
+    public void updateData(int states, int maxStates, int cities, int chunks, int members,
+                           long balance, boolean open, String desc, String leader,
+                           boolean isLeader, boolean isAdmin,
+                           List<String> stateNames, List<String> allies, List<String> enemies,
+                           String flagUrl) {
+        updateData(states, maxStates, cities, chunks, members, balance, open, desc, leader,
+                   isLeader, isAdmin, isAdmin, stateNames, allies, enemies, flagUrl);
+    }
+
+    // Overload for backward compatibility (without flagUrl)
+    public void updateData(int states, int maxStates, int cities, int chunks, int members,
+                           long balance, boolean open, String desc, String leader,
+                           boolean isLeader, boolean isAdmin, boolean isMember,
+                           List<String> stateNames, List<String> allies, List<String> enemies) {
+        updateData(states, maxStates, cities, chunks, members, balance, open, desc, leader,
+                   isLeader, isAdmin, isMember, stateNames, allies, enemies, "");
+    }
+
+    // Overload for backward compatibility (without isMember or flagUrl)
+    public void updateData(int states, int maxStates, int cities, int chunks, int members,
+                           long balance, boolean open, String desc, String leader,
+                           boolean isLeader, boolean isAdmin,
+                           List<String> stateNames, List<String> allies, List<String> enemies) {
+        updateData(states, maxStates, cities, chunks, members, balance, open, desc, leader,
+                   isLeader, isAdmin, isAdmin, stateNames, allies, enemies, "");
     }
 }
 

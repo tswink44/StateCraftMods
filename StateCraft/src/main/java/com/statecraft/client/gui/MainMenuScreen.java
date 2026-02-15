@@ -41,103 +41,110 @@ public class MainMenuScreen extends StateCraftScreen {
     private Button mapButton;
     private Button invitesButton;
 
+    // Compact menu items (for custom rendering)
+    private List<MenuEntry> menuEntries = new ArrayList<>();
+
     public MainMenuScreen() {
-        super(Component.literal("StateCraft Menu"));
-        this.guiWidth = 300; this.guiHeight = 280;
+        super(Component.literal("StateCraft"));
+        this.guiWidth = 260;
+        this.guiHeight = 200;
+    }
+
+    @Override
+    protected boolean shouldRenderTitle() {
+        return false; // We render our own title in renderContent
     }
 
     @Override
     protected void init() {
         super.init();
 
-        int buttonWidth = guiWidth - 40;
-        int buttonHeight = 20;
-        int startX = guiLeft + 20;
-        int startY = guiTop + 30;
-        int spacing = 24;
+        // Compact dimensions
+        int buttonWidth = guiWidth - 50;  // Leave room for arrow button
+        int arrowBtnWidth = 22;
+        int buttonHeight = 14;
+        int startX = guiLeft + 10;
+        int arrowX = guiLeft + guiWidth - 32;
+        int startY = guiTop + 24;
+        int spacing = 18;
 
         // Request data from server
         requestData();
 
+        menuEntries.clear();
+
         // === Personal Section ===
-        // My Profile button
-        profileButton = this.addRenderableWidget(createMenuButton(
-            startX, startY,
-            buttonWidth, buttonHeight,
-            "My Profile",
+        int row = 0;
+
+        // My Profile
+        menuEntries.add(new MenuEntry("My Profile", startY + spacing * row, true));
+        profileButton = this.addRenderableWidget(createCompactArrowButton(
+            arrowX, startY + spacing * row, arrowBtnWidth, buttonHeight,
             btn -> openProfileScreen()
         ));
+        row++;
 
-        // Mailbox (Invitations)
-        mailboxButton = this.addRenderableWidget(createMenuButton(
-            startX, startY + spacing,
-            buttonWidth, buttonHeight,
-            "My Mail",
-            btn -> openInvitesScreen()
+        // My Mail
+        menuEntries.add(new MenuEntry("My Mail", startY + spacing * row, true));
+        mailboxButton = this.addRenderableWidget(createCompactArrowButton(
+            arrowX, startY + spacing * row, arrowBtnWidth, buttonHeight,
+            btn -> openMailboxScreen()
         ));
+        row++;
 
-        // My Company (placeholder for future)
-        companyButton = this.addRenderableWidget(createMenuButton(
-            startX, startY + spacing * 2,
-            buttonWidth, buttonHeight,
-            "My Company",
-            btn -> {} // Placeholder
+        // My Company
+        menuEntries.add(new MenuEntry("My Company", startY + spacing * row, false));
+        companyButton = this.addRenderableWidget(createCompactArrowButton(
+            arrowX, startY + spacing * row, arrowBtnWidth, buttonHeight,
+            btn -> {}
         ));
-        companyButton.active = false; // Not implemented yet
+        companyButton.active = false;
+        row++;
 
-        // === Territory Section ===
-        int sectionY = startY + spacing * 3 + 10;
+        // === Territory Section (with gap) ===
+        row++; // Add a small gap
 
-        // Chunk Info
-        chunkButton = this.addRenderableWidget(createMenuButton(
-            startX, sectionY,
-            buttonWidth, buttonHeight,
-            "Chunk",
+        // Chunk
+        menuEntries.add(new MenuEntry("Chunk", startY + spacing * row, true));
+        chunkButton = this.addRenderableWidget(createCompactArrowButton(
+            arrowX, startY + spacing * row, arrowBtnWidth, buttonHeight,
             btn -> openChunkScreen()
         ));
+        row++;
 
-        // City Info
-        cityButton = this.addRenderableWidget(createMenuButton(
-            startX, sectionY + spacing,
-            buttonWidth, buttonHeight,
-            "City",
+        // City
+        menuEntries.add(new MenuEntry("City", startY + spacing * row, true));
+        cityButton = this.addRenderableWidget(createCompactArrowButton(
+            arrowX, startY + spacing * row, arrowBtnWidth, buttonHeight,
             btn -> openCityScreen()
         ));
+        row++;
 
-        // State Info
-        stateButton = this.addRenderableWidget(createMenuButton(
-            startX, sectionY + spacing * 2,
-            buttonWidth, buttonHeight,
-            "State",
+        // State
+        menuEntries.add(new MenuEntry("State", startY + spacing * row, true));
+        stateButton = this.addRenderableWidget(createCompactArrowButton(
+            arrowX, startY + spacing * row, arrowBtnWidth, buttonHeight,
             btn -> openStateScreen()
         ));
+        row++;
 
-        // Nation Info
-        nationButton = this.addRenderableWidget(createMenuButton(
-            startX, sectionY + spacing * 3,
-            buttonWidth, buttonHeight,
-            "Nation",
+        // Nation
+        menuEntries.add(new MenuEntry("Nation", startY + spacing * row, true));
+        nationButton = this.addRenderableWidget(createCompactArrowButton(
+            arrowX, startY + spacing * row, arrowBtnWidth, buttonHeight,
             btn -> openNationScreen()
         ));
+        row++;
+    }
 
-        // === Additional Tools ===
-        int toolsY = sectionY + spacing * 4 + 10;
-
-        // Chunk Map
-        mapButton = this.addRenderableWidget(createMenuButton(
-            startX, toolsY,
-            buttonWidth, buttonHeight,
-            "Chunk Map",
-            btn -> openMapScreen()
-        ));
-
-        // Close button
-        this.addRenderableWidget(createButton(
-            this.width / 2 - 40, guiTop + guiHeight - 28,
-            80, 20,
-            Component.literal("Close"),
-            btn -> this.onClose()
-        ));
+    /**
+     * Create a compact arrow button (small square with arrow icon)
+     */
+    private Button createCompactArrowButton(int x, int y, int width, int height, Button.OnPress onPress) {
+        return Button.builder(Component.literal("→"), onPress)
+            .pos(x, y)
+            .size(width, height)
+            .build();
     }
 
     /**
@@ -157,27 +164,35 @@ public class MainMenuScreen extends StateCraftScreen {
 
     @Override
     protected void renderContent(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        // Render section headers
-        int leftMargin = guiLeft + 15;
-        int startY = guiTop + 30;
-        int spacing = 24;
+        int startX = guiLeft + 10;
+        int spacing = 18;
 
-        // Divider under title
-        renderDivider(graphics, guiLeft + 10, guiTop + 22, guiWidth - 20);
+        // Render each menu entry as a row with gray background
+        for (MenuEntry entry : menuEntries) {
+            // Row background
+            int rowColor = entry.active ? 0xAA808080 : 0xAA606060;
+            graphics.fill(startX, entry.y, guiLeft + guiWidth - 10, entry.y + 14, rowColor);
 
-        // Personal section label (rendered above the buttons area)
-        // The buttons themselves serve as the interface
+            // Border around row
+            graphics.fill(startX, entry.y, guiLeft + guiWidth - 10, entry.y + 1, 0xFF505050);
+            graphics.fill(startX, entry.y + 13, guiLeft + guiWidth - 10, entry.y + 14, 0xFF404040);
 
-        // Territory section divider
-        int sectionY = startY + spacing * 3 + 5;
-        renderDivider(graphics, guiLeft + 10, sectionY - 4, guiWidth - 20);
+            // Text (left-aligned)
+            int textColor = entry.active ? 0xFFFFFFFF : 0xFFAAAAAA;
+            graphics.drawString(this.font, entry.text, startX + 4, entry.y + 3, textColor);
+        }
 
-        // Tools section divider
-        int toolsY = sectionY + spacing * 4 + 5;
-        renderDivider(graphics, guiLeft + 10, toolsY - 4, guiWidth - 20);
+        // Render title row with special styling
+        graphics.fill(startX, guiTop + 6, guiLeft + guiWidth - 10, guiTop + 20, 0xAA808080);
+        graphics.fill(startX, guiTop + 6, guiLeft + guiWidth - 10, guiTop + 7, 0xFF505050);
+        graphics.fill(startX, guiTop + 19, guiLeft + guiWidth - 10, guiTop + 20, 0xFF404040);
+        graphics.drawString(this.font, "StateCraft", startX + 4, guiTop + 9, 0xFFFFFFFF);
 
-        // Update button labels based on context
-        updateButtonLabels();
+        // Title icon placeholder (SC box)
+        int iconX = guiLeft + guiWidth - 32;
+        int iconY = guiTop + 6;
+        graphics.fill(iconX, iconY, iconX + 22, iconY + 14, 0xFF1E90FF);
+        graphics.drawCenteredString(this.font, "SC", iconX + 11, iconY + 3, 0xFFFFFFFF);
     }
 
     private void updateButtonLabels() {
@@ -213,30 +228,35 @@ public class MainMenuScreen extends StateCraftScreen {
     }
 
     private void openProfileScreen() {
-        // TODO: Implement profile screen
-        // For now, show player stats/info
-        if (this.minecraft != null && this.minecraft.player != null) {
-            this.minecraft.player.sendSystemMessage(Component.literal("§7Profile screen coming soon!"));
-        }
+        this.minecraft.setScreen(new ProfileScreen());
     }
 
     private void openNationScreen() {
-        if (inNation && nationName != null) {
-            this.minecraft.setScreen(new NationInfoScreen(nationName));
-        } else {
-            this.minecraft.setScreen(new CreateNationScreen());
-        }
+        // Open the NationsListScreen which shows all nations
+        this.minecraft.setScreen(new NationsListScreen());
     }
 
     private void openStateScreen() {
-        if (stateName != null && !stateName.isEmpty() && nationName != null) {
-            this.minecraft.setScreen(new StateInfoScreen(nationName, stateName));
+        if (nationName == null || nationName.isEmpty()) {
+            showMessage("§cYou are not part of a nation.");
+            return;
         }
+        // Open the MyStatesScreen which lists all states the player is a citizen of
+        this.minecraft.setScreen(new MyStatesScreen(nationName));
     }
 
     private void openCityScreen() {
-        if (cityName != null && !cityName.isEmpty() && nationName != null && stateName != null) {
-            this.minecraft.setScreen(new CityInfoScreen(nationName, stateName, cityName));
+        if (nationName == null || nationName.isEmpty()) {
+            showMessage("§cYou are not part of a nation.");
+            return;
+        }
+        // Open the MyCitiesScreen which lists all cities the player is a resident of
+        this.minecraft.setScreen(new MyCitiesScreen(nationName));
+    }
+
+    private void showMessage(String message) {
+        if (this.minecraft != null && this.minecraft.player != null) {
+            this.minecraft.player.sendSystemMessage(net.minecraft.network.chat.Component.literal(message));
         }
     }
 
@@ -254,6 +274,10 @@ public class MainMenuScreen extends StateCraftScreen {
 
     private void openInvitesScreen() {
         this.minecraft.setScreen(new InvitationsScreen());
+    }
+
+    private void openMailboxScreen() {
+        this.minecraft.setScreen(new MailInboxScreen());
     }
 
     // Called by network handler when data is received
@@ -285,6 +309,21 @@ public class MainMenuScreen extends StateCraftScreen {
     public void setNoNation() {
         this.inNation = false;
         this.dataLoaded = true;
+    }
+
+    /**
+     * Helper class for menu entries
+     */
+    private static class MenuEntry {
+        final String text;
+        final int y;
+        final boolean active;
+
+        MenuEntry(String text, int y, boolean active) {
+            this.text = text;
+            this.y = y;
+            this.active = active;
+        }
     }
 }
 

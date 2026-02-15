@@ -1,10 +1,13 @@
 package com.statecraft.client.gui;
 
+import com.statecraft.client.FlagTextureManager;
 import com.statecraft.network.NetworkHandler;
+import com.statecraft.network.packets.LeaveCitizenshipPacket;
 import com.statecraft.network.packets.RequestCityDetailsPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -13,6 +16,8 @@ import java.util.List;
  * Screen showing detailed city information and chunk management
  */
 public class CityInfoScreen extends StateCraftScreen {
+
+    private static final int FLAG_SIZE = 24;
 
     private final String nationName;
     private final String stateName;
@@ -25,6 +30,7 @@ public class CityInfoScreen extends StateCraftScreen {
     private int residentCount = 0;
     private boolean isMayor = false;
     private boolean canManage = false;
+    private String flagUrl = "";
     private List<String> residentNames = new ArrayList<>();
 
     public CityInfoScreen(String nationName, String stateName, String cityName) {
@@ -35,6 +41,10 @@ public class CityInfoScreen extends StateCraftScreen {
         this.guiWidth = 280; this.guiHeight = 220;
     }
 
+    private Button settingsButton;
+    private Button mailButton;
+    private Button leaveButton;
+
     @Override
     protected void init() {
         super.init();
@@ -43,25 +53,50 @@ public class CityInfoScreen extends StateCraftScreen {
         NetworkHandler.sendToServer(new RequestCityDetailsPacket(nationName, stateName, cityName));
 
         int buttonY = guiTop + guiHeight - 30;
-        int buttonWidth = 75;
+        int buttonWidth = 38;
+        int spacing = 42;
 
         // Claim Chunk button
-        Button claimBtn = this.addRenderableWidget(createButton(
-            guiLeft + 15, buttonY, buttonWidth, 20,
-            Component.literal("Claim Chunk"),
+        this.addRenderableWidget(createButton(
+            guiLeft + 6, buttonY, buttonWidth + 5, 20,
+            Component.literal("Claim"),
             btn -> claimCurrentChunk()
         ));
 
         // View Map button
         this.addRenderableWidget(createButton(
-            guiLeft + 15 + buttonWidth + 5, buttonY, 60, 20,
+            guiLeft + 6 + spacing + 5, buttonY, buttonWidth, 20,
             Component.literal("Map"),
             btn -> openChunkMap()
         ));
 
+        // Mailbox button - hidden until we know permissions
+        mailButton = this.addRenderableWidget(createButton(
+            guiLeft + 6 + (spacing + 5) * 2, buttonY, buttonWidth, 20,
+            Component.literal("§eMail"),
+            btn -> openMailboxScreen()
+        ));
+        mailButton.visible = false;
+
+        // Settings button - hidden until we know permissions
+        settingsButton = this.addRenderableWidget(createButton(
+            guiLeft + 6 + (spacing + 5) * 3, buttonY, buttonWidth, 20,
+            Component.literal("Settings"),
+            btn -> openSettingsScreen()
+        ));
+        settingsButton.visible = false;
+
+        // Leave button - hidden until we know permissions (not mayor)
+        leaveButton = this.addRenderableWidget(createButton(
+            guiLeft + 6 + (spacing + 5) * 4, buttonY, buttonWidth, 20,
+            Component.literal("§cLeave"),
+            btn -> leaveCity()
+        ));
+        leaveButton.visible = false;
+
         // Back button
         this.addRenderableWidget(createButton(
-            guiLeft + guiWidth - 75, buttonY, 60, 20,
+            guiLeft + guiWidth - 42, buttonY, 36, 20,
             Component.literal("Back"),
             btn -> goBack()
         ));
@@ -69,6 +104,9 @@ public class CityInfoScreen extends StateCraftScreen {
 
     @Override
     protected void renderContent(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        // Render flag
+        renderFlag(graphics);
+
         renderDivider(graphics, guiLeft + 10, guiTop + 22, guiWidth - 20);
 
         if (!dataLoaded) {
@@ -148,8 +186,45 @@ public class CityInfoScreen extends StateCraftScreen {
         this.minecraft.setScreen(new ChunkMapScreen());
     }
 
+    private void openSettingsScreen() {
+        this.minecraft.setScreen(new CitySettingsScreen(nationName, stateName, cityName));
+    }
+
+    private void openMailboxScreen() {
+        this.minecraft.setScreen(new GovMailboxScreen(GovMailboxScreen.EntityType.CITY, cityName, nationName + ":" + stateName));
+    }
+
+    private void leaveCity() {
+        // Send leave request to server
+        NetworkHandler.sendToServer(LeaveCitizenshipPacket.leaveCity(nationName, stateName, cityName));
+        // Return to my cities screen
+        this.minecraft.setScreen(new MyCitiesScreen(nationName));
+    }
+
     private void goBack() {
-        this.minecraft.setScreen(new CitiesListScreen(nationName, stateName));
+        this.minecraft.setScreen(new MyCitiesScreen(nationName));
+    }
+
+    private void renderFlag(GuiGraphics graphics) {
+        int flagX = guiLeft - FLAG_SIZE - 4;
+        int flagY = guiTop - FLAG_SIZE - 4;
+
+        // Draw flag border/background
+        graphics.fill(flagX - 2, flagY - 2, flagX + FLAG_SIZE + 2, flagY + FLAG_SIZE + 2, 0xFF333333);
+        graphics.fill(flagX - 1, flagY - 1, flagX + FLAG_SIZE + 1, flagY + FLAG_SIZE + 1, 0xFF1A1A2E);
+
+        if (flagUrl != null && !flagUrl.isEmpty()) {
+            ResourceLocation texture = FlagTextureManager.getInstance().getFlagTexture(flagUrl);
+            if (texture != null) {
+                graphics.blit(texture, flagX, flagY, 0, 0, FLAG_SIZE, FLAG_SIZE, FLAG_SIZE, FLAG_SIZE);
+            } else if (FlagTextureManager.getInstance().isLoading(flagUrl)) {
+                graphics.drawCenteredString(this.font, "...", flagX + FLAG_SIZE / 2, flagY + FLAG_SIZE / 2 - 4, 0xFF888888);
+            } else {
+                graphics.drawCenteredString(this.font, "?", flagX + FLAG_SIZE / 2, flagY + FLAG_SIZE / 2 - 4, 0xFF666666);
+            }
+        } else {
+            graphics.drawCenteredString(this.font, "C", flagX + FLAG_SIZE / 2, flagY + FLAG_SIZE / 2 - 4, 0xFF4A90D9);
+        }
     }
 
     @Override
@@ -159,14 +234,33 @@ public class CityInfoScreen extends StateCraftScreen {
 
     // Called by network handler when data is received
     public void updateData(String mayorName, int chunkCount, int residentCount,
-                           boolean isMayor, boolean canManage, List<String> residentNames) {
+                           boolean isMayor, boolean canManage, List<String> residentNames, String flagUrl) {
         this.mayorName = mayorName;
         this.chunkCount = chunkCount;
         this.residentCount = residentCount;
         this.isMayor = isMayor;
         this.canManage = canManage;
         this.residentNames = residentNames;
+        this.flagUrl = flagUrl != null ? flagUrl : "";
         this.dataLoaded = true;
+
+        // Show settings and mail buttons only for mayors/managers
+        if (settingsButton != null) {
+            settingsButton.visible = canManage;
+        }
+        if (mailButton != null) {
+            mailButton.visible = canManage;
+        }
+        // Show leave button for non-mayors
+        if (leaveButton != null) {
+            leaveButton.visible = !isMayor;
+        }
+    }
+
+    // Overload for backward compatibility
+    public void updateData(String mayorName, int chunkCount, int residentCount,
+                           boolean isMayor, boolean canManage, List<String> residentNames) {
+        updateData(mayorName, chunkCount, residentCount, isMayor, canManage, residentNames, "");
     }
 }
 

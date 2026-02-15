@@ -3,6 +3,7 @@ package com.statecraft.economy.event;
 import com.statecraft.economy.StateCraftEconomy;
 import com.statecraft.economy.core.EconomyManager;
 import com.statecraft.economy.data.EconomySavedData;
+import com.statecraft.economy.integration.StateCraftIntegration;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraftforge.event.level.LevelEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -21,6 +22,9 @@ public class WorldLoadHandler {
                 EconomySavedData data = EconomySavedData.get(serverLevel);
                 EconomyManager.getInstance().loadFromData(data);
                 StateCraftEconomy.LOGGER.info("Economy data loaded");
+
+                // Ensure all existing nations/states/cities have treasury accounts
+                StateCraftIntegration.ensureAllTreasuryAccounts();
             }
         }
     }

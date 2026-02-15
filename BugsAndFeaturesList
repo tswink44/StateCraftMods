@@ -1,0 +1,19 @@
+Set one-time fee for joining a Nation/State/City/
+
+Set fee for cities claiming chunks. Can be set in config. This fee is paid by the city
+
+Requirement when claiming chunks for cities/states to be contigious. No such requirement for nations. Also, add configurable chunk limit for cities and states
+
+Government Leader for City/State/Nation needs ability to set base tax rate and carryover rate
+Nation sets passthrough rate from states and states set rate through cities.
+
+Legislature mechanic to enable voting on policies
+
+Elections for leader
+
+Diplomacy between nations
+Peace treaties
+
+Trying to deposit or withdraw to Nation/State/City accounts deposits to personal account instead
+
+Ensure Join button shows itself when not in Nation and Nation is set to "Open"

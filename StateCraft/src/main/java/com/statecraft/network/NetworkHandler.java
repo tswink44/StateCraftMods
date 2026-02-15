@@ -150,7 +150,100 @@ public class NetworkHandler {
             .consumerMainThread(ServerPacketHandler::handleRequestChunkInfo)
             .add();
 
+        CHANNEL.messageBuilder(AbandonChunkPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(AbandonChunkPacket::encode)
+            .decoder(AbandonChunkPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleAbandonChunk)
+            .add();
+
+        CHANNEL.messageBuilder(SetNicknamePacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(SetNicknamePacket::encode)
+            .decoder(SetNicknamePacket::new)
+            .consumerMainThread(ServerPacketHandler::handleSetNickname)
+            .add();
+
+        CHANNEL.messageBuilder(RequestMarketplaceDataPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestMarketplaceDataPacket::encode)
+            .decoder(RequestMarketplaceDataPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestMarketplaceData)
+            .add();
+
+        CHANNEL.messageBuilder(UpdateEntitySettingsPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(UpdateEntitySettingsPacket::encode)
+            .decoder(UpdateEntitySettingsPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleUpdateEntitySettings)
+            .add();
+
+        // Mail packets
+        CHANNEL.messageBuilder(RequestMailDataPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestMailDataPacket::encode)
+            .decoder(RequestMailDataPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestMailData)
+            .add();
+
+        CHANNEL.messageBuilder(RequestGovMailDataPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestGovMailDataPacket::encode)
+            .decoder(RequestGovMailDataPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestGovMailData)
+            .add();
+
+        CHANNEL.messageBuilder(SendMailPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(SendMailPacket::encode)
+            .decoder(SendMailPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleSendMail)
+            .add();
+
+        // Citizenship packets
+        CHANNEL.messageBuilder(JoinCitizenshipPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(JoinCitizenshipPacket::encode)
+            .decoder(JoinCitizenshipPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleJoinCitizenship)
+            .add();
+
+        CHANNEL.messageBuilder(LeaveCitizenshipPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(LeaveCitizenshipPacket::encode)
+            .decoder(LeaveCitizenshipPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleLeaveCitizenship)
+            .add();
+
+        // My States/Cities packets
+        CHANNEL.messageBuilder(RequestMyStatesPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestMyStatesPacket::encode)
+            .decoder(RequestMyStatesPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestMyStates)
+            .add();
+
+        CHANNEL.messageBuilder(RequestMyCitiesPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestMyCitiesPacket::encode)
+            .decoder(RequestMyCitiesPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestMyCities)
+            .add();
+
+        CHANNEL.messageBuilder(RequestAllNationsPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestAllNationsPacket::encode)
+            .decoder(RequestAllNationsPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestAllNations)
+            .add();
+
         // Server -> Client packets (responses)
+        CHANNEL.messageBuilder(SyncAllNationsPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncAllNationsPacket::encode)
+            .decoder(SyncAllNationsPacket::new)
+            .consumerMainThread(ClientPacketHandler::handleSyncAllNations)
+            .add();
+
+        CHANNEL.messageBuilder(SyncMyStatesPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncMyStatesPacket::encode)
+            .decoder(SyncMyStatesPacket::new)
+            .consumerMainThread(ClientPacketHandler::handleSyncMyStates)
+            .add();
+
+        CHANNEL.messageBuilder(SyncMyCitiesPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncMyCitiesPacket::encode)
+            .decoder(SyncMyCitiesPacket::new)
+            .consumerMainThread(ClientPacketHandler::handleSyncMyCities)
+            .add();
+
         CHANNEL.messageBuilder(SyncNationDataPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncNationDataPacket::encode)
             .decoder(SyncNationDataPacket::new)
@@ -239,6 +332,18 @@ public class NetworkHandler {
             .encoder(SyncChunkInfoPacket::encode)
             .decoder(SyncChunkInfoPacket::new)
             .consumerMainThread(ClientPacketHandler::handleSyncChunkInfo)
+            .add();
+
+        CHANNEL.messageBuilder(SyncMarketplaceDataPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncMarketplaceDataPacket::encode)
+            .decoder(SyncMarketplaceDataPacket::new)
+            .consumerMainThread(ClientPacketHandler::handleSyncMarketplaceData)
+            .add();
+
+        CHANNEL.messageBuilder(SyncMailDataPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncMailDataPacket::encode)
+            .decoder(SyncMailDataPacket::new)
+            .consumerMainThread(ClientPacketHandler::handleSyncMailData)
             .add();
 
         StateCraft.LOGGER.info("StateCraft network packets registered");

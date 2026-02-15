@@ -25,6 +25,11 @@ public class ClaimedChunk {
     private OwnershipType ownershipType;
     private UUID playerOwner; // Only set if ownershipType is PLAYER
 
+    // Sale information
+    private boolean forSale;
+    private double salePrice;
+    private UUID sellerId; // Who listed it for sale
+
     // Permissions per role
     private final Map<PermissionLevel, Set<Permission>> rolePermissions;
     // Specific player overrides
@@ -114,6 +119,55 @@ public class ClaimedChunk {
      */
     public void setOwnerId(@Nullable UUID ownerId) {
         setPlayerOwner(ownerId);
+    }
+
+    // ==================== Sale Methods ====================
+
+    public boolean isForSale() {
+        return forSale;
+    }
+
+    public void setForSale(boolean forSale) {
+        this.forSale = forSale;
+        if (!forSale) {
+            this.salePrice = 0;
+            this.sellerId = null;
+        }
+    }
+
+    public double getSalePrice() {
+        return salePrice;
+    }
+
+    public void setSalePrice(double salePrice) {
+        this.salePrice = salePrice;
+    }
+
+    @Nullable
+    public UUID getSellerId() {
+        return sellerId;
+    }
+
+    public void setSellerId(@Nullable UUID sellerId) {
+        this.sellerId = sellerId;
+    }
+
+    /**
+     * List this chunk for sale
+     */
+    public void listForSale(double price, UUID seller) {
+        this.forSale = true;
+        this.salePrice = price;
+        this.sellerId = seller;
+    }
+
+    /**
+     * Remove this chunk from sale
+     */
+    public void removeFromSale() {
+        this.forSale = false;
+        this.salePrice = 0;
+        this.sellerId = null;
     }
 
     public boolean hasPermission(UUID playerId, Permission permission, PermissionLevel roleLevel) {
@@ -222,6 +276,15 @@ public class ClaimedChunk {
             tag.putUUID("playerOwner", playerOwner);
         }
 
+        // Save sale information
+        tag.putBoolean("forSale", forSale);
+        if (forSale) {
+            tag.putDouble("salePrice", salePrice);
+            if (sellerId != null) {
+                tag.putUUID("sellerId", sellerId);
+            }
+        }
+
         // Save role permissions
         CompoundTag rolePermsTag = new CompoundTag();
         for (Map.Entry<PermissionLevel, Set<Permission>> entry : rolePermissions.entrySet()) {
@@ -257,6 +320,15 @@ public class ClaimedChunk {
 
         if (tag.hasUUID("playerOwner")) {
             chunk.playerOwner = tag.getUUID("playerOwner");
+        }
+
+        // Load sale information
+        chunk.forSale = tag.getBoolean("forSale");
+        if (chunk.forSale) {
+            chunk.salePrice = tag.getDouble("salePrice");
+            if (tag.hasUUID("sellerId")) {
+                chunk.sellerId = tag.getUUID("sellerId");
+            }
         }
 
         // Load role permissions

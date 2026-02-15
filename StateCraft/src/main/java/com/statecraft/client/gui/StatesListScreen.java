@@ -1,6 +1,7 @@
 package com.statecraft.client.gui;
 
 import com.statecraft.network.NetworkHandler;
+import com.statecraft.network.packets.JoinCitizenshipPacket;
 import com.statecraft.network.packets.RequestStatesPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -16,6 +17,8 @@ public class StatesListScreen extends StateCraftScreen {
     private final String nationName;
     private List<StateData> states = new ArrayList<>();
     private boolean dataLoaded = false;
+    private boolean canCreateState = false; // Only nation officers can create states
+    private Button createStateButton;
 
     public StatesListScreen(String nationName) {
         super(Component.literal("States: " + nationName));
@@ -30,13 +33,14 @@ public class StatesListScreen extends StateCraftScreen {
         // Request states data from server
         NetworkHandler.sendToServer(new RequestStatesPacket(nationName));
 
-        // Create State button
-        this.addRenderableWidget(createButton(
+        // Create State button - initially hidden until we know permissions
+        createStateButton = this.addRenderableWidget(createButton(
             guiLeft + 15, guiTop + guiHeight - 28,
             80, 20,
             Component.literal("Create State"),
             btn -> createState()
         ));
+        createStateButton.visible = false; // Hidden until data loads
 
         // Back button
         this.addRenderableWidget(createButton(
@@ -67,22 +71,31 @@ public class StatesListScreen extends StateCraftScreen {
             StateData state = states.get(i);
 
             // State panel - highlight if hovered
-            boolean hovered = mouseX >= guiLeft + 15 && mouseX <= guiLeft + guiWidth - 15 &&
+            boolean hovered = mouseX >= guiLeft + 15 && mouseX <= guiLeft + guiWidth - 55 &&
                              mouseY >= y && mouseY <= y + 26;
 
             if (hovered) {
-                renderSubPanel(graphics, guiLeft + 14, y - 1, guiWidth - 28, 28);
+                renderSubPanel(graphics, guiLeft + 14, y - 1, guiWidth - 68, 28);
             } else {
-                renderSubPanel(graphics, guiLeft + 15, y, guiWidth - 30, 26);
+                renderSubPanel(graphics, guiLeft + 15, y, guiWidth - 70, 26);
             }
 
-            graphics.drawString(this.font, "§e" + state.name, guiLeft + 22, y + 4, COLOR_TEXT);
+            // Citizenship indicator
+            String citizenMark = state.isCitizen ? "§a✓ " : "";
+            graphics.drawString(this.font, citizenMark + "§e" + state.name, guiLeft + 22, y + 4, COLOR_TEXT);
             graphics.drawString(this.font, "§7Governor: §f" + state.governorName, guiLeft + 22, y + 14, 0xFFAAAAAA);
 
-            // Stats on right
-            String stats = state.cityCount + " cities, " + state.chunkCount + " chunks";
-            int statsWidth = this.font.width(stats);
-            graphics.drawString(this.font, "§8" + stats, guiLeft + guiWidth - 22 - statsWidth, y + 9, 0xFF888888);
+            // Join button area on right (if not already a citizen)
+            if (!state.isCitizen) {
+                boolean joinHovered = mouseX >= guiLeft + guiWidth - 50 && mouseX <= guiLeft + guiWidth - 15 &&
+                                     mouseY >= y + 3 && mouseY <= y + 23;
+                int joinBgColor = joinHovered ? 0xFF4A7A4A : 0xFF3A5A3A;
+                graphics.fill(guiLeft + guiWidth - 50, y + 3, guiLeft + guiWidth - 15, y + 23, joinBgColor);
+                graphics.drawCenteredString(this.font, "§aJoin", guiLeft + guiWidth - 32, y + 9, 0xFFFFFFFF);
+            } else {
+                // Show member indicator
+                graphics.drawString(this.font, "§2Member", guiLeft + guiWidth - 55, y + 9, 0xFF55FF55);
+            }
 
             y += 30;
         }
@@ -97,9 +110,20 @@ public class StatesListScreen extends StateCraftScreen {
         if (button == 0 && dataLoaded) {
             int y = guiTop + 35;
             for (int i = 0; i < Math.min(5, states.size()); i++) {
-                if (mouseX >= guiLeft + 15 && mouseX <= guiLeft + guiWidth - 15 &&
+                StateData state = states.get(i);
+
+                // Check if clicked Join button
+                if (!state.isCitizen &&
+                    mouseX >= guiLeft + guiWidth - 50 && mouseX <= guiLeft + guiWidth - 15 &&
+                    mouseY >= y + 3 && mouseY <= y + 23) {
+                    joinState(state.name);
+                    return true;
+                }
+
+                // Check if clicked state info area
+                if (mouseX >= guiLeft + 15 && mouseX <= guiLeft + guiWidth - 55 &&
                     mouseY >= y && mouseY <= y + 26) {
-                    openStateInfo(states.get(i).name);
+                    openStateInfo(state.name);
                     return true;
                 }
                 y += 30;
@@ -110,6 +134,12 @@ public class StatesListScreen extends StateCraftScreen {
 
     private void openStateInfo(String stateName) {
         this.minecraft.setScreen(new StateInfoScreen(nationName, stateName));
+    }
+
+    private void joinState(String stateName) {
+        NetworkHandler.sendToServer(JoinCitizenshipPacket.joinState(nationName, stateName));
+        // Refresh data after a short delay
+        NetworkHandler.sendToServer(new RequestStatesPacket(nationName));
     }
 
     private void createState() {
@@ -125,9 +155,20 @@ public class StatesListScreen extends StateCraftScreen {
         goBack();
     }
 
-    public void updateStates(List<StateData> states) {
+    public void updateStates(List<StateData> states, boolean canCreateState) {
         this.states = states;
+        this.canCreateState = canCreateState;
         this.dataLoaded = true;
+
+        // Show/hide create button based on permission
+        if (createStateButton != null) {
+            createStateButton.visible = canCreateState;
+        }
+    }
+
+    // Overload for backward compatibility
+    public void updateStates(List<StateData> states) {
+        updateStates(states, false);
     }
 
     public static class StateData {
@@ -135,12 +176,19 @@ public class StatesListScreen extends StateCraftScreen {
         public String governorName;
         public int cityCount;
         public int chunkCount;
+        public boolean isCitizen;
 
-        public StateData(String name, String governor, int cities, int chunks) {
+        public StateData(String name, String governor, int cities, int chunks, boolean isCitizen) {
             this.name = name;
             this.governorName = governor;
             this.cityCount = cities;
             this.chunkCount = chunks;
+            this.isCitizen = isCitizen;
+        }
+
+        // Backward compatibility constructor
+        public StateData(String name, String governor, int cities, int chunks) {
+            this(name, governor, cities, chunks, false);
         }
     }
 }

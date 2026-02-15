@@ -33,7 +33,9 @@ public class GuiCommand {
             .then(Commands.literal("city")
                 .executes(GuiCommand::openCityGui))
             .then(Commands.literal("chunk")
-                .executes(GuiCommand::openChunkGui));
+                .executes(GuiCommand::openChunkGui))
+            .then(Commands.literal("marketplace")
+                .executes(GuiCommand::openMarketplaceGui));
     }
 
     private static int openMainMenu(CommandContext<CommandSourceStack> context) {
@@ -108,31 +110,39 @@ public class GuiCommand {
             ChunkPos chunkPos = player.chunkPosition();
             ChunkClaimManager manager = ChunkClaimManager.getInstance();
 
+            // First check if player is in a nation
+            Nation playerNation = manager.getPlayerNation(player.getUUID());
+            if (playerNation == null) {
+                context.getSource().sendFailure(Component.literal("§cYou are not part of a Nation."));
+                return 0;
+            }
+
+            // Check if nation has any states
+            if (playerNation.getAllStates().isEmpty()) {
+                context.getSource().sendFailure(Component.literal("§cYour nation has no States. Create one to open this menu."));
+                return 0;
+            }
+
+            // Try to find state from current chunk first
             ClaimedChunk chunk = manager.getClaimedChunk(chunkPos, player.level().dimension());
+            State state = null;
+            City city = null;
 
-            if (chunk == null) {
-                context.getSource().sendFailure(Component.literal("§cThis chunk is wilderness - no state to view!"));
-                return 0;
+            if (chunk != null) {
+                city = manager.getCity(chunk.getCityId());
+                if (city != null) {
+                    state = manager.getState(city.getStateId());
+                }
             }
 
-            City city = manager.getCity(chunk.getCityId());
-            if (city == null) {
-                context.getSource().sendFailure(Component.literal("§cCould not find city for this chunk!"));
-                return 0;
-            }
-
-            State state = manager.getState(city.getStateId());
+            // If not in a claimed chunk, use player's first state
             if (state == null) {
-                context.getSource().sendFailure(Component.literal("§cCould not find state for this chunk!"));
-                return 0;
+                state = playerNation.getAllStates().iterator().next();
             }
-
-            Nation nation = manager.getNation(state.getNationId());
-            String nationName = nation != null ? nation.getName() : "";
 
             NetworkHandler.sendToPlayer(new OpenGuiPacket(
                 OpenGuiPacket.ScreenType.STATE_INFO,
-                nationName, state.getName(), city.getName(),
+                playerNation.getName(), state.getName(), city != null ? city.getName() : "",
                 chunkPos.x, chunkPos.z
             ), player);
             return 1;
@@ -148,28 +158,74 @@ public class GuiCommand {
             ChunkPos chunkPos = player.chunkPosition();
             ChunkClaimManager manager = ChunkClaimManager.getInstance();
 
+            // First check if player is in a nation
+            Nation playerNation = manager.getPlayerNation(player.getUUID());
+            if (playerNation == null) {
+                context.getSource().sendFailure(Component.literal("§cYou are not part of a Nation."));
+                return 0;
+            }
+
+            // Check if nation has any cities
+            boolean hasCities = false;
+            City playerCity = null;
+            State playerState = null;
+            for (State state : playerNation.getAllStates()) {
+                if (!state.getAllCities().isEmpty()) {
+                    hasCities = true;
+                    // Find player's city if they're a resident
+                    for (City city : state.getAllCities()) {
+                        if (city.isResident(player.getUUID())) {
+                            playerCity = city;
+                            playerState = state;
+                            break;
+                        }
+                    }
+                    if (playerCity != null) break;
+                }
+            }
+
+            if (!hasCities) {
+                context.getSource().sendFailure(Component.literal("§cYour nation has no Cities. Create one to open this menu."));
+                return 0;
+            }
+
+            // Try to find city from current chunk first
             ClaimedChunk chunk = manager.getClaimedChunk(chunkPos, player.level().dimension());
+            City city = null;
+            State state = null;
 
-            if (chunk == null) {
-                context.getSource().sendFailure(Component.literal("§cThis chunk is wilderness - no city to view!"));
-                return 0;
+            if (chunk != null) {
+                city = manager.getCity(chunk.getCityId());
+                if (city != null) {
+                    state = manager.getState(city.getStateId());
+                }
             }
 
-            City city = manager.getCity(chunk.getCityId());
+            // If not in a claimed chunk, use player's city or first available city
             if (city == null) {
-                context.getSource().sendFailure(Component.literal("§cCould not find city for this chunk!"));
-                return 0;
+                if (playerCity != null) {
+                    city = playerCity;
+                    state = playerState;
+                } else {
+                    // Use first city in nation
+                    for (State s : playerNation.getAllStates()) {
+                        if (!s.getAllCities().isEmpty()) {
+                            city = s.getAllCities().iterator().next();
+                            state = s;
+                            break;
+                        }
+                    }
+                }
             }
 
-            State state = manager.getState(city.getStateId());
-            String stateName = state != null ? state.getName() : "";
-
-            Nation nation = state != null ? manager.getNation(state.getNationId()) : null;
-            String nationName = nation != null ? nation.getName() : "";
+            if (city == null) {
+                context.getSource().sendFailure(Component.literal("§cCould not find a city to display."));
+                return 0;
+            }
 
             NetworkHandler.sendToPlayer(new OpenGuiPacket(
                 OpenGuiPacket.ScreenType.CITY_INFO,
-                nationName, stateName, city.getName(),
+                playerNation.getName(), state != null ? state.getName() : "", city.getName(),
                 chunkPos.x, chunkPos.z
             ), player);
             return 1;
@@ -209,6 +265,23 @@ public class GuiCommand {
             NetworkHandler.sendToPlayer(new OpenGuiPacket(
                 OpenGuiPacket.ScreenType.CHUNK_INFO,
                 nationName, stateName, cityName,
+                chunkPos.x, chunkPos.z
+            ), player);
+            return 1;
+        } catch (Exception e) {
+            context.getSource().sendFailure(Component.literal("This command must be run by a player!"));
+            return 0;
+        }
+    }
+
+    private static int openMarketplaceGui(CommandContext<CommandSourceStack> context) {
+        try {
+            ServerPlayer player = context.getSource().getPlayerOrException();
+            ChunkPos chunkPos = player.chunkPosition();
+
+            NetworkHandler.sendToPlayer(new OpenGuiPacket(
+                OpenGuiPacket.ScreenType.MARKETPLACE,
+                "", "", "",
                 chunkPos.x, chunkPos.z
             ), player);
             return 1;

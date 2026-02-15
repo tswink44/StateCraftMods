@@ -1,6 +1,7 @@
 package com.statecraft.client.gui;
 
 import com.statecraft.network.NetworkHandler;
+import com.statecraft.network.packets.JoinCitizenshipPacket;
 import com.statecraft.network.packets.RequestCitiesPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -17,7 +18,9 @@ public class CitiesListScreen extends StateCraftScreen {
     private final String stateName;
     private List<CityData> cities = new ArrayList<>();
     private boolean dataLoaded = false;
+    private boolean canCreateCity = false; // Only state governor or nation officers can create cities
     private int scrollOffset = 0;
+    private Button createCityButton;
 
     public CitiesListScreen(String nationName, String stateName) {
         super(Component.literal("Cities: " + stateName));
@@ -33,13 +36,14 @@ public class CitiesListScreen extends StateCraftScreen {
         // Request cities data from server
         NetworkHandler.sendToServer(new RequestCitiesPacket(nationName, stateName));
 
-        // Create City button
-        this.addRenderableWidget(createButton(
+        // Create City button - initially hidden until we know permissions
+        createCityButton = this.addRenderableWidget(createButton(
             guiLeft + 15, guiTop + guiHeight - 28,
             80, 20,
             Component.literal("New City"),
             btn -> createCity()
         ));
+        createCityButton.visible = false; // Hidden until data loads
 
         // Back button
         this.addRenderableWidget(createButton(
@@ -71,23 +75,37 @@ public class CitiesListScreen extends StateCraftScreen {
         for (int i = scrollOffset; i < Math.min(scrollOffset + maxVisible, cities.size()); i++) {
             CityData city = cities.get(i);
 
-            // City panel - clickable
-            boolean hovered = mouseX >= guiLeft + 15 && mouseX <= guiLeft + guiWidth - 15 &&
+            // City panel - clickable (reduced width for join button)
+            boolean hovered = mouseX >= guiLeft + 15 && mouseX <= guiLeft + guiWidth - 55 &&
                              mouseY >= y && mouseY <= y + 26;
 
             if (hovered) {
-                renderSubPanel(graphics, guiLeft + 14, y - 1, guiWidth - 28, 28);
+                renderSubPanel(graphics, guiLeft + 14, y - 1, guiWidth - 68, 28);
             } else {
-                renderSubPanel(graphics, guiLeft + 15, y, guiWidth - 30, 26);
+                renderSubPanel(graphics, guiLeft + 15, y, guiWidth - 70, 26);
             }
 
-            graphics.drawString(this.font, "§e" + city.name, guiLeft + 22, y + 4, COLOR_TEXT);
+            // Citizenship indicator
+            String citizenMark = city.isResident ? "§a✓ " : "";
+            graphics.drawString(this.font, citizenMark + "§e" + city.name, guiLeft + 22, y + 4, COLOR_TEXT);
             graphics.drawString(this.font, "§7Mayor: §f" + city.mayorName, guiLeft + 22, y + 14, 0xFFAAAAAA);
 
-            // Stats on right
-            String stats = city.chunkCount + " chunks, " + city.residentCount + " residents";
-            int statsWidth = this.font.width(stats);
-            graphics.drawString(this.font, "§8" + stats, guiLeft + guiWidth - 22 - statsWidth, y + 9, 0xFF888888);
+            // Join button area on right (if not already a resident)
+            if (!city.isResident) {
+                if (city.isPublicJoin) {
+                    boolean joinHovered = mouseX >= guiLeft + guiWidth - 50 && mouseX <= guiLeft + guiWidth - 15 &&
+                                         mouseY >= y + 3 && mouseY <= y + 23;
+                    int joinBgColor = joinHovered ? 0xFF4A7A4A : 0xFF3A5A3A;
+                    graphics.fill(guiLeft + guiWidth - 50, y + 3, guiLeft + guiWidth - 15, y + 23, joinBgColor);
+                    graphics.drawCenteredString(this.font, "§aJoin", guiLeft + guiWidth - 32, y + 9, 0xFFFFFFFF);
+                } else {
+                    // City is not open for joining
+                    graphics.drawString(this.font, "§8Closed", guiLeft + guiWidth - 50, y + 9, 0xFF888888);
+                }
+            } else {
+                // Show member indicator
+                graphics.drawString(this.font, "§2Member", guiLeft + guiWidth - 55, y + 9, 0xFF55FF55);
+            }
 
             y += 30;
         }
@@ -108,9 +126,20 @@ public class CitiesListScreen extends StateCraftScreen {
             int maxVisible = 6;
 
             for (int i = scrollOffset; i < Math.min(scrollOffset + maxVisible, cities.size()); i++) {
-                if (mouseX >= guiLeft + 15 && mouseX <= guiLeft + guiWidth - 15 &&
+                CityData city = cities.get(i);
+
+                // Check if clicked Join button (only if not resident and public join)
+                if (!city.isResident && city.isPublicJoin &&
+                    mouseX >= guiLeft + guiWidth - 50 && mouseX <= guiLeft + guiWidth - 15 &&
+                    mouseY >= y + 3 && mouseY <= y + 23) {
+                    joinCity(city.name);
+                    return true;
+                }
+
+                // Check if clicked city info area
+                if (mouseX >= guiLeft + 15 && mouseX <= guiLeft + guiWidth - 55 &&
                     mouseY >= y && mouseY <= y + 26) {
-                    openCityInfo(cities.get(i).name);
+                    openCityInfo(city.name);
                     return true;
                 }
                 y += 30;
@@ -135,6 +164,12 @@ public class CitiesListScreen extends StateCraftScreen {
         this.minecraft.setScreen(new CityInfoScreen(nationName, stateName, cityName));
     }
 
+    private void joinCity(String cityName) {
+        NetworkHandler.sendToServer(JoinCitizenshipPacket.joinCity(nationName, stateName, cityName));
+        // Refresh data after a short delay
+        NetworkHandler.sendToServer(new RequestCitiesPacket(nationName, stateName));
+    }
+
     private void createCity() {
         this.minecraft.setScreen(new CreateCityScreen(nationName, stateName));
     }
@@ -148,9 +183,20 @@ public class CitiesListScreen extends StateCraftScreen {
         goBack();
     }
 
-    public void updateCities(List<CityData> cities) {
+    public void updateCities(List<CityData> cities, boolean canCreateCity) {
         this.cities = cities;
+        this.canCreateCity = canCreateCity;
         this.dataLoaded = true;
+
+        // Show/hide create button based on permission
+        if (createCityButton != null) {
+            createCityButton.visible = canCreateCity;
+        }
+    }
+
+    // Overload for backward compatibility
+    public void updateCities(List<CityData> cities) {
+        updateCities(cities, false);
     }
 
     public static class CityData {
@@ -158,12 +204,21 @@ public class CitiesListScreen extends StateCraftScreen {
         public String mayorName;
         public int chunkCount;
         public int residentCount;
+        public boolean isResident;
+        public boolean isPublicJoin;
 
-        public CityData(String name, String mayorName, int chunkCount, int residentCount) {
+        public CityData(String name, String mayorName, int chunkCount, int residentCount, boolean isResident, boolean isPublicJoin) {
             this.name = name;
             this.mayorName = mayorName;
             this.chunkCount = chunkCount;
             this.residentCount = residentCount;
+            this.isResident = isResident;
+            this.isPublicJoin = isPublicJoin;
+        }
+
+        // Backward compatibility constructor
+        public CityData(String name, String mayorName, int chunkCount, int residentCount) {
+            this(name, mayorName, chunkCount, residentCount, false, false);
         }
     }
 }

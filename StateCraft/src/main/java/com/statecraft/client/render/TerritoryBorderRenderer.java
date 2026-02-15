@@ -23,7 +23,7 @@ import java.util.*;
 public class TerritoryBorderRenderer {
 
     private static final float LINE_WIDTH = 3.0f;
-    private static final int RENDER_DISTANCE = 6; // Chunks to consider
+    private static final int RENDER_DISTANCE = 10; // Chunks to consider (should match cache radius)
 
     // Colors (RGBA 0-1 range) - slightly more saturated than chunk borders
     private static final float[] COLOR_OWN = {0.1f, 0.9f, 0.1f, 0.85f};      // Bright Green

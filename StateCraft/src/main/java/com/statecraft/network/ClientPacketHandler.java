@@ -45,6 +45,18 @@ public class ClientPacketHandler {
                 } else {
                     screen.setNoNation();
                 }
+            } else if (mc.screen instanceof ProfileScreen screen) {
+                // Get nickname from player's persistent data (synced separately or from local cache)
+                String nickname = "";
+                if (mc.player != null) {
+                    nickname = mc.player.getPersistentData().getString("statecraft_nickname");
+                }
+                screen.updateProfileData(
+                    packet.isInNation() ? packet.getNationName() : "",
+                    packet.isInNation() ? packet.getStateName() : "",
+                    packet.isInNation() ? packet.getCityName() : "",
+                    nickname
+                );
             } else if (mc.screen instanceof NationInfoScreen screen) {
                 if (packet.isDetailedData()) {
                     screen.updateData(
@@ -59,6 +71,7 @@ public class ClientPacketHandler {
                         packet.getLeaderName(),
                         packet.isLeader(),
                         packet.isAdmin(),
+                        packet.isMember(),
                         packet.getStateNames(),
                         packet.getAllyNames(),
                         packet.getEnemyNames()
@@ -193,6 +206,16 @@ public class ClientPacketHandler {
                     // Always open ChunkInfoScreen for chunk info command
                     mc.setScreen(new ChunkInfoScreen(packet.getChunkX(), packet.getChunkZ()));
                 }
+                case MARKETPLACE -> {
+                    // Open marketplace screen
+                    mc.setScreen(new ChunkMarketplaceScreen());
+                }
+                case MAIL_INBOX -> {
+                    mc.setScreen(new MailInboxScreen());
+                }
+                case MAIL_VIEW -> {
+                    // Mail view is opened from inbox, not directly from server
+                }
             }
         });
         ctx.get().setPacketHandled(true);
@@ -269,10 +292,10 @@ public class ClientPacketHandler {
                 List<StatesListScreen.StateData> states = new ArrayList<>();
                 for (SyncStatesPacket.StateInfo info : packet.getStates()) {
                     states.add(new StatesListScreen.StateData(
-                        info.name, info.governorName, info.cityCount, info.chunkCount
+                        info.name, info.governorName, info.cityCount, info.chunkCount, info.isCitizen
                     ));
                 }
-                screen.updateStates(states);
+                screen.updateStates(states, packet.canCreateState());
             }
         });
         ctx.get().setPacketHandled(true);
@@ -303,10 +326,11 @@ public class ClientPacketHandler {
                 List<CitiesListScreen.CityData> cities = new ArrayList<>();
                 for (SyncCitiesPacket.CityInfo info : packet.getCities()) {
                     cities.add(new CitiesListScreen.CityData(
-                        info.name, info.mayorName, info.chunkCount, info.residentCount
+                        info.name, info.mayorName, info.chunkCount, info.residentCount,
+                        info.isResident, info.isPublicJoin
                     ));
                 }
-                screen.updateCities(cities);
+                screen.updateCities(cities, packet.canCreateCity());
             }
         });
         ctx.get().setPacketHandled(true);
@@ -354,6 +378,122 @@ public class ClientPacketHandler {
         });
         ctx.get().setPacketHandled(true);
     }
-}
 
+    public static void handleSyncMarketplaceData(SyncMarketplaceDataPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof ChunkMarketplaceScreen screen) {
+                // Convert to screen's data format
+                java.util.List<ChunkMarketplaceScreen.ChunkListing> listings = new java.util.ArrayList<>();
+                for (SyncMarketplaceDataPacket.ListingInfo info : packet.getListings()) {
+                    listings.add(new ChunkMarketplaceScreen.ChunkListing(
+                        info.chunkX, info.chunkZ,
+                        info.ownerName, info.isGovernment,
+                        info.price, info.cityName
+                    ));
+                }
+                screen.updateMarketplaceData(listings);
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncMailData(SyncMailDataPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof MailInboxScreen screen) {
+                // Convert to screen's data format
+                List<MailInboxScreen.MailEntry> entries = new ArrayList<>();
+                for (SyncMailDataPacket.MailInfo info : packet.getMessages()) {
+                    entries.add(new MailInboxScreen.MailEntry(
+                        info.mailId,
+                        info.subject,
+                        info.body,
+                        info.senderName,
+                        info.timeAgo,
+                        info.type,
+                        info.read
+                    ));
+                }
+                screen.updateMailData(entries, packet.getUnreadCount(), packet.getTotalCount());
+            } else if (mc.screen instanceof GovMailboxScreen screen) {
+                // Convert to government mailbox screen's data format
+                List<GovMailboxScreen.MailEntry> entries = new ArrayList<>();
+                for (SyncMailDataPacket.MailInfo info : packet.getMessages()) {
+                    entries.add(new GovMailboxScreen.MailEntry(
+                        info.mailId,
+                        info.subject,
+                        info.body,
+                        info.senderName,
+                        info.timeAgo,
+                        info.type.name(),
+                        info.read
+                    ));
+                }
+                screen.updateMailData(entries, packet.getUnreadCount(), packet.getTotalCount());
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncMyStates(SyncMyStatesPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof MyStatesScreen screen) {
+                List<MyStatesScreen.StateEntry> entries = new ArrayList<>();
+                for (SyncMyStatesPacket.StateEntry info : packet.getStates()) {
+                    entries.add(new MyStatesScreen.StateEntry(
+                        info.stateName,
+                        info.governorName,
+                        info.isPrimary,
+                        info.ownedChunks
+                    ));
+                }
+                screen.updateMyStates(entries);
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncMyCities(SyncMyCitiesPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof MyCitiesScreen screen) {
+                List<MyCitiesScreen.CityEntry> entries = new ArrayList<>();
+                for (SyncMyCitiesPacket.CityEntry info : packet.getCities()) {
+                    entries.add(new MyCitiesScreen.CityEntry(
+                        info.cityName,
+                        info.stateName,
+                        info.mayorName,
+                        info.isPrimary,
+                        info.ownedChunks
+                    ));
+                }
+                screen.updateMyCities(entries);
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncAllNations(SyncAllNationsPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof NationsListScreen screen) {
+                List<NationsListScreen.NationEntry> entries = new ArrayList<>();
+                for (SyncAllNationsPacket.NationEntry info : packet.getNations()) {
+                    entries.add(new NationsListScreen.NationEntry(
+                        info.name,
+                        info.leaderName,
+                        info.memberCount,
+                        info.stateCount,
+                        info.isOpen,
+                        info.isMember
+                    ));
+                }
+                screen.updateNations(entries);
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+}
 

@@ -228,6 +228,23 @@ public class EconomyManager {
         return new TransactionResult(true, "Withdrew " + formatCurrency(amount), account.getBalance());
     }
 
+    /**
+     * Force a withdrawal even if it results in a negative balance.
+     * Used for mandatory payments like taxes.
+     */
+    public TransactionResult forceWithdraw(UUID playerId, double amount, String description) {
+        if (amount <= 0) {
+            return new TransactionResult(false, "Amount must be positive", 0);
+        }
+
+        BankAccount account = getOrCreateAccount(playerId);
+        account.subtract(amount);
+        recordTransaction(playerId, Transaction.Type.WITHDRAWAL, amount, null, "[FORCED] " + description);
+        dirty = true;
+
+        return new TransactionResult(true, "Force withdrew " + formatCurrency(amount), account.getBalance());
+    }
+
     public TransactionResult transfer(UUID fromId, UUID toId, double amount, String description) {
         if (amount <= 0) {
             return new TransactionResult(false, "Amount must be positive", 0);

@@ -10,9 +10,11 @@ import java.util.List;
  */
 public class SyncStatesPacket {
     private final List<StateInfo> states;
+    private final boolean canCreateState; // Whether the player can create new states
 
-    public SyncStatesPacket(List<StateInfo> states) {
+    public SyncStatesPacket(List<StateInfo> states, boolean canCreateState) {
         this.states = states;
+        this.canCreateState = canCreateState;
     }
 
     public SyncStatesPacket(FriendlyByteBuf buf) {
@@ -23,9 +25,11 @@ public class SyncStatesPacket {
                 buf.readUtf(64),
                 buf.readUtf(64),
                 buf.readVarInt(),
-                buf.readVarInt()
+                buf.readVarInt(),
+                buf.readBoolean()
             ));
         }
+        this.canCreateState = buf.readBoolean();
     }
 
     public void encode(FriendlyByteBuf buf) {
@@ -35,11 +39,17 @@ public class SyncStatesPacket {
             buf.writeUtf(state.governorName, 64);
             buf.writeVarInt(state.cityCount);
             buf.writeVarInt(state.chunkCount);
+            buf.writeBoolean(state.isCitizen);
         }
+        buf.writeBoolean(canCreateState);
     }
 
     public List<StateInfo> getStates() {
         return states;
+    }
+
+    public boolean canCreateState() {
+        return canCreateState;
     }
 
     public static class StateInfo {
@@ -47,12 +57,14 @@ public class SyncStatesPacket {
         public final String governorName;
         public final int cityCount;
         public final int chunkCount;
+        public final boolean isCitizen;
 
-        public StateInfo(String name, String governorName, int cityCount, int chunkCount) {
+        public StateInfo(String name, String governorName, int cityCount, int chunkCount, boolean isCitizen) {
             this.name = name;
             this.governorName = governorName;
             this.cityCount = cityCount;
             this.chunkCount = chunkCount;
+            this.isCitizen = isCitizen;
         }
     }
 }

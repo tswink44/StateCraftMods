@@ -279,11 +279,146 @@ public class ServerPacketHandler {
         ctx.get().setPacketHandled(true);
     }
 
+    public static void handleChunkMarket(ChunkMarketPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            int chunkX = packet.getChunkX();
+            int chunkZ = packet.getChunkZ();
+
+            switch (packet.getAction()) {
+                case REQUEST_INFO -> sendChunkMarketInfo(player, chunkX, chunkZ);
+                case LIST_FOR_SALE -> {
+                    var result = com.statecraft.economy.core.ChunkMarketManager.getInstance()
+                        .listChunkForSale(player, chunkX, chunkZ, packet.getPrice());
+                    NetworkHandler.sendToPlayer(new TransactionResultPacket(result.success(),
+                        result.message(), EconomyManager.getInstance().getBalance(player.getUUID())), player);
+                    if (result.success()) {
+                        sendChunkMarketInfo(player, chunkX, chunkZ);
+                    }
+                }
+                case REMOVE_FROM_SALE -> {
+                    var result = com.statecraft.economy.core.ChunkMarketManager.getInstance()
+                        .removeChunkFromSale(player, chunkX, chunkZ);
+                    NetworkHandler.sendToPlayer(new TransactionResultPacket(result.success(),
+                        result.message(), EconomyManager.getInstance().getBalance(player.getUUID())), player);
+                    if (result.success()) {
+                        sendChunkMarketInfo(player, chunkX, chunkZ);
+                    }
+                }
+                case PURCHASE -> {
+                    var result = com.statecraft.economy.core.ChunkMarketManager.getInstance()
+                        .purchaseChunk(player, chunkX, chunkZ);
+                    NetworkHandler.sendToPlayer(new TransactionResultPacket(result.success(),
+                        result.message(), EconomyManager.getInstance().getBalance(player.getUUID())), player);
+                    if (result.success()) {
+                        sendChunkMarketInfo(player, chunkX, chunkZ);
+                    }
+                }
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    private static void sendChunkMarketInfo(ServerPlayer player, int chunkX, int chunkZ) {
+        if (!StateCraftEconomy.isStateCraftLoaded()) {
+            NetworkHandler.sendToPlayer(new SyncChunkMarketInfoPacket(chunkX, chunkZ), player);
+            return;
+        }
+
+        var chunkInfo = StateCraftIntegration.getChunkInfo(chunkX, chunkZ, player.level().dimension());
+        if (chunkInfo == null) {
+            // Unclaimed chunk
+            NetworkHandler.sendToPlayer(new SyncChunkMarketInfoPacket(chunkX, chunkZ), player);
+            return;
+        }
+
+        // Get names for display
+        String sellerName = "";
+        String ownerName = "";
+        String cityName = "";
+
+        if (chunkInfo.sellerId() != null) {
+            var profile = player.server.getProfileCache().get(chunkInfo.sellerId());
+            sellerName = profile.map(p -> p.getName()).orElse("Unknown");
+        }
+
+        if (chunkInfo.isPrivatelyOwned() && chunkInfo.ownerId() != null) {
+            var profile = player.server.getProfileCache().get(chunkInfo.ownerId());
+            ownerName = profile.map(p -> p.getName()).orElse("Unknown");
+        }
+
+        // Get city name
+        cityName = StateCraftIntegration.getCityName(chunkInfo.cityId());
+
+        // Check permissions
+        boolean canListForSale = false;
+        boolean canBuy = false;
+        UUID playerId = player.getUUID();
+
+        if (chunkInfo.isPrivatelyOwned()) {
+            // Private chunk - owner can list, others can buy if for sale
+            canListForSale = playerId.equals(chunkInfo.ownerId());
+            canBuy = chunkInfo.isForSale() && !playerId.equals(chunkInfo.ownerId());
+        } else {
+            // Government chunk - officials can list, anyone can buy if for sale
+            canListForSale = StateCraftIntegration.canManageChunk(player, chunkX, chunkZ);
+            canBuy = chunkInfo.isForSale() && !playerId.equals(chunkInfo.sellerId());
+        }
+
+        NetworkHandler.sendToPlayer(new SyncChunkMarketInfoPacket(
+            chunkX, chunkZ,
+            true, // isClaimed
+            chunkInfo.isForSale(),
+            chunkInfo.salePrice(),
+            sellerName,
+            ownerName,
+            cityName,
+            chunkInfo.isPrivatelyOwned(),
+            canListForSale,
+            canBuy
+        ), player);
+    }
+
     private static double getNationBalance(ServerPlayer player) {
         if (!StateCraftEconomy.isStateCraftLoaded()) {
             return -1;
         }
         return StateCraftIntegration.getNationBalance(player);
+    }
+
+    public static void handleRequestChunkValuation(RequestChunkValuationPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            int chunkX = packet.getChunkX();
+            int chunkZ = packet.getChunkZ();
+            String dimension = player.level().dimension().location().toString();
+
+            // Get valuation from manager
+            com.statecraft.economy.valuation.ChunkValuation valuation =
+                com.statecraft.economy.valuation.ChunkValuationManager.getInstance()
+                    .getValuation(chunkX, chunkZ, dimension);
+
+            // Send to client
+            NetworkHandler.sendToPlayer(new SyncChunkValuationPacket(
+                chunkX, chunkZ, dimension,
+                valuation.getBaseValue(),
+                valuation.getLocationMultiplier(),
+                valuation.getDistanceFromSpawn(),
+                valuation.getBiomeMultiplier(),
+                valuation.getBiomeName(),
+                valuation.getDemandMultiplier(),
+                valuation.getNearbyClaims(),
+                valuation.getGovernmentMultiplier(),
+                valuation.getImprovementValue(),
+                valuation.getImprovementScore(),
+                valuation.getTotalValue()
+            ), player);
+        });
+        ctx.get().setPacketHandled(true);
     }
 }
 

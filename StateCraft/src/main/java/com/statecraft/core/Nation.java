@@ -26,6 +26,8 @@ public class Nation {
     private String description;
     private String tag; // Short tag/prefix for chat
     private boolean open; // Can players join without invite?
+    private String flagUrl; // URL to flag image
+    private double statePassThroughRate; // Rate states must give to nation (e.g., 0.20 = 20%)
 
     // Treasury (for future economy integration)
     private long balance;
@@ -44,6 +46,8 @@ public class Nation {
         this.description = "";
         this.tag = "";
         this.open = false;
+        this.flagUrl = "";
+        this.statePassThroughRate = 0.20; // Default 20%
         this.balance = 0;
     }
 
@@ -134,6 +138,23 @@ public class Nation {
 
     public void setOpen(boolean open) {
         this.open = open;
+    }
+
+    public String getFlagUrl() {
+        return flagUrl;
+    }
+
+    public void setFlagUrl(String flagUrl) {
+        this.flagUrl = flagUrl != null ? flagUrl : "";
+    }
+
+    public double getStatePassThroughRate() {
+        return statePassThroughRate;
+    }
+
+    public void setStatePassThroughRate(double statePassThroughRate) {
+        // Clamp between 0 and 1 (0% to 100%)
+        this.statePassThroughRate = Math.max(0, Math.min(1.0, statePassThroughRate));
     }
 
     public long getBalance() {
@@ -234,6 +255,18 @@ public class Nation {
         return states.values().stream().mapToInt(State::getTotalChunkCount).sum();
     }
 
+    /**
+     * Check if a player owns any property (chunks) in this nation
+     */
+    public boolean playerOwnsPropertyInNation(UUID playerId) {
+        for (State state : states.values()) {
+            if (state.playerOwnsChunkInState(playerId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public Set<UUID> getAllMembers() {
         Set<UUID> allMembers = new HashSet<>();
         allMembers.add(leaderId);
@@ -277,7 +310,9 @@ public class Nation {
         tag.putString("description", description);
         tag.putString("tag", this.tag);
         tag.putBoolean("open", open);
+        tag.putString("flagUrl", flagUrl);
         tag.putLong("balance", balance);
+        tag.putDouble("statePassThroughRate", statePassThroughRate);
 
         // Save admins
         ListTag adminsList = new ListTag();
@@ -336,7 +371,9 @@ public class Nation {
         nation.description = tag.getString("description");
         nation.tag = tag.getString("tag");
         nation.open = tag.getBoolean("open");
+        nation.flagUrl = tag.getString("flagUrl");
         nation.balance = tag.getLong("balance");
+        nation.statePassThroughRate = tag.contains("statePassThroughRate") ? tag.getDouble("statePassThroughRate") : 0.20;
 
         // Load admins
         ListTag adminsList = tag.getList("admins", Tag.TAG_COMPOUND);

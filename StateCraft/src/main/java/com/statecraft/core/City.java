@@ -24,6 +24,11 @@ public class City {
     // City settings
     private boolean publicJoin; // Can players join without invite?
     private String description;
+    private String flagUrl;
+    private double taxMultiplier; // Multiplier for chunk valuation (government-controlled)
+    private double taxRate; // Base tax rate as decimal (e.g., 0.05 = 5%)
+    private double statePassThroughRate; // Percentage of tax revenue passed to state (e.g., 0.20 = 20%)
+    private int maxChunks; // Maximum chunks this city can claim
 
     public City(UUID id, String name, UUID stateId, UUID mayorId) {
         this.id = id;
@@ -34,6 +39,11 @@ public class City {
         this.chunks = new HashMap<>();
         this.publicJoin = false;
         this.description = "";
+        this.flagUrl = "";
+        this.taxMultiplier = 1.0;
+        this.taxRate = 0.05; // Default 5%
+        this.statePassThroughRate = 0.20; // Default 20% to state
+        this.maxChunks = 50; // Default 50 chunks per city
 
         // Mayor is automatically a resident
         residents.add(mayorId);
@@ -102,6 +112,49 @@ public class City {
         this.description = description;
     }
 
+    public String getFlagUrl() {
+        return flagUrl;
+    }
+
+    public void setFlagUrl(String flagUrl) {
+        this.flagUrl = flagUrl != null ? flagUrl : "";
+    }
+
+    public double getTaxMultiplier() {
+        return taxMultiplier;
+    }
+
+    public void setTaxMultiplier(double taxMultiplier) {
+        // Clamp between 0.5 and 2.0
+        this.taxMultiplier = Math.max(0.5, Math.min(2.0, taxMultiplier));
+    }
+
+    public double getTaxRate() {
+        return taxRate;
+    }
+
+    public void setTaxRate(double taxRate) {
+        // Clamp between 0 and 1 (0% to 100%)
+        this.taxRate = Math.max(0, Math.min(1.0, taxRate));
+    }
+
+    public double getStatePassThroughRate() {
+        return statePassThroughRate;
+    }
+
+    public void setStatePassThroughRate(double statePassThroughRate) {
+        // Clamp between 0 and 1 (0% to 100%)
+        this.statePassThroughRate = Math.max(0, Math.min(1.0, statePassThroughRate));
+    }
+
+    public int getMaxChunks() {
+        return maxChunks;
+    }
+
+    public void setMaxChunks(int maxChunks) {
+        this.maxChunks = Math.max(1, maxChunks); // At least 1 chunk
+    }
+
     // Chunk Management
     private static String getChunkKey(ChunkPos pos, ResourceKey<Level> dimension) {
         return pos.x + "," + pos.z + "," + dimension.location().toString();
@@ -127,8 +180,24 @@ public class City {
         return Collections.unmodifiableCollection(chunks.values());
     }
 
+    public Collection<ClaimedChunk> getChunks() {
+        return getAllChunks();
+    }
+
     public int getChunkCount() {
         return chunks.size();
+    }
+
+    /**
+     * Check if player owns any chunk in this city
+     */
+    public boolean playerOwnsChunkInCity(UUID playerId) {
+        for (ClaimedChunk chunk : chunks.values()) {
+            if (playerId.equals(chunk.getPlayerOwner())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public PermissionLevel getPlayerRole(UUID playerId) {
@@ -149,6 +218,11 @@ public class City {
         tag.putUUID("mayorId", mayorId);
         tag.putBoolean("publicJoin", publicJoin);
         tag.putString("description", description);
+        tag.putString("flagUrl", flagUrl);
+        tag.putDouble("taxMultiplier", taxMultiplier);
+        tag.putDouble("taxRate", taxRate);
+        tag.putDouble("statePassThroughRate", statePassThroughRate);
+        tag.putInt("maxChunks", maxChunks);
 
         // Save residents
         ListTag residentsList = new ListTag();
@@ -178,6 +252,11 @@ public class City {
         City city = new City(id, name, stateId, mayorId);
         city.publicJoin = tag.getBoolean("publicJoin");
         city.description = tag.getString("description");
+        city.flagUrl = tag.getString("flagUrl");
+        city.taxMultiplier = tag.contains("taxMultiplier") ? tag.getDouble("taxMultiplier") : 1.0;
+        city.taxRate = tag.contains("taxRate") ? tag.getDouble("taxRate") : 0.05;
+        city.statePassThroughRate = tag.contains("statePassThroughRate") ? tag.getDouble("statePassThroughRate") : 0.20;
+        city.maxChunks = tag.contains("maxChunks") ? tag.getInt("maxChunks") : 50;
 
         // Load residents
         ListTag residentsList = tag.getList("residents", Tag.TAG_COMPOUND);

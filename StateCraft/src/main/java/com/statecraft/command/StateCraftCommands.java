@@ -20,7 +20,8 @@ public class StateCraftCommands {
             .then(InfoCommand.register())
             .then(GuiCommand.register())
             .then(BordersCommand.register())
-            .then(AdminCommand.register());
+            .then(AdminCommand.register())
+            .then(MailCommand.register());
 
         dispatcher.register(statecraftCommand);
 
@@ -31,6 +32,7 @@ public class StateCraftCommands {
         dispatcher.register(Commands.literal("nation").redirect(dispatcher.getRoot().getChild("statecraft").getChild("nation")));
         dispatcher.register(Commands.literal("city").redirect(dispatcher.getRoot().getChild("statecraft").getChild("city")));
         dispatcher.register(Commands.literal("chunk").redirect(dispatcher.getRoot().getChild("statecraft").getChild("chunk")));
+        dispatcher.register(Commands.literal("mail").redirect(dispatcher.getRoot().getChild("statecraft").getChild("mail")));
     }
 }
 

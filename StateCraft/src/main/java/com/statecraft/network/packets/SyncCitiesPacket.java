@@ -10,9 +10,11 @@ import java.util.List;
  */
 public class SyncCitiesPacket {
     private final List<CityInfo> cities;
+    private final boolean canCreateCity; // Whether the player can create new cities
 
-    public SyncCitiesPacket(List<CityInfo> cities) {
+    public SyncCitiesPacket(List<CityInfo> cities, boolean canCreateCity) {
         this.cities = cities;
+        this.canCreateCity = canCreateCity;
     }
 
     public SyncCitiesPacket(FriendlyByteBuf buf) {
@@ -23,9 +25,12 @@ public class SyncCitiesPacket {
                 buf.readUtf(64),
                 buf.readUtf(64),
                 buf.readVarInt(),
-                buf.readVarInt()
+                buf.readVarInt(),
+                buf.readBoolean(),
+                buf.readBoolean()
             ));
         }
+        this.canCreateCity = buf.readBoolean();
     }
 
     public void encode(FriendlyByteBuf buf) {
@@ -35,11 +40,18 @@ public class SyncCitiesPacket {
             buf.writeUtf(city.mayorName, 64);
             buf.writeVarInt(city.chunkCount);
             buf.writeVarInt(city.residentCount);
+            buf.writeBoolean(city.isResident);
+            buf.writeBoolean(city.isPublicJoin);
         }
+        buf.writeBoolean(canCreateCity);
     }
 
     public List<CityInfo> getCities() {
         return cities;
+    }
+
+    public boolean canCreateCity() {
+        return canCreateCity;
     }
 
     public static class CityInfo {
@@ -47,12 +59,21 @@ public class SyncCitiesPacket {
         public final String mayorName;
         public final int chunkCount;
         public final int residentCount;
+        public final boolean isResident;
+        public final boolean isPublicJoin;
 
-        public CityInfo(String name, String mayorName, int chunkCount, int residentCount) {
+        public CityInfo(String name, String mayorName, int chunkCount, int residentCount, boolean isResident, boolean isPublicJoin) {
             this.name = name;
             this.mayorName = mayorName;
             this.chunkCount = chunkCount;
             this.residentCount = residentCount;
+            this.isResident = isResident;
+            this.isPublicJoin = isPublicJoin;
+        }
+
+        // Backward compatibility constructor
+        public CityInfo(String name, String mayorName, int chunkCount, int residentCount) {
+            this(name, mayorName, chunkCount, residentCount, false, false);
         }
     }
 }

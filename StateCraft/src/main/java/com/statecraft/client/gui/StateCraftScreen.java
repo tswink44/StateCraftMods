@@ -50,14 +50,23 @@ public abstract class StateCraftScreen extends Screen {
         // Render panel background
         renderPanel(graphics, guiLeft, guiTop, guiWidth, guiHeight);
 
-        // Render title
-        graphics.drawCenteredString(this.font, this.title, this.width / 2, guiTop + 8, COLOR_PRIMARY);
+        // Render title (can be overridden by subclasses)
+        if (shouldRenderTitle()) {
+            graphics.drawCenteredString(this.font, this.title, this.width / 2, guiTop + 8, COLOR_PRIMARY);
+        }
 
         // Render content
         renderContent(graphics, mouseX, mouseY, partialTick);
 
         // Render widgets (buttons, etc.)
         super.render(graphics, mouseX, mouseY, partialTick);
+    }
+
+    /**
+     * Override to disable default title rendering
+     */
+    protected boolean shouldRenderTitle() {
+        return true;
     }
 
     /**

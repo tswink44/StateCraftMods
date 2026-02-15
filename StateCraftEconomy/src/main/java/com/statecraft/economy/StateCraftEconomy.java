@@ -5,14 +5,21 @@ import com.statecraft.economy.block.entity.ModBlockEntities;
 import com.statecraft.economy.command.EconomyCommands;
 import com.statecraft.economy.config.EconomyConfig;
 import com.statecraft.economy.core.EconomyManager;
+import com.statecraft.economy.core.TaxationManager;
 import com.statecraft.economy.integration.StateCraftIntegration;
 import com.statecraft.economy.item.ModItems;
 import com.statecraft.economy.network.NetworkHandler;
 import com.statecraft.economy.gui.ModMenuTypes;
+import com.statecraft.economy.valuation.ChunkValuationManager;
+import com.statecraft.economy.valuation.ImprovementTracker;
+import com.statecraft.economy.valuation.ValuationConfig;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
 import net.minecraftforge.event.RegisterCommandsEvent;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.server.ServerStartedEvent;
+import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.ModList;
@@ -55,9 +62,11 @@ public class StateCraftEconomy {
 
         // Register config
         ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, EconomyConfig.SPEC, "statecraft-economy.toml");
+        ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, ValuationConfig.SPEC, "statecraft-valuation.toml");
 
         // Register game events
         MinecraftForge.EVENT_BUS.register(this);
+        MinecraftForge.EVENT_BUS.register(ImprovementTracker.getInstance());
 
         LOGGER.info("StateCraft Economy initializing...");
     }
@@ -100,6 +109,36 @@ public class StateCraftEconomy {
     public void onRegisterCommands(RegisterCommandsEvent event) {
         EconomyCommands.register(event.getDispatcher());
         LOGGER.info("StateCraft Economy commands registered");
+    }
+
+    @SubscribeEvent
+    public void onServerStarted(ServerStartedEvent event) {
+        // Initialize valuation and improvement tracking
+        ChunkValuationManager.getInstance().init(event.getServer());
+        ImprovementTracker.getInstance().init(event.getServer());
+        LOGGER.info("Chunk valuation system initialized");
+    }
+
+    @SubscribeEvent
+    public void onServerStopping(ServerStoppingEvent event) {
+        // Save valuation cache and improvement scores
+        ChunkValuationManager.getInstance().saveCache();
+        ImprovementTracker.getInstance().save();
+        LOGGER.info("Chunk valuation data saved");
+    }
+
+    @SubscribeEvent
+    public void onServerTick(TickEvent.ServerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
+        if (event.getServer() == null) return;
+
+        // Run taxation system tick
+        if (stateCraftLoaded) {
+            TaxationManager.getInstance().tick(event.getServer());
+        }
+
+        // Run valuation cache tick
+        ChunkValuationManager.getInstance().tick(event.getServer());
     }
 
     public static boolean isStateCraftLoaded() {

@@ -37,7 +37,7 @@ public class ClaimsManagementScreen extends StateCraftScreen {
 
     public ClaimsManagementScreen() {
         super(Component.literal("Manage Claims"));
-        this.guiWidth = 280; this.guiHeight = 300;
+        this.guiWidth = 280; this.guiHeight = 250;
     }
 
     @Override
@@ -56,13 +56,13 @@ public class ClaimsManagementScreen extends StateCraftScreen {
 
         int centerX = this.width / 2;
         int buttonWidth = 120;
-        int startY = guiTop + 130; // Moved down to make room for chunk info
-        int spacing = 24;
+        int startY = guiTop + 110; // Adjusted for shorter height
+        int spacing = 22;
 
         // Chunk Info button - shows current chunk details and permits
         this.addRenderableWidget(createButton(
             centerX - buttonWidth / 2, startY,
-            buttonWidth, 20,
+            buttonWidth, 18,
             Component.literal("Chunk Info"),
             btn -> openChunkInfo()
         ));
@@ -70,7 +70,7 @@ public class ClaimsManagementScreen extends StateCraftScreen {
         // Claim current chunk
         this.addRenderableWidget(createButton(
             centerX - buttonWidth / 2, startY + spacing,
-            buttonWidth, 20,
+            buttonWidth, 18,
             Component.literal("Claim This Chunk"),
             btn -> claimCurrentChunk()
         ));
@@ -78,7 +78,7 @@ public class ClaimsManagementScreen extends StateCraftScreen {
         // Unclaim current chunk
         this.addRenderableWidget(createButton(
             centerX - buttonWidth / 2, startY + spacing * 2,
-            buttonWidth, 20,
+            buttonWidth, 18,
             Component.literal("Unclaim This Chunk"),
             btn -> unclaimCurrentChunk()
         ));
@@ -86,7 +86,7 @@ public class ClaimsManagementScreen extends StateCraftScreen {
         // View chunk map
         this.addRenderableWidget(createButton(
             centerX - buttonWidth / 2, startY + spacing * 3,
-            buttonWidth, 20,
+            buttonWidth, 18,
             Component.literal("View Chunk Map"),
             btn -> openChunkMap()
         ));
@@ -94,7 +94,7 @@ public class ClaimsManagementScreen extends StateCraftScreen {
         // Auto-claim toggle (admin only)
         autoClaimButton = this.addRenderableWidget(createButton(
             centerX - buttonWidth / 2, startY + spacing * 4,
-            buttonWidth, 20,
+            buttonWidth, 18,
             Component.literal("Auto-Claim: OFF"),
             btn -> toggleAutoClaim()
         ));
@@ -102,8 +102,8 @@ public class ClaimsManagementScreen extends StateCraftScreen {
 
         // Back button
         this.addRenderableWidget(createButton(
-            centerX - 40, guiTop + guiHeight - 28,
-            80, 20,
+            centerX - 40, guiTop + guiHeight - 26,
+            80, 18,
             Component.literal("Back"),
             btn -> goBack()
         ));
@@ -115,73 +115,60 @@ public class ClaimsManagementScreen extends StateCraftScreen {
         renderDivider(graphics, guiLeft + 10, guiTop + 22, guiWidth - 20);
 
         int centerX = this.width / 2;
-        int y = guiTop + 30;
+        int y = guiTop + 28;
         int leftCol = guiLeft + 15;
 
         // === Current Chunk Section ===
         graphics.drawString(this.font, "§6Current Chunk", leftCol, y, COLOR_PRIMARY);
-        y += 14;
+        y += 12;
         graphics.drawString(this.font, "§7Coordinates: §f" + currentChunkX + ", " + currentChunkZ, leftCol + 10, y, COLOR_TEXT);
-        y += 14;
+        y += 12;
 
-        // Chunk ownership
+        // Chunk ownership (single line)
         if (chunkDataLoaded) {
             if (chunkOwnershipType.equals("UNCLAIMED")) {
-                graphics.drawString(this.font, "§7Status: §8Wilderness (Unclaimed)", leftCol + 10, y, COLOR_TEXT);
+                graphics.drawString(this.font, "§7Status: §8Wilderness", leftCol + 10, y, COLOR_TEXT);
             } else if (chunkOwnershipType.equals("PLAYER")) {
-                graphics.drawString(this.font, "§7Status: §ePrivate Property", leftCol + 10, y, COLOR_TEXT);
-                y += 12;
-                graphics.drawString(this.font, "§7Owner: §f" + chunkOwnerName, leftCol + 10, y, COLOR_TEXT);
+                graphics.drawString(this.font, "§7Status: §ePrivate §7- §f" + chunkOwnerName, leftCol + 10, y, COLOR_TEXT);
             } else {
                 // HIERARCHY - government owned
-                graphics.drawString(this.font, "§7Status: §aGovernment Land", leftCol + 10, y, COLOR_TEXT);
-                y += 12;
-                if (!chunkCityName.isEmpty()) {
-                    graphics.drawString(this.font, "§7Claimed by: §a" + chunkCityName, leftCol + 10, y, COLOR_TEXT);
-                } else if (!chunkNationName.isEmpty()) {
-                    graphics.drawString(this.font, "§7Claimed by: §e" + chunkNationName, leftCol + 10, y, COLOR_TEXT);
-                }
+                String claimedBy = !chunkCityName.isEmpty() ? chunkCityName : chunkNationName;
+                graphics.drawString(this.font, "§7Status: §aGov §7- §a" + claimedBy, leftCol + 10, y, COLOR_TEXT);
             }
         } else {
             graphics.drawString(this.font, "§7Status: §8Loading...", leftCol + 10, y, COLOR_TEXT);
         }
 
         // Divider before your nation context
-        y += 20;
+        y += 16;
         renderDivider(graphics, guiLeft + 10, y - 4, guiWidth - 20);
 
-        // === Your Nation Context Section ===
+        // === Your Nation Context Section (condensed) ===
         graphics.drawString(this.font, "§6Your Nation", leftCol, y, COLOR_PRIMARY);
-        y += 14;
+        y += 12;
 
         if (dataLoaded && nationName != null) {
-            // Show current context
-            graphics.drawString(this.font, "§7Nation: §e" + nationName, leftCol + 10, y, COLOR_TEXT);
+            // Show current context on fewer lines
+            graphics.drawString(this.font, "§e" + nationName + " §7> §f" + (stateName != null ? stateName : ""), leftCol + 10, y, COLOR_TEXT);
             y += 12;
-
-            if (stateName != null && !stateName.isEmpty()) {
-                graphics.drawString(this.font, "§7State: §f" + stateName, leftCol + 10, y, COLOR_TEXT);
-                y += 12;
-            }
-
             if (cityName != null && !cityName.isEmpty()) {
                 graphics.drawString(this.font, "§7City: §a" + cityName, leftCol + 10, y, COLOR_TEXT);
             } else {
-                graphics.drawString(this.font, "§7City: §cNone (join a city first)", leftCol + 10, y, COLOR_TEXT);
+                graphics.drawString(this.font, "§7City: §cNone", leftCol + 10, y, COLOR_TEXT);
             }
         } else if (dataLoaded) {
-            graphics.drawString(this.font, "§cYou are not in a nation", leftCol + 10, y, 0xFFFF5555);
+            graphics.drawString(this.font, "§cNot in a nation", leftCol + 10, y, 0xFFFF5555);
         } else {
             graphics.drawString(this.font, "§7Loading...", leftCol + 10, y, COLOR_TEXT);
         }
 
         // Help text at bottom
-        renderDivider(graphics, guiLeft + 10, guiTop + guiHeight - 48, guiWidth - 20);
+        renderDivider(graphics, guiLeft + 10, guiTop + guiHeight - 40, guiWidth - 20);
 
         if (!canUseAutoClaim && dataLoaded && nationName != null) {
-            graphics.drawCenteredString(this.font, "§8Auto-claim requires nation admin", centerX, guiTop + guiHeight - 42, 0xFF666666);
+            graphics.drawCenteredString(this.font, "§8Auto-claim requires nation admin", centerX, guiTop + guiHeight - 34, 0xFF666666);
         } else {
-            graphics.drawCenteredString(this.font, "§8Stand in the chunk you want to claim/unclaim", centerX, guiTop + guiHeight - 42, 0xFF666666);
+            graphics.drawCenteredString(this.font, "§8Stand in the chunk you want to claim/unclaim", centerX, guiTop + guiHeight - 34, 0xFF666666);
         }
     }
 

@@ -12,7 +12,10 @@ public class OpenGuiPacket {
         NATION_INFO,
         STATE_INFO,
         CITY_INFO,
-        CHUNK_INFO
+        CHUNK_INFO,
+        MARKETPLACE,
+        MAIL_INBOX,
+        MAIL_VIEW
     }
 
     private final ScreenType screenType;

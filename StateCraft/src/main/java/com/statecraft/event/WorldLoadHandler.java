@@ -4,6 +4,7 @@ import com.statecraft.StateCraft;
 import com.statecraft.core.ChunkClaimManager;
 import com.statecraft.core.InvitationManager;
 import com.statecraft.data.NationSavedData;
+import com.statecraft.mail.MailManager;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraftforge.event.level.LevelEvent;
@@ -28,6 +29,9 @@ public class WorldLoadHandler {
 
         StateCraft.LOGGER.info("Loading StateCraft nation data...");
         NationSavedData.get(level);
+
+        // Initialize mail manager
+        MailManager.getInstance().init(level.getServer());
     }
 
     @SubscribeEvent
@@ -44,6 +48,9 @@ public class WorldLoadHandler {
         // Clean up expired invitations before saving
         InvitationManager.getInstance().cleanupExpired();
 
+        // Save mail data
+        MailManager.getInstance().save();
+
         if (ChunkClaimManager.getInstance().isDirty() || InvitationManager.getInstance().isDirty()) {
             NationSavedData data = NationSavedData.get(level);
             data.markForSave();
@@ -54,6 +61,10 @@ public class WorldLoadHandler {
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
         StateCraft.LOGGER.info("Server stopping, resetting StateCraft managers...");
+
+        // Save mail data before shutdown
+        MailManager.getInstance().save();
+
         ChunkClaimManager.resetInstance();
         InvitationManager.resetInstance();
     }

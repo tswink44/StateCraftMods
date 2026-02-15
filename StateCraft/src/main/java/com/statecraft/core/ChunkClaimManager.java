@@ -1,6 +1,7 @@
 package com.statecraft.core;
 
 import com.statecraft.StateCraft;
+import com.statecraft.integration.IntegrationRegistry;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
@@ -17,8 +18,9 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ChunkClaimManager {
     private static ChunkClaimManager instance;
 
-    // Fast lookup: dimension -> chunkPos -> ClaimedChunk
-    private final Map<ResourceKey<Level>, Map<Long, ClaimedChunk>> chunkIndex;
+    // Fast lookup: dimension location string -> chunkPos -> ClaimedChunk
+    // Using String keys instead of ResourceKey to avoid reference equality issues
+    private final Map<String, Map<Long, ClaimedChunk>> chunkIndex;
 
     // All nations indexed by ID
     private final Map<UUID, Nation> nations;
@@ -62,7 +64,7 @@ public class ChunkClaimManager {
      */
     @Nullable
     public ClaimedChunk getClaimedChunk(ChunkPos pos, ResourceKey<Level> dimension) {
-        Map<Long, ClaimedChunk> dimensionChunks = chunkIndex.get(dimension);
+        Map<Long, ClaimedChunk> dimensionChunks = chunkIndex.get(dimension.location().toString());
         if (dimensionChunks == null) {
             return null;
         }
@@ -146,6 +148,9 @@ public class ChunkClaimManager {
         playerNationIndex.put(leaderId, nation.getId());
         markDirty();
 
+        // Notify economy integration
+        IntegrationRegistry.notifyNationCreated(nation.getId(), nation.getName());
+
         StateCraft.LOGGER.info("Nation '{}' created by player {}", name, leaderId);
         return nation;
     }
@@ -156,21 +161,26 @@ public class ChunkClaimManager {
             return false;
         }
 
-        // Remove all state/city/chunk references
+        // Remove all state/city/chunk references and notify economy
         for (State state : nation.getAllStates()) {
             for (City city : state.getAllCities()) {
                 for (ClaimedChunk chunk : city.getAllChunks()) {
                     removeChunkFromIndex(chunk);
                 }
                 cityIndex.remove(city.getId());
+                IntegrationRegistry.notifyCityDisbanded(city.getId());
             }
             stateIndex.remove(state.getId());
+            IntegrationRegistry.notifyStateDisbanded(state.getId());
         }
 
         // Remove player references
         for (UUID member : nation.getAllMembers()) {
             playerNationIndex.remove(member);
         }
+
+        // Notify economy integration
+        IntegrationRegistry.notifyNationDisbanded(nationId);
 
         markDirty();
         StateCraft.LOGGER.info("Nation '{}' disbanded", nation.getName());
@@ -267,6 +277,10 @@ public class ChunkClaimManager {
         if (state != null) {
             stateIndex.put(state.getId(), state);
             markDirty();
+
+            // Notify economy integration
+            IntegrationRegistry.notifyStateCreated(state.getId(), state.getName(), nation.getId());
+
             StateCraft.LOGGER.info("State '{}' created in nation '{}'", name, nation.getName());
         }
         return state;
@@ -284,6 +298,10 @@ public class ChunkClaimManager {
         if (city != null) {
             cityIndex.put(city.getId(), city);
             markDirty();
+
+            // Notify economy integration
+            IntegrationRegistry.notifyCityCreated(city.getId(), city.getName(), state.getId());
+
             StateCraft.LOGGER.info("City '{}' created in state '{}'", name, state.getName());
         }
         return city;
@@ -296,18 +314,104 @@ public class ChunkClaimManager {
 
     // ==================== Chunk Claim Operations ====================
 
-    public ClaimedChunk claimChunk(City city, ChunkPos pos, ResourceKey<Level> dimension) {
-        // Check if already claimed
-        if (isClaimed(pos, dimension)) {
-            return null;
+    /**
+     * Result of a claim attempt with reason for failure
+     */
+    public enum ClaimResult {
+        SUCCESS,
+        ALREADY_CLAIMED,
+        CITY_CHUNK_LIMIT,
+        STATE_CHUNK_LIMIT,
+        NOT_CONTIGUOUS,
+        INSUFFICIENT_FUNDS
+    }
+
+    /**
+     * Check if a chunk position is adjacent (contiguous) to any existing chunk owned by the city
+     */
+    public boolean isContiguousToCity(City city, ChunkPos pos, ResourceKey<Level> dimension) {
+        // If city has no chunks, any position is valid (first chunk)
+        if (city.getChunkCount() == 0) {
+            return true;
         }
 
-        // Check chunk limit
+        // Check all 4 adjacent positions
+        ChunkPos[] adjacent = {
+            new ChunkPos(pos.x + 1, pos.z),
+            new ChunkPos(pos.x - 1, pos.z),
+            new ChunkPos(pos.x, pos.z + 1),
+            new ChunkPos(pos.x, pos.z - 1)
+        };
+
+        for (ChunkPos adjPos : adjacent) {
+            ClaimedChunk adjChunk = getClaimedChunk(adjPos, dimension);
+            if (adjChunk != null && adjChunk.getCityId().equals(city.getId())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if a chunk position is contiguous to any chunk in the same state
+     */
+    public boolean isContiguousToState(State state, ChunkPos pos, ResourceKey<Level> dimension) {
+        // If state has no chunks, any position is valid
+        int totalChunks = state.getTotalChunkCount();
+        if (totalChunks == 0) {
+            return true;
+        }
+
+        // Check all 4 adjacent positions
+        ChunkPos[] adjacent = {
+            new ChunkPos(pos.x + 1, pos.z),
+            new ChunkPos(pos.x - 1, pos.z),
+            new ChunkPos(pos.x, pos.z + 1),
+            new ChunkPos(pos.x, pos.z - 1)
+        };
+
+        for (ChunkPos adjPos : adjacent) {
+            ClaimedChunk adjChunk = getClaimedChunk(adjPos, dimension);
+            if (adjChunk != null) {
+                City adjCity = cityIndex.get(adjChunk.getCityId());
+                if (adjCity != null && adjCity.getStateId().equals(state.getId())) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public ClaimResult claimChunkWithResult(City city, ChunkPos pos, ResourceKey<Level> dimension) {
+        // Check if already claimed
+        if (isClaimed(pos, dimension)) {
+            return ClaimResult.ALREADY_CLAIMED;
+        }
+
+        // Get state and nation
         State state = stateIndex.get(city.getStateId());
-        if (state != null) {
-            Nation nation = nations.get(state.getNationId());
-            if (nation != null && city.getChunkCount() >= nation.getMaxChunksPerCity()) {
-                return null;
+        if (state == null) {
+            return ClaimResult.NOT_CONTIGUOUS; // No state means invalid
+        }
+
+        // Check city chunk limit
+        if (city.getChunkCount() >= city.getMaxChunks()) {
+            return ClaimResult.CITY_CHUNK_LIMIT;
+        }
+
+        // Check state chunk limit
+        if (state.getTotalChunkCount() >= state.getMaxChunks()) {
+            return ClaimResult.STATE_CHUNK_LIMIT;
+        }
+
+        // Check contiguity to city (chunks must be adjacent to existing city chunks)
+        if (!isContiguousToCity(city, pos, dimension)) {
+            // If not contiguous to city, check if contiguous to state
+            // This allows expanding into new territory adjacent to state
+            if (!isContiguousToState(state, pos, dimension)) {
+                return ClaimResult.NOT_CONTIGUOUS;
             }
         }
 
@@ -316,7 +420,15 @@ public class ChunkClaimManager {
         markDirty();
 
         StateCraft.LOGGER.debug("Chunk ({}, {}) claimed by city '{}'", pos.x, pos.z, city.getName());
-        return chunk;
+        return ClaimResult.SUCCESS;
+    }
+
+    public ClaimedChunk claimChunk(City city, ChunkPos pos, ResourceKey<Level> dimension) {
+        ClaimResult result = claimChunkWithResult(city, pos, dimension);
+        if (result == ClaimResult.SUCCESS) {
+            return getClaimedChunk(pos, dimension);
+        }
+        return null;
     }
 
     public boolean unclaimChunk(ChunkPos pos, ResourceKey<Level> dimension) {
@@ -338,12 +450,12 @@ public class ChunkClaimManager {
     }
 
     private void addChunkToIndex(ClaimedChunk chunk) {
-        chunkIndex.computeIfAbsent(chunk.getDimension(), k -> new ConcurrentHashMap<>())
+        chunkIndex.computeIfAbsent(chunk.getDimension().location().toString(), k -> new ConcurrentHashMap<>())
                   .put(chunk.getChunkPos().toLong(), chunk);
     }
 
     private void removeChunkFromIndex(ClaimedChunk chunk) {
-        Map<Long, ClaimedChunk> dimensionChunks = chunkIndex.get(chunk.getDimension());
+        Map<Long, ClaimedChunk> dimensionChunks = chunkIndex.get(chunk.getDimension().location().toString());
         if (dimensionChunks != null) {
             dimensionChunks.remove(chunk.getChunkPos().toLong());
         }

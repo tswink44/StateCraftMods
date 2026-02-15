@@ -9,6 +9,7 @@ import java.util.*;
 /**
  * Represents a state within a nation
  * States contain cities and provide regional governance
+ * Players can be citizens of a state directly, or through city membership
  */
 public class State {
     private final UUID id;
@@ -16,10 +17,14 @@ public class State {
     private UUID nationId;
     private UUID governorId; // Player who manages the state
     private final Map<UUID, City> cities;
+    private final Set<UUID> citizens; // Direct state citizens (not through cities)
 
     // State settings
     private int maxCities;
+    private int maxChunks; // Maximum total chunks across all cities in this state
     private String description;
+    private String flagUrl;
+    private double cityPassThroughRate; // Rate cities must give to state (e.g., 0.20 = 20%)
 
     public State(UUID id, String name, UUID nationId, UUID governorId) {
         this.id = id;
@@ -27,8 +32,15 @@ public class State {
         this.nationId = nationId;
         this.governorId = governorId;
         this.cities = new HashMap<>();
+        this.citizens = new HashSet<>();
         this.maxCities = 10; // Default max cities per state
+        this.maxChunks = 500; // Default max chunks per state
         this.description = "";
+        this.flagUrl = "";
+        this.cityPassThroughRate = 0.20; // Default 20% from cities
+
+        // Governor is automatically a citizen
+        citizens.add(governorId);
     }
 
     public UUID getId() {
@@ -67,12 +79,48 @@ public class State {
         this.maxCities = maxCities;
     }
 
+    public int getMaxChunks() {
+        return maxChunks;
+    }
+
+    public void setMaxChunks(int maxChunks) {
+        this.maxChunks = Math.max(1, maxChunks);
+    }
+
+    /**
+     * Get total chunk count across all cities in this state
+     */
+    public int getTotalChunkCount() {
+        int total = 0;
+        for (City city : cities.values()) {
+            total += city.getChunkCount();
+        }
+        return total;
+    }
+
     public String getDescription() {
         return description;
     }
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getFlagUrl() {
+        return flagUrl;
+    }
+
+    public void setFlagUrl(String flagUrl) {
+        this.flagUrl = flagUrl != null ? flagUrl : "";
+    }
+
+    public double getCityPassThroughRate() {
+        return cityPassThroughRate;
+    }
+
+    public void setCityPassThroughRate(double cityPassThroughRate) {
+        // Clamp between 0 and 1 (0% to 100%)
+        this.cityPassThroughRate = Math.max(0, Math.min(1.0, cityPassThroughRate));
     }
 
     // City Management
@@ -110,13 +158,53 @@ public class State {
         return cities.size();
     }
 
-    public int getTotalChunkCount() {
-        return cities.values().stream().mapToInt(City::getChunkCount).sum();
+
+    // Citizen Management
+    public Set<UUID> getCitizens() {
+        return Collections.unmodifiableSet(citizens);
+    }
+
+    public void addCitizen(UUID playerId) {
+        citizens.add(playerId);
+    }
+
+    public void removeCitizen(UUID playerId) {
+        if (!playerId.equals(governorId)) {
+            citizens.remove(playerId);
+        }
+    }
+
+    public boolean isCitizen(UUID playerId) {
+        // Direct citizen or citizen through a city
+        if (citizens.contains(playerId)) return true;
+        for (City city : cities.values()) {
+            if (city.isResident(playerId)) return true;
+        }
+        return false;
+    }
+
+    public boolean isDirectCitizen(UUID playerId) {
+        return citizens.contains(playerId);
+    }
+
+    /**
+     * Check if player owns any chunk in this state
+     */
+    public boolean playerOwnsChunkInState(UUID playerId) {
+        for (City city : cities.values()) {
+            for (ClaimedChunk chunk : city.getChunks()) {
+                if (playerId.equals(chunk.getPlayerOwner())) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     public Set<UUID> getAllResidents() {
         Set<UUID> allResidents = new HashSet<>();
         allResidents.add(governorId);
+        allResidents.addAll(citizens);
         for (City city : cities.values()) {
             allResidents.addAll(city.getResidents());
         }
@@ -145,7 +233,19 @@ public class State {
         tag.putUUID("nationId", nationId);
         tag.putUUID("governorId", governorId);
         tag.putInt("maxCities", maxCities);
+        tag.putInt("maxChunks", maxChunks);
         tag.putString("description", description);
+        tag.putString("flagUrl", flagUrl);
+        tag.putDouble("cityPassThroughRate", cityPassThroughRate);
+
+        // Save citizens
+        ListTag citizensList = new ListTag();
+        for (UUID citizen : citizens) {
+            CompoundTag citizenTag = new CompoundTag();
+            citizenTag.putUUID("id", citizen);
+            citizensList.add(citizenTag);
+        }
+        tag.put("citizens", citizensList);
 
         // Save cities
         ListTag citiesList = new ListTag();
@@ -165,7 +265,26 @@ public class State {
 
         State state = new State(id, name, nationId, governorId);
         state.maxCities = tag.getInt("maxCities");
+        state.maxChunks = tag.contains("maxChunks") ? tag.getInt("maxChunks") : 500;
         state.description = tag.getString("description");
+        state.flagUrl = tag.getString("flagUrl");
+        // Load cityPassThroughRate (check old name for backward compatibility)
+        if (tag.contains("cityPassThroughRate")) {
+            state.cityPassThroughRate = tag.getDouble("cityPassThroughRate");
+        } else if (tag.contains("nationPassThroughRate")) {
+            state.cityPassThroughRate = tag.getDouble("nationPassThroughRate");
+        } else {
+            state.cityPassThroughRate = 0.20;
+        }
+
+        // Load citizens
+        if (tag.contains("citizens")) {
+            ListTag citizensList = tag.getList("citizens", Tag.TAG_COMPOUND);
+            for (int i = 0; i < citizensList.size(); i++) {
+                CompoundTag citizenTag = citizensList.getCompound(i);
+                state.citizens.add(citizenTag.getUUID("id"));
+            }
+        }
 
         // Load cities
         ListTag citiesList = tag.getList("cities", Tag.TAG_COMPOUND);

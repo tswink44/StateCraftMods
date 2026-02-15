@@ -27,6 +27,7 @@ public class ChunkCommand {
     public static LiteralArgumentBuilder<CommandSourceStack> register() {
         return Commands.literal("chunk")
             .then(Commands.literal("claim")
+                .executes(ChunkCommand::claimChunkNoCity)
                 .then(Commands.argument("city", StringArgumentType.greedyString())
                     .executes(ChunkCommand::claimChunk)))
             .then(Commands.literal("unclaim")
@@ -38,6 +39,63 @@ public class ChunkCommand {
                     .executes(ChunkCommand::transferChunk)))
             .then(Commands.literal("map")
                 .executes(ChunkCommand::showMap));
+    }
+
+    private static int claimChunkNoCity(CommandContext<CommandSourceStack> context) {
+        try {
+            ServerPlayer player = context.getSource().getPlayerOrException();
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+
+            // Check if player is in a nation
+            Nation nation = manager.getPlayerNation(player.getUUID());
+            if (nation == null) {
+                context.getSource().sendFailure(Component.literal("§cYou are not part of a Nation. Join or create one first."));
+                return 0;
+            }
+
+            // Try to find a city the player can claim for
+            City playerCity = null;
+            for (State state : nation.getAllStates()) {
+                for (City city : state.getAllCities()) {
+                    // Check if player is mayor or nation admin
+                    if (city.getMayorId().equals(player.getUUID()) || nation.isAdmin(player.getUUID())) {
+                        playerCity = city;
+                        break;
+                    }
+                }
+                if (playerCity != null) break;
+            }
+
+            if (playerCity == null) {
+                context.getSource().sendFailure(Component.literal("§cYou are not a mayor of any city or a nation admin. You need to be a city officer to claim chunks."));
+                return 0;
+            }
+
+            // Claim for the player's city
+            ChunkPos chunkPos = new ChunkPos(player.blockPosition());
+
+            // Check if already claimed
+            if (manager.isClaimed(chunkPos, player.level().dimension())) {
+                context.getSource().sendFailure(Component.literal("§cThis chunk is already claimed!"));
+                return 0;
+            }
+
+            ClaimedChunk chunk = manager.claimChunk(playerCity, chunkPos, player.level().dimension());
+            if (chunk == null) {
+                context.getSource().sendFailure(Component.literal("§cCould not claim chunk. City may have reached its chunk limit."));
+                return 0;
+            }
+
+            markDataDirty(context);
+            final City city = playerCity;
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§aChunk (" + chunkPos.x + ", " + chunkPos.z + ") claimed for city §e" + city.getName() + "§a!"
+            ), true);
+            return 1;
+        } catch (Exception e) {
+            context.getSource().sendFailure(Component.literal("This command must be run by a player!"));
+            return 0;
+        }
     }
 
     private static int claimChunk(CommandContext<CommandSourceStack> context) {
