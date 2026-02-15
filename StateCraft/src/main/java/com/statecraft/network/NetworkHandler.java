@@ -328,6 +328,30 @@ public class NetworkHandler {
             .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncCityDetails(pkt, ctx), ctx))
             .add();
 
+        CHANNEL.messageBuilder(RequestCitySettingsPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestCitySettingsPacket::encode)
+            .decoder(RequestCitySettingsPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestCitySettings)
+            .add();
+
+        CHANNEL.messageBuilder(SyncCitySettingsPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncCitySettingsPacket::encode)
+            .decoder(SyncCitySettingsPacket::new)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncCitySettings(pkt, ctx), ctx))
+            .add();
+
+        CHANNEL.messageBuilder(RequestNationLawsPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestNationLawsPacket::encode)
+            .decoder(RequestNationLawsPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestNationLaws)
+            .add();
+
+        CHANNEL.messageBuilder(SyncNationLawsPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncNationLawsPacket::encode)
+            .decoder(SyncNationLawsPacket::new)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncNationLaws(pkt, ctx), ctx))
+            .add();
+
         CHANNEL.messageBuilder(SyncAutoClaimPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncAutoClaimPacket::encode)
             .decoder(SyncAutoClaimPacket::new)

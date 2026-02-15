@@ -904,12 +904,12 @@ public class SimpleATMScreen extends Screen {
 
     private void performTransfer() {
         // Validate recipient selection
-        if (selectedRecipientIndex < 0 || selectedRecipientIndex >= transferRecipients.size()) {
+        if (selectedRecipientIndex < 0 || selectedRecipientIndex >= filteredRecipients.size()) {
             showStatus("§cPlease select a recipient", true);
             return;
         }
 
-        SyncTransferRecipientsPacket.RecipientInfo recipient = transferRecipients.get(selectedRecipientIndex);
+        SyncTransferRecipientsPacket.RecipientInfo recipient = filteredRecipients.get(selectedRecipientIndex);
 
         try {
             double amount = Double.parseDouble(amountInput.getValue());
@@ -925,15 +925,37 @@ public class SimpleATMScreen extends Screen {
             // Format recipient target as "type:id" for the server to parse
             String recipientTarget = selectedTransferType.name() + ":" + recipient.id();
 
+            // Build source account string based on selected account
+            String sourceAccount = getSelectedSourceAccountString();
+
             NetworkHandler.sendToServer(new ATMTransactionPacket(
                 ATMTransactionPacket.Action.TRANSFER,
                 amount,
-                recipientTarget
+                recipientTarget,
+                sourceAccount
             ));
             showStatus("§aProcessing transfer to " + recipient.name() + "...", false);
         } catch (NumberFormatException e) {
             showStatus("§cInvalid amount", true);
         }
+    }
+
+    /**
+     * Gets the source account string for the currently selected account.
+     * Returns empty string for personal account, or "TYPE:uuid" for government accounts.
+     */
+    private String getSelectedSourceAccountString() {
+        if (availableAccounts.isEmpty() || selectedAccountIndex >= availableAccounts.size()) {
+            return ""; // Default to personal account
+        }
+
+        SyncAccountsPacket.AccountInfo selectedAccount = availableAccounts.get(selectedAccountIndex);
+        if ("PERSONAL".equals(selectedAccount.type())) {
+            return ""; // Personal account - no source account string needed
+        }
+
+        // Government account - return "TYPE:uuid" format
+        return selectedAccount.type() + ":" + selectedAccount.id();
     }
 
     private void showStatus(String message, boolean isError) {

@@ -10,7 +10,6 @@ import net.minecraft.network.chat.Component;
 
 /**
  * Screen for managing nation settings (admin only)
- * Note: Nations set the pass-through rate that states must give to the nation.
  */
 public class NationSettingsScreen extends StateCraftScreen {
     private final String nationName;
@@ -19,19 +18,17 @@ public class NationSettingsScreen extends StateCraftScreen {
     private EditBox descriptionField;
     private EditBox tagField;
     private EditBox flagUrlField;
-    private EditBox statePassThroughField; // Rate states must give to nation
     private Button openToggle;
     private Button saveButton;
 
     private boolean isOpen = false;
     private boolean hasChanges = false;
     private String currentFlagUrl = "";
-    private double currentStatePassThrough = 20.0; // Default 20% from states
 
     public NationSettingsScreen(String nationName) {
         super(Component.literal("Nation Settings"));
         this.nationName = nationName;
-        this.guiWidth = 280; this.guiHeight = 275;
+        this.guiWidth = 280; this.guiHeight = 250;
     }
 
     @Override
@@ -76,16 +73,9 @@ public class NationSettingsScreen extends StateCraftScreen {
             btn -> toggleOpen()
         ));
 
-        // State pass-through rate field (what states give to nation)
-        this.statePassThroughField = new EditBox(this.font, fieldX, startY + rowSpacing * 5, 60, 16, Component.literal("State Tax"));
-        this.statePassThroughField.setMaxLength(5);
-        this.statePassThroughField.setValue(String.format("%.1f", currentStatePassThrough));
-        this.statePassThroughField.setResponder(s -> hasChanges = true);
-        this.addRenderableWidget(this.statePassThroughField);
-
         // Officers management button
         this.addRenderableWidget(createButton(
-            fieldX, startY + rowSpacing * 6, 100, 16,
+            fieldX, startY + rowSpacing * 5, 100, 16,
             Component.literal("§eManage Officers"),
             btn -> openOfficerManagement()
         ));
@@ -120,9 +110,7 @@ public class NationSettingsScreen extends StateCraftScreen {
         graphics.drawString(this.font, "§7Info:", labelX, startY + rowSpacing * 2 + 4, COLOR_TEXT);
         graphics.drawString(this.font, "§7Flag:", labelX, startY + rowSpacing * 3 + 4, COLOR_TEXT);
         graphics.drawString(this.font, "§7Status:", labelX, startY + rowSpacing * 4 + 4, COLOR_TEXT);
-        graphics.drawString(this.font, "§7From States:", labelX, startY + rowSpacing * 5 + 4, COLOR_TEXT);
-        graphics.drawString(this.font, "§8%", guiLeft + 165, startY + rowSpacing * 5 + 4, 0xFF888888);
-        graphics.drawString(this.font, "§7Officers:", labelX, startY + rowSpacing * 6 + 4, COLOR_TEXT);
+        graphics.drawString(this.font, "§7Officers:", labelX, startY + rowSpacing * 5 + 4, COLOR_TEXT);
 
         // Unsaved changes indicator
         if (hasChanges) {
@@ -142,14 +130,10 @@ public class NationSettingsScreen extends StateCraftScreen {
         String description = descriptionField.getValue().trim();
         String flagUrl = flagUrlField.getValue().trim();
 
-        // Parse state pass-through rate
-        double statePassThrough = parseDouble(statePassThroughField.getValue(), currentStatePassThrough);
-        statePassThrough = Math.max(0, Math.min(100, statePassThrough));
-
         // Send update packets
-        // One for name/flag and state pass-through rate
+        // One for name/flag
         NetworkHandler.sendToServer(new UpdateEntitySettingsPacket(
-            UpdateEntitySettingsPacket.EntityType.NATION, nationName, newName, flagUrl, false, statePassThrough, -1));
+            UpdateEntitySettingsPacket.EntityType.NATION, nationName, newName, flagUrl, false, -1, -1));
 
         // One for tag/description/open status
         NetworkHandler.sendToServer(new UpdateNationSettingsPacket(
@@ -159,14 +143,6 @@ public class NationSettingsScreen extends StateCraftScreen {
         // Navigate to the updated nation name
         String finalName = newName.isEmpty() ? nationName : newName;
         this.minecraft.setScreen(new NationInfoScreen(finalName));
-    }
-
-    private double parseDouble(String value, double defaultValue) {
-        try {
-            return Double.parseDouble(value.trim());
-        } catch (NumberFormatException e) {
-            return defaultValue;
-        }
     }
 
     private void goBack() {
@@ -184,24 +160,22 @@ public class NationSettingsScreen extends StateCraftScreen {
 
     // Called to populate current settings
     public void setCurrentSettings(String tag, String description, boolean open, String flagUrl) {
-        setCurrentSettings(tag, description, open, flagUrl, 20.0);
-    }
-
-    public void setCurrentSettings(String tag, String description, boolean open, String flagUrl, double statePassThrough) {
         if (this.tagField != null) this.tagField.setValue(tag != null ? tag : "");
         if (this.descriptionField != null) this.descriptionField.setValue(description != null ? description : "");
         this.isOpen = open;
         if (this.openToggle != null) this.openToggle.setMessage(Component.literal(open ? "§aOpen" : "§cClosed"));
         this.currentFlagUrl = flagUrl != null ? flagUrl : "";
         if (this.flagUrlField != null) this.flagUrlField.setValue(currentFlagUrl);
-        this.currentStatePassThrough = statePassThrough;
-        if (this.statePassThroughField != null) this.statePassThroughField.setValue(String.format("%.1f", statePassThrough));
         this.hasChanges = false;
     }
 
-    // Overload for backward compatibility
+    // Overloads for backward compatibility
+    public void setCurrentSettings(String tag, String description, boolean open, String flagUrl, double statePassThrough) {
+        setCurrentSettings(tag, description, open, flagUrl);
+    }
+
     public void setCurrentSettings(String tag, String description, boolean open) {
-        setCurrentSettings(tag, description, open, "", 20.0);
+        setCurrentSettings(tag, description, open, "");
     }
 }
 

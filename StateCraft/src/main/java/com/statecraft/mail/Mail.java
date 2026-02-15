@@ -40,6 +40,7 @@ public class Mail {
         // Transaction notifications
         CHUNK_PURCHASE("Chunk Purchase", "§a"),
         CHUNK_SALE("Chunk Sale", "§e"),
+        TRADING_HUB_SALE("Trading Hub Sale", "§e"),
 
         // Tax notifications
         TAX_SUMMARY("Tax Summary", "§6"),

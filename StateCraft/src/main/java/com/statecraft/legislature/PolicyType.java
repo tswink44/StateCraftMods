@@ -5,14 +5,14 @@ package com.statecraft.legislature;
  */
 public enum PolicyType {
     // Taxation policies
-    NATION_TAX_RATE("Nation Tax Rate", Category.TAXATION, 0.0, 0.5, ValueType.PERCENTAGE,
-        "Tax rate on player transactions within the nation"),
     STATE_PASS_THROUGH_RATE("State Pass-Through Rate", Category.TAXATION, 0.0, 1.0, ValueType.PERCENTAGE,
         "Percentage of state revenue that must be passed to nation treasury"),
     IMPORT_TARIFF("Import Tariff", Category.TAXATION, 0.0, 1.0, ValueType.PERCENTAGE,
         "Tax rate on trade with other nations"),
     BASE_CHUNK_VALUE("Base Chunk Value", Category.TAXATION, 1, 100000, ValueType.CURRENCY,
         "Base valuation for chunks in the nation (default $100)"),
+    NATION_SALES_TAX_RATE("Nation Sales Tax", Category.TAXATION, 0.0, 0.5, ValueType.PERCENTAGE,
+        "Nation's sales tax rate on trading hub sales (0-50%)"),
 
     // Territory policies
     MAX_STATES_PER_NATION("Max States", Category.TERRITORY, 1, 100, ValueType.INTEGER,
@@ -46,6 +46,14 @@ public enum PolicyType {
     CHUNK_CLAIM_FEE("Chunk Claim Fee", Category.ECONOMY, 0, 1000000, ValueType.CURRENCY,
         "Fee cities must pay to claim each chunk"),
 
+    // Constitutional policies (require constitutional amendment to change)
+    LEADER_TERM_DURATION("Leader Term Duration", Category.CONSTITUTIONAL, 1, 365, ValueType.INTEGER,
+        "Duration of leader term in days (default: 7 days). Requires constitutional amendment."),
+    ELECTION_DURATION("Election Duration", Category.CONSTITUTIONAL, 1, 30, ValueType.INTEGER,
+        "Duration of election voting period in days (default: 1 day). Requires constitutional amendment."),
+    MAX_OFFICERS("Max Officers", Category.CONSTITUTIONAL, 0, 3, ValueType.INTEGER,
+        "Maximum number of officers the leader can appoint (0-3). Requires constitutional amendment."),
+
     // Custom laws (roleplay)
     CUSTOM_LAW("Custom Law", Category.CUSTOM, 0, 0, ValueType.TEXT,
         "Custom law or regulation for roleplay purposes");
@@ -73,6 +81,14 @@ public enum PolicyType {
     public double getMaxValue() { return maxValue; }
     public ValueType getValueType() { return valueType; }
     public String getDescription() { return description; }
+
+    /**
+     * Check if this policy type requires a constitutional amendment to change
+     * Constitutional policies require 2/3 majority vote and cannot be vetoed
+     */
+    public boolean requiresConstitutionalAmendment() {
+        return category == Category.CONSTITUTIONAL;
+    }
 
     public boolean isValidValue(String value) {
         try {
@@ -103,6 +119,7 @@ public enum PolicyType {
         MEMBERSHIP("Membership"),
         DIPLOMACY("Diplomacy"),
         ECONOMY("Economy"),
+        CONSTITUTIONAL("Constitutional"),
         CUSTOM("Custom Laws");
 
         private final String displayName;

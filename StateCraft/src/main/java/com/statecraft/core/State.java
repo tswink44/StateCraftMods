@@ -1,6 +1,5 @@
 package com.statecraft.core;
 
-import com.statecraft.config.StateCraftConfig;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -26,6 +25,7 @@ public class State {
     private String description;
     private String flagUrl;
     private double cityPassThroughRate; // Rate cities must give to state (e.g., 0.20 = 20%)
+    private double salesTaxRate; // State's sales tax rate (e.g., 0.10 = 10%)
 
     public State(UUID id, String name, UUID nationId, UUID governorId) {
         this.id = id;
@@ -39,6 +39,7 @@ public class State {
         this.description = "";
         this.flagUrl = "";
         this.cityPassThroughRate = 0.20; // Default 20% from cities
+        this.salesTaxRate = 0.0; // Default 0% state sales tax
 
         // Governor is automatically a citizen
         citizens.add(governorId);
@@ -73,10 +74,6 @@ public class State {
     }
 
     public int getMaxCities() {
-        // Use config value for max cities - server config takes precedence
-        if (StateCraftConfig.MAX_CITIES_PER_STATE != null) {
-            return StateCraftConfig.MAX_CITIES_PER_STATE.get();
-        }
         return maxCities;
     }
 
@@ -128,12 +125,18 @@ public class State {
         this.cityPassThroughRate = Math.max(0, Math.min(1.0, cityPassThroughRate));
     }
 
+    public double getSalesTaxRate() {
+        return salesTaxRate;
+    }
+
+    public void setSalesTaxRate(double salesTaxRate) {
+        // Clamp between 0 and 0.5 (0% to 50%)
+        this.salesTaxRate = Math.max(0, Math.min(0.5, salesTaxRate));
+    }
+
     // City Management
     public City createCity(String cityName, UUID mayorId) {
-        // Use config value for max cities, fall back to instance value if config not loaded
-        int maxAllowed = StateCraftConfig.MAX_CITIES_PER_STATE != null ?
-            StateCraftConfig.MAX_CITIES_PER_STATE.get() : maxCities;
-        if (cities.size() >= maxAllowed) {
+        if (cities.size() >= maxCities) {
             return null; // Max cities reached
         }
         City city = new City(UUID.randomUUID(), cityName, this.id, mayorId);
@@ -245,6 +248,7 @@ public class State {
         tag.putString("description", description);
         tag.putString("flagUrl", flagUrl);
         tag.putDouble("cityPassThroughRate", cityPassThroughRate);
+        tag.putDouble("salesTaxRate", salesTaxRate);
 
         // Save citizens
         ListTag citizensList = new ListTag();
@@ -283,6 +287,13 @@ public class State {
             state.cityPassThroughRate = tag.getDouble("nationPassThroughRate");
         } else {
             state.cityPassThroughRate = 0.20;
+        }
+
+        // Load salesTaxRate
+        if (tag.contains("salesTaxRate")) {
+            state.salesTaxRate = tag.getDouble("salesTaxRate");
+        } else {
+            state.salesTaxRate = 0.0;
         }
 
         // Load citizens

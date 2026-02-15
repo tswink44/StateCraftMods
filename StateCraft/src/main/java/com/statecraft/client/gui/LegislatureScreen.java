@@ -180,14 +180,12 @@ public class LegislatureScreen extends StateCraftScreen {
 
     private void voteOnBill(String billId, VoteBillPacket.VoteType voteType) {
         NetworkHandler.sendToServer(new VoteBillPacket(nationName, billId, voteType));
-        // Refresh data after a short delay
-        refreshData();
+        // Server will automatically send updated legislature data after successful vote
     }
 
     private void leaderAction(String billId, LeaderBillActionPacket.ActionType actionType) {
         NetworkHandler.sendToServer(new LeaderBillActionPacket(nationName, billId, actionType));
-        // Refresh data after a short delay
-        refreshData();
+        // Server will automatically send updated legislature data after successful action
     }
 
     private void refreshData() {

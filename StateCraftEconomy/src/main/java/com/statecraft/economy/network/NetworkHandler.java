@@ -90,6 +90,13 @@ public class NetworkHandler {
             .consumerMainThread(TradingHubSellPacket::handle)
             .add();
 
+        // Trading Hub settings packet
+        CHANNEL.messageBuilder(TradingHubSettingsPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(TradingHubSettingsPacket::encode)
+            .decoder(TradingHubSettingsPacket::new)
+            .consumerMainThread(TradingHubSettingsPacket::handle)
+            .add();
+
         // Server -> Client packets - use dist-safe handlers
         CHANNEL.messageBuilder(SyncBalancePacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncBalancePacket::encode)

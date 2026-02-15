@@ -53,6 +53,7 @@ public class ATMScreen extends AbstractContainerScreen<ATMMenu> {
     private ScreenMode currentMode = ScreenMode.MAIN_MENU;
     private AccountType selectedAccountType = AccountType.PERSONAL;
     private UUID selectedBankId;
+    private UUID selectedEntityId; // UUID of selected nation/state/city
     private double currentBalance = 0.0;
     private double selectedAccountBalance = 0.0;
     private String statusMessage = "";

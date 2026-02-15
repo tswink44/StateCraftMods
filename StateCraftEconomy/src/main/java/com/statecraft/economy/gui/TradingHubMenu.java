@@ -15,19 +15,21 @@ import net.minecraftforge.items.SlotItemHandler;
 
 /**
  * Menu (Container) for the Trading Hub block
- * Has a single slot for items to sell
+ * Has a chest-like layout (27 slots) for bulk selling
  */
 public class TradingHubMenu extends AbstractContainerMenu {
     private final TradingHubBlockEntity blockEntity;
     private final Player player;
     private final ContainerLevelAccess access;
 
-    // Slot indices
-    public static final int SELL_SLOT = 0;
-    private static final int PLAYER_INV_START = 1;
-    private static final int PLAYER_INV_END = 28;
-    private static final int PLAYER_HOTBAR_START = 28;
-    private static final int PLAYER_HOTBAR_END = 37;
+    // Slot indices - chest-like layout (3 rows of 9)
+    public static final int TRADING_HUB_SLOTS = 27;
+    private static final int TRADING_HUB_START = 0;
+    private static final int TRADING_HUB_END = 27;
+    private static final int PLAYER_INV_START = 27;
+    private static final int PLAYER_INV_END = 54;
+    private static final int PLAYER_HOTBAR_START = 54;
+    private static final int PLAYER_HOTBAR_END = 63;
 
     // Client-side constructor (from network)
     public TradingHubMenu(int containerId, Inventory playerInventory, FriendlyByteBuf extraData) {
@@ -41,17 +43,22 @@ public class TradingHubMenu extends AbstractContainerMenu {
         this.player = playerInventory.player;
         this.access = ContainerLevelAccess.create(blockEntity.getLevel(), blockEntity.getBlockPos());
 
-        // Add sell slot (centered at top)
+        // Add trading hub inventory slots (3 rows of 9, like a chest)
         IItemHandler itemHandler = blockEntity.getItemHandler();
-        this.addSlot(new SlotItemHandler(itemHandler, 0, 80, 35) {
-            @Override
-            public boolean mayPlace(ItemStack stack) {
-                // Only accept items that can be sold
-                return ItemValueConfig.canSell(stack);
+        for (int row = 0; row < 3; ++row) {
+            for (int col = 0; col < 9; ++col) {
+                int slotIndex = col + row * 9;
+                this.addSlot(new SlotItemHandler(itemHandler, slotIndex, 8 + col * 18, 18 + row * 18) {
+                    @Override
+                    public boolean mayPlace(ItemStack stack) {
+                        // Only accept items that can be sold
+                        return ItemValueConfig.canSell(stack);
+                    }
+                });
             }
-        });
+        }
 
-        // Add player inventory slots
+        // Add player inventory slots (below trading hub inventory)
         addPlayerInventory(playerInventory);
         addPlayerHotbar(playerInventory);
     }
@@ -66,6 +73,7 @@ public class TradingHubMenu extends AbstractContainerMenu {
     }
 
     private void addPlayerInventory(Inventory playerInventory) {
+        // Player inventory starts lower to accommodate trading hub slots
         for (int row = 0; row < 3; ++row) {
             for (int col = 0; col < 9; ++col) {
                 this.addSlot(new Slot(playerInventory, col + row * 9 + 9, 8 + col * 18, 84 + row * 18));
@@ -88,16 +96,16 @@ public class TradingHubMenu extends AbstractContainerMenu {
             ItemStack slotStack = slot.getItem();
             itemstack = slotStack.copy();
 
-            if (index == SELL_SLOT) {
-                // From sell slot to player inventory
+            if (index < TRADING_HUB_END) {
+                // From trading hub to player inventory
                 if (!this.moveItemStackTo(slotStack, PLAYER_INV_START, PLAYER_HOTBAR_END, true)) {
                     return ItemStack.EMPTY;
                 }
             } else if (index >= PLAYER_INV_START && index < PLAYER_INV_END) {
                 // From player inventory
-                // Try sell slot first if item can be sold
+                // Try trading hub first if item can be sold
                 if (ItemValueConfig.canSell(slotStack)) {
-                    if (!this.moveItemStackTo(slotStack, SELL_SLOT, SELL_SLOT + 1, false)) {
+                    if (!this.moveItemStackTo(slotStack, TRADING_HUB_START, TRADING_HUB_END, false)) {
                         // Then try hotbar
                         if (!this.moveItemStackTo(slotStack, PLAYER_HOTBAR_START, PLAYER_HOTBAR_END, false)) {
                             return ItemStack.EMPTY;
@@ -111,9 +119,9 @@ public class TradingHubMenu extends AbstractContainerMenu {
                 }
             } else if (index >= PLAYER_HOTBAR_START && index < PLAYER_HOTBAR_END) {
                 // From hotbar
-                // Try sell slot first if item can be sold
+                // Try trading hub first if item can be sold
                 if (ItemValueConfig.canSell(slotStack)) {
-                    if (!this.moveItemStackTo(slotStack, SELL_SLOT, SELL_SLOT + 1, false)) {
+                    if (!this.moveItemStackTo(slotStack, TRADING_HUB_START, TRADING_HUB_END, false)) {
                         // Then try inventory
                         if (!this.moveItemStackTo(slotStack, PLAYER_INV_START, PLAYER_INV_END, false)) {
                             return ItemStack.EMPTY;
@@ -150,24 +158,31 @@ public class TradingHubMenu extends AbstractContainerMenu {
     }
 
     /**
-     * Get the current sell value of items in the slot
+     * Get the current total sell value of all items
      */
     public double getCurrentSellValue() {
-        return blockEntity.calculateSellValue();
+        return blockEntity.calculateTotalSellValue();
     }
 
     /**
-     * Get the current tax amount
+     * Get the current total tax amount
      */
     public double getCurrentTaxAmount() {
-        return blockEntity.calculateTaxAmount();
+        return blockEntity.calculateTotalTaxAmount();
     }
 
     /**
-     * Perform the sale (called from client via packet)
+     * Get the count of sellable items
      */
-    public boolean performSale() {
-        return blockEntity.sellItems(player);
+    public int getSellableItemCount() {
+        return blockEntity.countSellableItems();
+    }
+
+    /**
+     * Check if player can modify settings
+     */
+    public boolean canModifySettings() {
+        return blockEntity.canModifySettings(player);
     }
 }
 

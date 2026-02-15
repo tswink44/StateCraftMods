@@ -26,24 +26,32 @@ public class ATMTransactionPacket {
     private final Action action;
     private final double amount;
     private final String recipient; // Player name for transfers
+    private final String sourceAccount; // Source account for transfers: empty = personal, or "TYPE:uuid"
 
     public ATMTransactionPacket(Action action, double amount, String recipient) {
+        this(action, amount, recipient, "");
+    }
+
+    public ATMTransactionPacket(Action action, double amount, String recipient, String sourceAccount) {
         this.action = action;
         this.amount = amount;
         this.recipient = recipient;
+        this.sourceAccount = sourceAccount != null ? sourceAccount : "";
     }
 
     public static void encode(ATMTransactionPacket packet, FriendlyByteBuf buffer) {
         buffer.writeEnum(packet.action);
         buffer.writeDouble(packet.amount);
         buffer.writeUtf(packet.recipient);
+        buffer.writeUtf(packet.sourceAccount);
     }
 
     public static ATMTransactionPacket decode(FriendlyByteBuf buffer) {
         Action action = buffer.readEnum(Action.class);
         double amount = buffer.readDouble();
         String recipient = buffer.readUtf();
-        return new ATMTransactionPacket(action, amount, recipient);
+        String sourceAccount = buffer.readUtf();
+        return new ATMTransactionPacket(action, amount, recipient, sourceAccount);
     }
 
     public static void handle(ATMTransactionPacket packet, Supplier<NetworkEvent.Context> ctx) {
@@ -243,6 +251,11 @@ public class ATMTransactionPacket {
                     }
                 }
                 case TRANSFER -> {
+                    // Determine source account
+                    String sourceAccount = packet.sourceAccount;
+                    boolean isSourceGovernment = sourceAccount != null && !sourceAccount.isEmpty()
+                        && sourceAccount.contains(":");
+
                     // Parse recipient format: "TYPE:id"
                     String[] parts = packet.recipient.split(":", 2);
                     if (parts.length != 2) {
@@ -253,8 +266,14 @@ public class ATMTransactionPacket {
                                 "Invalid recipient format", manager.getBalance(player.getUUID())), player);
                             return;
                         }
-                        TransactionResult result = manager.transfer(player.getUUID(), recipientPlayer.getUUID(),
-                            packet.amount, "Transfer via ATM");
+                        // Transfer from source account to player
+                        TransactionResult result;
+                        if (isSourceGovernment) {
+                            result = transferFromEntity(manager, player, sourceAccount, recipientPlayer.getUUID(), packet.amount, true);
+                        } else {
+                            result = manager.transfer(player.getUUID(), recipientPlayer.getUUID(),
+                                packet.amount, "Transfer via ATM");
+                        }
                         NetworkHandler.sendToPlayer(new TransactionResultPacket(result.isSuccess(),
                             result.getMessage(), result.getNewBalance()), player);
                         if (result.isSuccess()) {
@@ -270,13 +289,16 @@ public class ATMTransactionPacket {
                     try {
                         UUID targetUUID = UUID.fromString(targetId);
                         TransactionResult result;
-                        String recipientName = targetId;
 
                         switch (targetType) {
                             case "PLAYER" -> {
-                                // Transfer to player
-                                result = manager.transfer(player.getUUID(), targetUUID,
-                                    packet.amount, "Transfer via ATM");
+                                // Transfer to player from source account
+                                if (isSourceGovernment) {
+                                    result = transferFromEntity(manager, player, sourceAccount, targetUUID, packet.amount, true);
+                                } else {
+                                    result = manager.transfer(player.getUUID(), targetUUID,
+                                        packet.amount, "Transfer via ATM");
+                                }
                                 // Try to notify online player
                                 ServerPlayer recipientPlayer = player.server.getPlayerList().getPlayer(targetUUID);
                                 if (result.isSuccess() && recipientPlayer != null) {
@@ -285,16 +307,46 @@ public class ATMTransactionPacket {
                                 }
                             }
                             case "NATION" -> {
-                                // Transfer from player to nation treasury
-                                result = transferToEntity(manager, player, targetUUID, packet.amount, "nation");
+                                // Transfer to nation treasury
+                                if (isSourceGovernment) {
+                                    result = transferFromEntity(manager, player, sourceAccount, targetUUID, packet.amount, false);
+                                    if (result.isSuccess()) {
+                                        manager.getOrCreateNationTreasury(targetUUID).add(packet.amount);
+                                        result = new TransactionResult(true,
+                                            "Transferred " + manager.formatCurrency(packet.amount) + " to nation treasury",
+                                            result.getNewBalance());
+                                    }
+                                } else {
+                                    result = transferToEntity(manager, player, targetUUID, packet.amount, "nation");
+                                }
                             }
                             case "STATE" -> {
-                                // Transfer from player to state treasury
-                                result = transferToEntity(manager, player, targetUUID, packet.amount, "state");
+                                // Transfer to state treasury
+                                if (isSourceGovernment) {
+                                    result = transferFromEntity(manager, player, sourceAccount, targetUUID, packet.amount, false);
+                                    if (result.isSuccess()) {
+                                        manager.getOrCreateStateTreasury(targetUUID).add(packet.amount);
+                                        result = new TransactionResult(true,
+                                            "Transferred " + manager.formatCurrency(packet.amount) + " to state treasury",
+                                            result.getNewBalance());
+                                    }
+                                } else {
+                                    result = transferToEntity(manager, player, targetUUID, packet.amount, "state");
+                                }
                             }
                             case "CITY" -> {
-                                // Transfer from player to city treasury
-                                result = transferToEntity(manager, player, targetUUID, packet.amount, "city");
+                                // Transfer to city treasury
+                                if (isSourceGovernment) {
+                                    result = transferFromEntity(manager, player, sourceAccount, targetUUID, packet.amount, false);
+                                    if (result.isSuccess()) {
+                                        manager.getOrCreateCityTreasury(targetUUID).add(packet.amount);
+                                        result = new TransactionResult(true,
+                                            "Transferred " + manager.formatCurrency(packet.amount) + " to city treasury",
+                                            result.getNewBalance());
+                                    }
+                                } else {
+                                    result = transferToEntity(manager, player, targetUUID, packet.amount, "city");
+                                }
                             }
                             default -> {
                                 result = new TransactionResult(false, "Unknown recipient type: " + targetType,
@@ -356,6 +408,70 @@ public class ATMTransactionPacket {
         return new TransactionResult(true,
             "Transferred " + manager.formatCurrency(amount) + " to " + entityType + " treasury",
             manager.getBalance(player.getUUID()));
+    }
+
+    /**
+     * Helper method to transfer funds from a government entity (nation, state, city)
+     * @param depositToPlayer if true, deposits to target player account; if false, just withdraws from source
+     */
+    private static TransactionResult transferFromEntity(EconomyManager manager, ServerPlayer player,
+                                                         String sourceAccount, UUID targetId, double amount, boolean depositToPlayer) {
+        if (amount <= 0) {
+            return new TransactionResult(false, "Amount must be positive", 0);
+        }
+
+        // Parse source account: "TYPE:uuid"
+        String[] sourceParts = sourceAccount.split(":", 2);
+        if (sourceParts.length != 2) {
+            return new TransactionResult(false, "Invalid source account format", 0);
+        }
+
+        String sourceType = sourceParts[0];
+        UUID sourceUUID;
+        try {
+            sourceUUID = UUID.fromString(sourceParts[1]);
+        } catch (IllegalArgumentException e) {
+            return new TransactionResult(false, "Invalid source account ID", 0);
+        }
+
+        // Get source balance
+        double sourceBalance = switch (sourceType) {
+            case "NATION" -> manager.getNationBalance(sourceUUID);
+            case "STATE" -> manager.getStateBalance(sourceUUID);
+            case "CITY" -> manager.getCityBalance(sourceUUID);
+            default -> 0;
+        };
+
+        if (sourceBalance < amount) {
+            return new TransactionResult(false, "Insufficient funds in " + sourceType.toLowerCase() + " treasury", sourceBalance);
+        }
+
+        // Withdraw from source treasury
+        switch (sourceType) {
+            case "NATION" -> manager.getOrCreateNationTreasury(sourceUUID).subtract(amount);
+            case "STATE" -> manager.getOrCreateStateTreasury(sourceUUID).subtract(amount);
+            case "CITY" -> manager.getOrCreateCityTreasury(sourceUUID).subtract(amount);
+            default -> {
+                return new TransactionResult(false, "Unknown source type: " + sourceType, 0);
+            }
+        }
+
+        // Deposit to target if requested
+        if (depositToPlayer) {
+            manager.deposit(targetId, amount, "Transfer from " + sourceType.toLowerCase() + " treasury");
+        }
+
+        // Get new source balance for display
+        double newSourceBalance = switch (sourceType) {
+            case "NATION" -> manager.getNationBalance(sourceUUID);
+            case "STATE" -> manager.getStateBalance(sourceUUID);
+            case "CITY" -> manager.getCityBalance(sourceUUID);
+            default -> 0;
+        };
+
+        return new TransactionResult(true,
+            "Transferred " + manager.formatCurrency(amount) + " from " + sourceType.toLowerCase() + " treasury",
+            newSourceBalance);
     }
 }
 

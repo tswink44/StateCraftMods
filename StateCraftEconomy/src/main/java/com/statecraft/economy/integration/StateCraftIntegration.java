@@ -1152,6 +1152,89 @@ public class StateCraftIntegration {
     }
 
     /**
+     * Get the nation's base chunk value for a chunk, or -1 if chunk is not in a nation
+     * This allows nations to set their own base chunk value via legislation
+     */
+    public static double getNationBaseChunkValue(net.minecraft.server.MinecraftServer server,
+                                                  int chunkX, int chunkZ, String dimension) {
+        if (!initialized) return -1;
+
+        try {
+            var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
+            var getInstance = managerClass.getMethod("getInstance");
+            var manager = getInstance.invoke(null);
+
+            // Get the dimension key
+            net.minecraft.resources.ResourceKey<?> dimKey = null;
+            for (net.minecraft.server.level.ServerLevel level : server.getAllLevels()) {
+                if (level.dimension().location().toString().equals(dimension)) {
+                    dimKey = level.dimension();
+                    break;
+                }
+            }
+
+            if (dimKey == null) return -1;
+
+            // Get the claimed chunk
+            var getClaimedChunk = managerClass.getMethod("getClaimedChunk",
+                net.minecraft.world.level.ChunkPos.class, net.minecraft.resources.ResourceKey.class);
+            net.minecraft.world.level.ChunkPos pos = new net.minecraft.world.level.ChunkPos(chunkX, chunkZ);
+            Object chunk = getClaimedChunk.invoke(manager, pos, dimKey);
+
+            if (chunk == null) return -1;
+
+            // Get city ID from chunk
+            var chunkClass = Class.forName("com.statecraft.core.ClaimedChunk");
+            var getCityId = chunkClass.getMethod("getCityId");
+            UUID cityId = (UUID) getCityId.invoke(chunk);
+
+            if (cityId == null) return -1;
+
+            // Get city
+            var getCity = managerClass.getMethod("getCity", UUID.class);
+            Object city = getCity.invoke(manager, cityId);
+
+            if (city == null) return -1;
+
+            // Get state ID from city
+            var cityClass = Class.forName("com.statecraft.core.City");
+            var getStateId = cityClass.getMethod("getStateId");
+            UUID stateId = (UUID) getStateId.invoke(city);
+
+            if (stateId == null) return -1;
+
+            // Get state
+            var getState = managerClass.getMethod("getState", UUID.class);
+            Object state = getState.invoke(manager, stateId);
+
+            if (state == null) return -1;
+
+            // Get nation ID from state
+            var stateClass = Class.forName("com.statecraft.core.State");
+            var getNationId = stateClass.getMethod("getNationId");
+            UUID nationId = (UUID) getNationId.invoke(state);
+
+            if (nationId == null) return -1;
+
+            // Get nation
+            var getNation = managerClass.getMethod("getNation", UUID.class);
+            Object nation = getNation.invoke(manager, nationId);
+
+            if (nation == null) return -1;
+
+            // Get base chunk value from nation
+            var nationClass = Class.forName("com.statecraft.core.Nation");
+            var getBaseChunkValue = nationClass.getMethod("getBaseChunkValue");
+            return (Double) getBaseChunkValue.invoke(nation);
+
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.debug("Error getting nation base chunk value: {}", e.getMessage());
+        }
+
+        return -1;
+    }
+
+    /**
      * Get the government tax multiplier for a chunk (from city settings)
      */
     public static double getGovernmentTaxMultiplier(net.minecraft.server.MinecraftServer server,

@@ -285,7 +285,7 @@ public class ServerPacketHandler {
                     }
 
                     // Check chunk claim fee if economy mod is loaded
-                    double chunkClaimFee = getChunkClaimFee();
+                    double chunkClaimFee = getChunkClaimFee(nation);
                     if (chunkClaimFee > 0) {
                         double cityBalance = getCityTreasuryBalance(targetCity.getId());
                         if (cityBalance < chunkClaimFee) {
@@ -300,9 +300,11 @@ public class ServerPacketHandler {
 
                     switch (result) {
                         case SUCCESS -> {
-                            // Deduct chunk claim fee from city treasury
+                            // Deduct chunk claim fee from city treasury and deposit to nation
                             if (chunkClaimFee > 0) {
                                 deductFromCityTreasury(targetCity.getId(), chunkClaimFee);
+                                depositToNationTreasury(nation.getId(), chunkClaimFee,
+                                    "Chunk claim fee from " + targetCity.getName());
                             }
 
                             if (player.level() instanceof ServerLevel level) {
@@ -864,9 +866,16 @@ public class ServerPacketHandler {
                 }
             }
 
+            // Check max cities limit before creating
+            if (state.getCityCount() >= state.getMaxCities()) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                    "Cannot create city! This state has reached its maximum of " + state.getMaxCities() + " cities."), player);
+                return;
+            }
+
             City city = manager.createCity(state, name, player.getUUID());
             if (city == null) {
-                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Could not create city. Max cities may be reached."), player);
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Could not create city. Please try again."), player);
                 return;
             }
 
@@ -924,6 +933,154 @@ public class ServerPacketHandler {
                 canManage,
                 residentNames
             ), player);
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleRequestCitySettings(RequestCitySettingsPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            Nation nation = manager.getNationByName(packet.getNationName());
+
+            if (nation == null) return;
+
+            State state = nation.getStateByName(packet.getStateName());
+            if (state == null) return;
+
+            City city = state.getCityByName(packet.getCityName());
+            if (city == null) return;
+
+            // Check permissions - only mayor, governor, or nation admin can view settings
+            boolean canManage = player.getUUID().equals(city.getMayorId()) ||
+                               player.getUUID().equals(state.getGovernorId()) ||
+                               nation.isAdmin(player.getUUID());
+
+            if (!canManage) {
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§cYou don't have permission to view city settings"));
+                return;
+            }
+
+            // Send settings to client
+            NetworkHandler.sendToPlayer(new SyncCitySettingsPacket(
+                city.getName(),
+                city.getDescription(),
+                city.getFlagUrl(),
+                city.isPublicJoin(),
+                city.getTaxRate() * 100, // Convert to percentage
+                city.getSalesTaxRate() * 100, // Convert to percentage
+                city.getStatePassThroughRate() * 100 // Convert to percentage
+            ), player);
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleRequestNationLaws(RequestNationLawsPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            Nation nation = manager.getNationByName(packet.getNationName());
+
+            if (nation == null) {
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§cNation not found"));
+                return;
+            }
+
+            // Build list of current policies/laws
+            List<SyncNationLawsPacket.PolicyInfo> policies = new ArrayList<>();
+
+            // Taxation policies
+            policies.add(new SyncNationLawsPacket.PolicyInfo(
+                "Taxation", "Nation Sales Tax", "PERCENTAGE",
+                nation.getSalesTaxRate(), ""
+            ));
+            policies.add(new SyncNationLawsPacket.PolicyInfo(
+                "Taxation", "State Pass-Through Rate", "PERCENTAGE",
+                nation.getStatePassThroughRate(), ""
+            ));
+            policies.add(new SyncNationLawsPacket.PolicyInfo(
+                "Taxation", "Base Chunk Value", "CURRENCY",
+                nation.getBaseChunkValue(), ""
+            ));
+            policies.add(new SyncNationLawsPacket.PolicyInfo(
+                "Taxation", "Chunk Claim Fee", "CURRENCY",
+                nation.getChunkClaimFee(), ""
+            ));
+
+            // Territory policies
+            policies.add(new SyncNationLawsPacket.PolicyInfo(
+                "Territory", "Max States", "INTEGER",
+                nation.getMaxStates(), ""
+            ));
+            policies.add(new SyncNationLawsPacket.PolicyInfo(
+                "Territory", "Max Cities per State", "INTEGER",
+                nation.getDefaultMaxCitiesPerState(), ""
+            ));
+            policies.add(new SyncNationLawsPacket.PolicyInfo(
+                "Territory", "Max Chunks per City", "INTEGER",
+                nation.getMaxChunksPerCity(), ""
+            ));
+            policies.add(new SyncNationLawsPacket.PolicyInfo(
+                "Territory", "Open Borders", "BOOLEAN",
+                nation.hasOpenBorders() ? 1 : 0, ""
+            ));
+
+            // Membership policies
+            policies.add(new SyncNationLawsPacket.PolicyInfo(
+                "Membership", "Open Nation", "BOOLEAN",
+                nation.isOpen() ? 1 : 0, ""
+            ));
+
+            // Constitutional settings
+            policies.add(new SyncNationLawsPacket.PolicyInfo(
+                "Constitutional", "Leader Term Duration", "INTEGER",
+                nation.getLeaderTermDays(), "days"
+            ));
+            policies.add(new SyncNationLawsPacket.PolicyInfo(
+                "Constitutional", "Election Duration", "INTEGER",
+                nation.getElectionDurationDays(), "days"
+            ));
+            policies.add(new SyncNationLawsPacket.PolicyInfo(
+                "Constitutional", "Max Officers", "INTEGER",
+                nation.getMaxOfficers(), ""
+            ));
+
+            // Diplomacy info
+            Set<UUID> allies = nation.getAllies();
+            Set<UUID> enemies = nation.getEnemies();
+
+            StringBuilder allyNames = new StringBuilder();
+            for (UUID allyId : allies) {
+                Nation ally = manager.getNation(allyId);
+                if (ally != null) {
+                    if (allyNames.length() > 0) allyNames.append(", ");
+                    allyNames.append(ally.getName());
+                }
+            }
+            policies.add(new SyncNationLawsPacket.PolicyInfo(
+                "Diplomacy", "Allies", "TEXT",
+                allies.size(), allyNames.length() > 0 ? allyNames.toString() : "None"
+            ));
+
+            StringBuilder enemyNames = new StringBuilder();
+            for (UUID enemyId : enemies) {
+                Nation enemy = manager.getNation(enemyId);
+                if (enemy != null) {
+                    if (enemyNames.length() > 0) enemyNames.append(", ");
+                    enemyNames.append(enemy.getName());
+                }
+            }
+            policies.add(new SyncNationLawsPacket.PolicyInfo(
+                "Diplomacy", "At War With", "TEXT",
+                enemies.size(), enemyNames.length() > 0 ? enemyNames.toString() : "None"
+            ));
+
+            // Send to client
+            NetworkHandler.sendToPlayer(new SyncNationLawsPacket(nation.getName(), policies), player);
         });
         ctx.get().setPacketHandled(true);
     }
@@ -1337,6 +1494,12 @@ public class ServerPacketHandler {
                         state.setCityPassThroughRate(cityPassThrough / 100.0); // Convert to decimal
                     }
 
+                    // Update state sales tax rate if provided
+                    if (packet.getPassThroughRate() >= 0) {
+                        double salesTax = Math.max(0, Math.min(50, packet.getPassThroughRate()));
+                        state.setSalesTaxRate(salesTax / 100.0); // Convert to decimal
+                    }
+
                     // Note: Max chunks per state is now controlled by server config (statecraft.toml)
                     // and cannot be changed via GUI
 
@@ -1392,10 +1555,16 @@ public class ServerPacketHandler {
                     city.setFlagUrl(flagUrl);
                     city.setPublicJoin(packet.isPublicJoin());
 
-                    // Update base tax rate if provided (cities set the base rate)
+                    // Update property tax rate if provided (cities set the property tax rate)
                     if (packet.getTaxRate() >= 0) {
                         double taxRate = Math.max(0, Math.min(100, packet.getTaxRate()));
                         city.setTaxRate(taxRate / 100.0); // Convert to decimal
+                    }
+
+                    // Update sales tax rate if provided (second value in packet)
+                    if (packet.getPassThroughRate() >= 0) {
+                        double salesTaxRate = Math.max(0, Math.min(50, packet.getPassThroughRate()));
+                        city.setSalesTaxRate(salesTaxRate / 100.0); // Convert to decimal
                     }
 
                     // Note: Max chunks per city is now controlled by server config (statecraft.toml)
@@ -1633,8 +1802,13 @@ public class ServerPacketHandler {
                     return;
                 }
 
-                // Add player to nation
-                nation.addMember(playerId);
+                // Add player to nation using manager method (this updates the playerNationIndex)
+                boolean success = manager.addPlayerToNation(playerId, nation.getId());
+                if (!success) {
+                    NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                        "Failed to join nation. Please try again."), player);
+                    return;
+                }
 
                 // Mark data dirty
                 if (player.level() instanceof ServerLevel serverLevel) {
@@ -2207,24 +2381,30 @@ public class ServerPacketHandler {
     // ==================== Economy Integration Helpers ====================
 
     /**
-     * Get the configured chunk claim fee from StateCraft config
+     * Get the chunk claim fee for a nation
+     * First checks nation's legislature-set fee, then falls back to config
      * Returns 0 if fee is disabled or economy mod is not loaded
      */
-    private static double getChunkClaimFee() {
+    private static double getChunkClaimFee(Nation nation) {
         try {
             // Check if StateCraft Economy is loaded (required for fee to work)
             if (!net.minecraftforge.fml.ModList.get().isLoaded("statecraft_economy")) {
                 return 0;
             }
 
-            // Use StateCraft's own config
+            // First check nation's legislature-set chunk claim fee
+            if (nation != null && nation.getChunkClaimFee() > 0) {
+                return nation.getChunkClaimFee();
+            }
+
+            // Fall back to config if enabled
             if (!com.statecraft.config.StateCraftConfig.CHUNK_CLAIM_FEE_ENABLED.get()) {
                 return 0;
             }
 
             return com.statecraft.config.StateCraftConfig.CHUNK_CLAIM_FEE.get();
         } catch (Exception e) {
-            StateCraft.LOGGER.debug("Could not get chunk claim fee from config: {}", e.getMessage());
+            StateCraft.LOGGER.debug("Could not get chunk claim fee: {}", e.getMessage());
             return 0;
         }
     }
@@ -2266,6 +2446,26 @@ public class ServerPacketHandler {
             StateCraft.LOGGER.info("Deducted ${} from city {} for chunk claim fee", String.format("%.2f", amount), cityId);
         } catch (Exception e) {
             StateCraft.LOGGER.error("Could not deduct from city treasury: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Deposit chunk claim fee to nation treasury
+     */
+    private static void depositToNationTreasury(UUID nationId, double amount, String reason) {
+        try {
+            if (!net.minecraftforge.fml.ModList.get().isLoaded("statecraft_economy")) {
+                return;
+            }
+
+            Class<?> managerClass = Class.forName("com.statecraft.economy.core.EconomyManager");
+            Object instance = managerClass.getMethod("getInstance").invoke(null);
+            Object treasury = managerClass.getMethod("getOrCreateNationTreasury", UUID.class).invoke(instance, nationId);
+            treasury.getClass().getMethod("add", double.class).invoke(treasury, amount);
+            managerClass.getMethod("markDirty").invoke(instance);
+            StateCraft.LOGGER.info("Deposited ${} to nation {} treasury: {}", String.format("%.2f", amount), nationId, reason);
+        } catch (Exception e) {
+            StateCraft.LOGGER.error("Could not deposit to nation treasury: {}", e.getMessage());
         }
     }
 
@@ -2442,14 +2642,21 @@ public class ServerPacketHandler {
                 boolean playerHasVoted = bill.getVotes().containsKey(player.getUUID());
                 boolean needsLeaderAction = bill.getStatus() == com.statecraft.legislature.Bill.Status.PASSED && !bill.isVetoProof();
 
+                // Count votes dynamically from the votes map
+                int yesCount = 0, noCount = 0;
+                for (com.statecraft.legislature.Bill.Vote v : bill.getVotes().values()) {
+                    if (v == com.statecraft.legislature.Bill.Vote.YES) yesCount++;
+                    else if (v == com.statecraft.legislature.Bill.Vote.NO) noCount++;
+                }
+
                 activeBills.add(new SyncLegislatureDataPacket.BillSummary(
                     bill.getBillId().toString(),
                     bill.getBillNumber(),
                     bill.getTitle(),
                     bill.getAuthorName(),
                     bill.getStatus().name(),
-                    bill.getYesVotes(),
-                    bill.getNoVotes(),
+                    yesCount,
+                    noCount,
                     timeRemaining,
                     playerHasVoted,
                     needsLeaderAction
@@ -2588,9 +2795,14 @@ public class ServerPacketHandler {
             UUID targetId = packet.getTargetPlayerId();
 
             if (packet.getAction() == ModifyOfficerPacket.Action.APPOINT) {
-                // Validate: max 3 officers
-                if (nation.getOfficers().size() >= 3) {
-                    NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Maximum of 3 officers allowed!"), player);
+                // Validate: check nation's max officers limit (constitutional setting)
+                if (!nation.canAddOfficer()) {
+                    int maxOfficers = nation.getMaxOfficers();
+                    if (maxOfficers == 0) {
+                        NetworkHandler.sendToPlayer(new ActionResultPacket(false, "This nation's constitution does not allow officers!"), player);
+                    } else {
+                        NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Maximum of " + maxOfficers + " officers allowed!"), player);
+                    }
                     return;
                 }
 
@@ -2704,10 +2916,29 @@ public class ServerPacketHandler {
                 return;
             }
 
-            // Create the draft bill
+            // Check if any policy changes require constitutional amendment
+            boolean requiresConstitutionalAmendment = false;
+            for (String policyName : packet.getPolicyChanges().keySet()) {
+                try {
+                    com.statecraft.legislature.PolicyType policyType =
+                        com.statecraft.legislature.PolicyType.valueOf(policyName);
+                    if (policyType.requiresConstitutionalAmendment()) {
+                        requiresConstitutionalAmendment = true;
+                        break;
+                    }
+                } catch (IllegalArgumentException ignored) {}
+            }
+
+            // Create the draft bill (constitutional amendment if any policy requires it)
             String playerName = player.getName().getString();
-            com.statecraft.legislature.Bill bill = legislature.createDraft(
-                player.getUUID(), playerName, title, description);
+            com.statecraft.legislature.Bill bill;
+            if (requiresConstitutionalAmendment) {
+                bill = legislature.createConstitutionalAmendment(
+                    player.getUUID(), playerName, title, description);
+            } else {
+                bill = legislature.createDraft(
+                    player.getUUID(), playerName, title, description);
+            }
 
             // Add policy changes
             for (Map.Entry<String, String> entry : packet.getPolicyChanges().entrySet()) {
@@ -2743,7 +2974,11 @@ public class ServerPacketHandler {
             }
 
             // Notify legislature members
-            String message = "§6[Legislature] §e" + playerName + " proposed: §f" + title;
+            String billTypeStr = bill.isConstitutionalAmendment() ? "§c[Constitutional Amendment] " : "";
+            String message = "§6[Legislature] " + billTypeStr + "§e" + playerName + " proposed: §f" + title;
+            if (bill.isConstitutionalAmendment()) {
+                message += " §7(Requires 2/3 majority, cannot be vetoed)";
+            }
             Set<UUID> votingMembers = legislature.getVotingMembers(nation);
             for (UUID memberId : votingMembers) {
                 ServerPlayer memberPlayer = player.getServer().getPlayerList().getPlayer(memberId);
@@ -2758,8 +2993,10 @@ public class ServerPacketHandler {
                 leader.sendSystemMessage(net.minecraft.network.chat.Component.literal(message));
             }
 
-            NetworkHandler.sendToPlayer(new ActionResultPacket(true,
-                "Bill '" + title + "' submitted for debate! (" + bill.getBillNumber() + ")"), player);
+            String successMsg = bill.isConstitutionalAmendment() ?
+                "Constitutional Amendment '" + title + "' submitted for debate! (" + bill.getBillNumber() + ") - Requires 2/3 majority" :
+                "Bill '" + title + "' submitted for debate! (" + bill.getBillNumber() + ")";
+            NetworkHandler.sendToPlayer(new ActionResultPacket(true, successMsg), player);
         });
         ctx.get().setPacketHandled(true);
     }
@@ -2828,6 +3065,11 @@ public class ServerPacketHandler {
                 return;
             }
 
+            // Verify the vote was recorded
+            boolean voteRecorded = bill.getVotes().containsKey(player.getUUID());
+            StateCraft.LOGGER.debug("Vote recorded for player {}: {} (verified in map: {})",
+                player.getName().getString(), vote, voteRecorded);
+
             // Save data
             if (player.level() instanceof ServerLevel level) {
                 NationSavedData.get(level).markForSave();
@@ -2842,6 +3084,9 @@ public class ServerPacketHandler {
             NetworkHandler.sendToPlayer(new ActionResultPacket(true,
                 "Vote recorded: " + voteText + " §fon " + bill.getBillNumber()), player);
 
+            // Send updated legislature data to the player so GUI reflects the vote
+            sendLegislatureDataToPlayer(player, nation, legislature, votingMembers);
+
             // Notify other legislature members about the vote
             String message = "§6[Legislature] §7" + player.getName().getString() + " voted on " + bill.getBillNumber();
             for (UUID memberId : votingMembers) {
@@ -2854,6 +3099,95 @@ public class ServerPacketHandler {
             }
         });
         ctx.get().setPacketHandled(true);
+    }
+
+    /**
+     * Helper method to send legislature data to a player
+     */
+    private static void sendLegislatureDataToPlayer(ServerPlayer player, Nation nation,
+            com.statecraft.legislature.Legislature legislature, Set<UUID> votingMembers) {
+
+        boolean isLegislatureMember = votingMembers.contains(player.getUUID());
+        boolean isNationLeader = player.getUUID().equals(nation.getLeaderId());
+
+        // Build active bills list
+        List<SyncLegislatureDataPacket.BillSummary> activeBills = new ArrayList<>();
+        long now = System.currentTimeMillis();
+
+        for (com.statecraft.legislature.Bill bill : legislature.getActiveBills()) {
+            long timeRemaining = 0;
+            if (bill.getStatus() == com.statecraft.legislature.Bill.Status.DEBATE) {
+                timeRemaining = Math.max(0, bill.getDebateEndTime() - now);
+            } else if (bill.getStatus() == com.statecraft.legislature.Bill.Status.VOTING) {
+                timeRemaining = Math.max(0, bill.getVoteEndTime() - now);
+            }
+
+            boolean playerHasVoted = bill.getVotes().containsKey(player.getUUID());
+            boolean needsLeaderAction = bill.getStatus() == com.statecraft.legislature.Bill.Status.PASSED && !bill.isVetoProof();
+
+            // Count votes dynamically from the votes map (not the yesVotes/noVotes fields which are only set during tally)
+            int yesCount = 0, noCount = 0;
+            for (com.statecraft.legislature.Bill.Vote v : bill.getVotes().values()) {
+                if (v == com.statecraft.legislature.Bill.Vote.YES) yesCount++;
+                else if (v == com.statecraft.legislature.Bill.Vote.NO) noCount++;
+            }
+
+            StateCraft.LOGGER.debug("Syncing bill {} to player {}: status={}, playerHasVoted={}, yesVotes={}, noVotes={}",
+                bill.getBillNumber(), player.getName().getString(), bill.getStatus(),
+                playerHasVoted, yesCount, noCount);
+
+            activeBills.add(new SyncLegislatureDataPacket.BillSummary(
+                bill.getBillId().toString(),
+                bill.getBillNumber(),
+                bill.getTitle(),
+                bill.getAuthorName(),
+                bill.getStatus().name(),
+                yesCount,
+                noCount,
+                timeRemaining,
+                playerHasVoted,
+                needsLeaderAction
+            ));
+        }
+
+        // Build history list (most recent 10)
+        List<SyncLegislatureDataPacket.BillSummary> recentHistory = new ArrayList<>();
+        List<com.statecraft.legislature.Bill> history = legislature.getBillHistory();
+        for (int i = 0; i < Math.min(10, history.size()); i++) {
+            com.statecraft.legislature.Bill historyBill = history.get(i);
+            recentHistory.add(new SyncLegislatureDataPacket.BillSummary(
+                historyBill.getBillId().toString(),
+                historyBill.getBillNumber(),
+                historyBill.getTitle(),
+                historyBill.getAuthorName(),
+                historyBill.getStatus().name(),
+                historyBill.getYesVotes(),
+                historyBill.getNoVotes(),
+                0,
+                false,
+                false
+            ));
+        }
+
+        // Build voting members list
+        List<String> votingMemberNames = new ArrayList<>();
+        for (UUID memberId : votingMembers) {
+            String memberName = player.getServer().getProfileCache()
+                .get(memberId)
+                .map(profile -> profile.getName())
+                .orElse("Unknown");
+            votingMemberNames.add(memberName);
+        }
+
+        NetworkHandler.sendToPlayer(new SyncLegislatureDataPacket(
+            nation.getName(),
+            isLegislatureMember,
+            isNationLeader,
+            activeBills,
+            recentHistory,
+            votingMemberNames,
+            votingMembers.size()
+        ), player);
     }
 
     public static void handleLeaderBillAction(LeaderBillActionPacket packet, Supplier<NetworkEvent.Context> ctx) {
@@ -2934,6 +3268,12 @@ public class ServerPacketHandler {
                     " signed " + bill.getBillNumber() + " into law: §f" + bill.getTitle();
             } else {
                 // Veto the bill
+                // Constitutional amendments cannot be vetoed
+                if (bill.isConstitutionalAmendment()) {
+                    NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                        "Constitutional amendments cannot be vetoed!"), player);
+                    return;
+                }
                 if (bill.isVetoProof()) {
                     NetworkHandler.sendToPlayer(new ActionResultPacket(false,
                         "This bill passed with a veto-proof majority and cannot be vetoed!"), player);
@@ -2956,8 +3296,11 @@ public class ServerPacketHandler {
 
             NetworkHandler.sendToPlayer(new ActionResultPacket(true, resultMessage), player);
 
-            // Notify all legislature members and the leader
+            // Send updated legislature data to the player so GUI reflects the change
             Set<UUID> votingMembers = legislature.getVotingMembers(nation);
+            sendLegislatureDataToPlayer(player, nation, legislature, votingMembers);
+
+            // Notify all legislature members and the leader
             for (UUID memberId : votingMembers) {
                 ServerPlayer memberPlayer = player.getServer().getPlayerList().getPlayer(memberId);
                 if (memberPlayer != null) {

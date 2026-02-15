@@ -353,6 +353,42 @@ public class ClientPacketHandler {
         ctx.get().setPacketHandled(true);
     }
 
+    public static void handleSyncCitySettings(SyncCitySettingsPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof CitySettingsScreen screen) {
+                screen.setCurrentSettings(
+                    packet.getDescription(),
+                    packet.getFlagUrl(),
+                    packet.isPublicJoin(),
+                    packet.getTaxRate(),
+                    packet.getSalesTaxRate()
+                );
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncNationLaws(SyncNationLawsPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof NationLawsScreen screen) {
+                List<NationLawsScreen.PolicyEntry> entries = new ArrayList<>();
+                for (SyncNationLawsPacket.PolicyInfo info : packet.getPolicies()) {
+                    entries.add(new NationLawsScreen.PolicyEntry(
+                        info.category,
+                        info.name,
+                        info.valueType,
+                        info.numericValue,
+                        info.textValue
+                    ));
+                }
+                screen.updatePolicies(entries);
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
     public static void handleSyncAutoClaim(SyncAutoClaimPacket packet, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
             Minecraft mc = Minecraft.getInstance();

@@ -28,6 +28,7 @@ public class City {
     private String flagUrl;
     private double taxMultiplier; // Multiplier for chunk valuation (government-controlled)
     private double taxRate; // Base tax rate as decimal (e.g., 0.05 = 5%)
+    private double salesTaxRate; // Sales tax rate for trading hub sales (e.g., 0.05 = 5%)
     private double statePassThroughRate; // Percentage of tax revenue passed to state (e.g., 0.20 = 20%)
     private int maxChunks; // Maximum chunks this city can claim
 
@@ -43,6 +44,7 @@ public class City {
         this.flagUrl = "";
         this.taxMultiplier = 1.0;
         this.taxRate = 0.05; // Default 5%
+        this.salesTaxRate = 0.05; // Default 5% sales tax
         this.statePassThroughRate = 0.20; // Default 20% to state
         this.maxChunks = 50; // Default 50 chunks per city
 
@@ -139,6 +141,15 @@ public class City {
         this.taxRate = Math.max(0, Math.min(1.0, taxRate));
     }
 
+    public double getSalesTaxRate() {
+        return salesTaxRate;
+    }
+
+    public void setSalesTaxRate(double salesTaxRate) {
+        // Clamp between 0 and 0.5 (0% to 50% max sales tax)
+        this.salesTaxRate = Math.max(0, Math.min(0.5, salesTaxRate));
+    }
+
     public double getStatePassThroughRate() {
         return statePassThroughRate;
     }
@@ -227,6 +238,7 @@ public class City {
         tag.putString("flagUrl", flagUrl);
         tag.putDouble("taxMultiplier", taxMultiplier);
         tag.putDouble("taxRate", taxRate);
+        tag.putDouble("salesTaxRate", salesTaxRate);
         tag.putDouble("statePassThroughRate", statePassThroughRate);
         tag.putInt("maxChunks", maxChunks);
 
@@ -261,6 +273,7 @@ public class City {
         city.flagUrl = tag.getString("flagUrl");
         city.taxMultiplier = tag.contains("taxMultiplier") ? tag.getDouble("taxMultiplier") : 1.0;
         city.taxRate = tag.contains("taxRate") ? tag.getDouble("taxRate") : 0.05;
+        city.salesTaxRate = tag.contains("salesTaxRate") ? tag.getDouble("salesTaxRate") : 0.05;
         city.statePassThroughRate = tag.contains("statePassThroughRate") ? tag.getDouble("statePassThroughRate") : 0.20;
         city.maxChunks = tag.contains("maxChunks") ? tag.getInt("maxChunks") : 50;
 

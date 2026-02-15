@@ -29,14 +29,23 @@ public class Bill {
         YES, NO, ABSTAIN
     }
 
+    /**
+     * Type of bill - affects voting requirements and veto rules
+     */
+    public enum BillType {
+        REGULAR,            // Standard bill: simple majority, can be vetoed
+        CONSTITUTIONAL      // Constitutional amendment: 2/3 majority required, cannot be vetoed
+    }
+
     private final UUID billId;
     private final UUID nationId;
     private final String billNumber;  // e.g., "NL-2026-001"
+    private BillType billType;        // Regular or Constitutional Amendment
     private String title;
     private String description;
-    private final UUID authorId;
-    private final String authorName;
-    private final long createdTime;
+    private UUID authorId;
+    private String authorName;
+    private long createdTime;
 
     // Policy changes this bill would enact
     private final Map<PolicyType, String> policyChanges;
@@ -59,9 +68,15 @@ public class Bill {
 
     public Bill(UUID nationId, String billNumber, String title, String description,
                 UUID authorId, String authorName) {
+        this(nationId, billNumber, title, description, authorId, authorName, BillType.REGULAR);
+    }
+
+    public Bill(UUID nationId, String billNumber, String title, String description,
+                UUID authorId, String authorName, BillType billType) {
         this.billId = UUID.randomUUID();
         this.nationId = nationId;
         this.billNumber = billNumber;
+        this.billType = billType;
         this.title = title;
         this.description = description;
         this.authorId = authorId;
@@ -78,6 +93,7 @@ public class Bill {
         this.billId = billId;
         this.nationId = nationId;
         this.billNumber = billNumber;
+        this.billType = BillType.REGULAR;  // Default, will be overwritten by load()
         this.authorId = null;
         this.authorName = "";
         this.createdTime = 0;
@@ -90,6 +106,7 @@ public class Bill {
     public UUID getBillId() { return billId; }
     public UUID getNationId() { return nationId; }
     public String getBillNumber() { return billNumber; }
+    public BillType getBillType() { return billType; }
     public String getTitle() { return title; }
     public String getDescription() { return description; }
     public UUID getAuthorId() { return authorId; }
@@ -102,6 +119,21 @@ public class Bill {
     public int getYesVotes() { return yesVotes; }
     public int getNoVotes() { return noVotes; }
     public int getAbstainVotes() { return abstainVotes; }
+
+    /**
+     * Check if this bill is a constitutional amendment
+     */
+    public boolean isConstitutionalAmendment() {
+        return billType == BillType.CONSTITUTIONAL;
+    }
+
+    /**
+     * Check if this bill can be vetoed
+     * Constitutional amendments cannot be vetoed
+     */
+    public boolean canBeVetoed() {
+        return billType != BillType.CONSTITUTIONAL && !vetoProof;
+    }
 
     public Map<PolicyType, String> getPolicyChanges() {
         return Collections.unmodifiableMap(policyChanges);
@@ -178,6 +210,9 @@ public class Bill {
 
     /**
      * Tally votes and determine outcome
+     * Regular bills: simple majority (>50%), can be vetoed unless veto-proof
+     * Constitutional amendments: require 2/3 majority (67%), cannot be vetoed
+     *
      * @param totalEligibleVoters Total legislature members who could vote
      * @param quorumPercent Minimum participation required (0-100)
      * @param vetoOverridePercent Percentage for veto-proof majority (0-100)
@@ -216,15 +251,30 @@ public class Bill {
 
         int yesPercent = (yesVotes * 100) / decisiveVotes;
 
-        if (yesPercent > 50) {
-            status = Status.PASSED;
-            vetoProof = yesPercent >= vetoOverridePercent;
+        // Constitutional amendments require 2/3 majority (67%)
+        if (billType == BillType.CONSTITUTIONAL) {
+            int constitutionalThreshold = 67; // 2/3 majority
+            if (yesPercent >= constitutionalThreshold) {
+                // Constitutional amendments pass directly to ENACTED (cannot be vetoed)
+                status = Status.ENACTED;
+                vetoProof = true; // Mark as veto-proof for records
+            } else {
+                status = Status.FAILED;
+            }
         } else {
-            status = Status.FAILED;
+            // Regular bills: simple majority
+            if (yesPercent > 50) {
+                status = Status.PASSED;
+                vetoProof = yesPercent >= vetoOverridePercent;
+            } else {
+                status = Status.FAILED;
+            }
         }
     }
 
     public void veto() {
+        // Constitutional amendments cannot be vetoed
+        if (billType == BillType.CONSTITUTIONAL) return;
         if (status == Status.PASSED && !vetoProof) {
             status = Status.VETOED;
         }
@@ -248,6 +298,7 @@ public class Bill {
         tag.putUUID("billId", billId);
         tag.putUUID("nationId", nationId);
         tag.putString("billNumber", billNumber);
+        tag.putString("billType", billType.name());
         tag.putString("title", title);
         tag.putString("description", description);
         if (authorId != null) {
@@ -299,9 +350,28 @@ public class Bill {
         String billNumber = tag.getString("billNumber");
 
         Bill bill = new Bill(billId, nationId, billNumber);
+
+        // Load bill type (default to REGULAR for backwards compatibility)
+        if (tag.contains("billType")) {
+            try {
+                bill.billType = BillType.valueOf(tag.getString("billType"));
+            } catch (IllegalArgumentException e) {
+                bill.billType = BillType.REGULAR;
+            }
+        } else {
+            bill.billType = BillType.REGULAR;
+        }
+
         bill.title = tag.getString("title");
         bill.description = tag.getString("description");
-        // authorId loaded via reflection or kept null for loaded bills
+
+        // Load authorId if present
+        if (tag.contains("authorId")) {
+            bill.authorId = tag.getUUID("authorId");
+        }
+        bill.authorName = tag.getString("authorName");
+        bill.createdTime = tag.getLong("createdTime");
+
         bill.status = Status.valueOf(tag.getString("status"));
         bill.debateEndTime = tag.getLong("debateEndTime");
         bill.voteEndTime = tag.getLong("voteEndTime");

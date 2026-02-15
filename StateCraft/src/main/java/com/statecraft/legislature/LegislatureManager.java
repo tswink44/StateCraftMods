@@ -3,7 +3,10 @@ package com.statecraft.legislature;
 import com.statecraft.StateCraft;
 import com.statecraft.config.StateCraftConfig;
 import com.statecraft.core.ChunkClaimManager;
+import com.statecraft.core.City;
 import com.statecraft.core.Nation;
+import com.statecraft.core.State;
+import com.statecraft.data.NationSavedData;
 import com.statecraft.mail.Mail;
 import com.statecraft.mail.MailManager;
 import net.minecraft.nbt.CompoundTag;
@@ -11,7 +14,9 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.Level;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,6 +31,7 @@ public class LegislatureManager {
 
     private final Map<UUID, Legislature> legislatures;  // nationId -> Legislature
     private boolean dirty = false;
+    private MinecraftServer server;
 
     private LegislatureManager() {
         this.legislatures = new ConcurrentHashMap<>();
@@ -40,6 +46,13 @@ public class LegislatureManager {
 
     public static void resetInstance() {
         instance = null;
+    }
+
+    /**
+     * Set the server reference for triggering saves
+     */
+    public void setServer(MinecraftServer server) {
+        this.server = server;
     }
 
     /**
@@ -104,7 +117,38 @@ public class LegislatureManager {
                             StateCraftConfig.LEGISLATURE_VETO_OVERRIDE_PERCENT.get()
                         );
 
-                        if (bill.getStatus() == Bill.Status.PASSED) {
+                        // Constitutional amendments go directly to ENACTED status
+                        if (bill.getStatus() == Bill.Status.ENACTED && bill.isConstitutionalAmendment()) {
+                            // Apply policy changes for constitutional amendment
+                            applyPolicyChanges(nation, bill.getPolicyChanges());
+
+                            // Create a law from this amendment
+                            String lawNumber = legislature.getCodex().generateLawNumber(Law.Type.NATION_LAW);
+                            Law law = new Law(
+                                nation.getId(),
+                                lawNumber,
+                                Law.Type.NATION_LAW,
+                                bill.getTitle(),
+                                bill.getDescription(),
+                                bill.getAuthorName(),
+                                bill.getPolicyChanges(),
+                                bill.getYesVotes(),
+                                bill.getNoVotes(),
+                                bill.getAbstainVotes(),
+                                true,  // Constitutional amendments are always veto-proof
+                                null
+                            );
+                            legislature.getCodex().addLaw(law);
+
+                            notifyLegislatureMembers(legislature, nation, server,
+                                "§6[Legislature] §a§lConstitutional Amendment ENACTED: §f" + bill.getTitle() +
+                                " §7(Yes: " + bill.getYesVotes() + ", No: " + bill.getNoVotes() + " - 2/3 majority achieved)");
+                            sendMailToLeader(nation, server,
+                                "Constitutional Amendment Enacted",
+                                "Constitutional Amendment " + bill.getBillNumber() + " (" + bill.getTitle() +
+                                ") passed with a 2/3 majority and has been enacted. As a constitutional amendment, it cannot be vetoed.");
+                            toArchive.add(bill.getBillId());
+                        } else if (bill.getStatus() == Bill.Status.PASSED) {
                             if (bill.isVetoProof()) {
                                 // Auto-enact veto-proof bills
                                 enactBill(legislature, bill, nation, server);
@@ -120,10 +164,12 @@ public class LegislatureManager {
                                     "Bill " + bill.getBillNumber() + " (" + bill.getTitle() +
                                     ") has passed the legislature. You may sign it into law or veto it.");
                             }
-                        } else {
+                        } else if (bill.getStatus() == Bill.Status.FAILED) {
+                            String failReason = bill.isConstitutionalAmendment() ?
+                                " §7(Did not achieve 2/3 majority)" : "";
                             notifyLegislatureMembers(legislature, nation, server,
                                 "§6[Legislature] §cBill failed: §f" + bill.getTitle() +
-                                " §7(Yes: " + bill.getYesVotes() + ", No: " + bill.getNoVotes() + ")");
+                                " §7(Yes: " + bill.getYesVotes() + ", No: " + bill.getNoVotes() + ")" + failReason);
                             toArchive.add(bill.getBillId());
                         }
                         markDirty();
@@ -250,22 +296,43 @@ public class LegislatureManager {
     private void applyPolicyChange(Nation nation, PolicyType policy, String value) {
         try {
             switch (policy) {
-                case NATION_TAX_RATE:
-                    // Would need economy integration
-                    StateCraft.LOGGER.info("Policy change: Nation tax rate set to {}", value);
-                    break;
                 case STATE_PASS_THROUGH_RATE:
                     nation.setStatePassThroughRate(Double.parseDouble(value));
                     break;
                 case MAX_STATES_PER_NATION:
                     nation.setMaxStates(Integer.parseInt(value));;
                     break;
+                case MAX_CITIES_PER_STATE:
+                    // Apply to all states in the nation
+                    int maxCities = Integer.parseInt(value);
+                    for (State state : nation.getAllStates()) {
+                        state.setMaxCities(maxCities);
+                    }
+                    // Store on nation for new states
+                    nation.setDefaultMaxCitiesPerState(maxCities);
+                    StateCraft.LOGGER.info("Policy change: Max cities per state set to {} for nation {}",
+                        maxCities, nation.getName());
+                    break;
+                case MAX_CHUNKS_PER_CITY:
+                    // Apply to all cities in all states
+                    int maxChunks = Integer.parseInt(value);
+                    for (State state : nation.getAllStates()) {
+                        for (City city : state.getAllCities()) {
+                            city.setMaxChunks(maxChunks);
+                        }
+                    }
+                    // Store on nation for new cities
+                    nation.setDefaultMaxChunksPerCity(maxChunks);
+                    StateCraft.LOGGER.info("Policy change: Max chunks per city set to {} for nation {}",
+                        maxChunks, nation.getName());
+                    break;
                 case OPEN_NATION:
                     nation.setOpen(Boolean.parseBoolean(value));
                     break;
                 case OPEN_BORDERS:
-                    // Would need to implement open borders tracking
-                    StateCraft.LOGGER.info("Policy change: Open borders set to {}", value);
+                    nation.setOpenBorders(Boolean.parseBoolean(value));
+                    StateCraft.LOGGER.info("Policy change: Open borders set to {} for nation {}",
+                        value, nation.getName());
                     break;
                 case DECLARE_WAR:
                     // Add to enemies
@@ -313,6 +380,46 @@ public class LegislatureManager {
                         }
                     }
                     break;
+                case BASE_CHUNK_VALUE:
+                    nation.setBaseChunkValue(Double.parseDouble(value));
+                    StateCraft.LOGGER.info("Policy change: Base chunk value set to ${} for nation {}",
+                        value, nation.getName());
+                    break;
+                case CHUNK_CLAIM_FEE:
+                    nation.setChunkClaimFee(Double.parseDouble(value));
+                    StateCraft.LOGGER.info("Policy change: Chunk claim fee set to ${} for nation {}",
+                        value, nation.getName());
+                    break;
+                case NATION_SALES_TAX_RATE:
+                    nation.setSalesTaxRate(Double.parseDouble(value));
+                    StateCraft.LOGGER.info("Policy change: Nation sales tax rate set to {}% for nation {}",
+                        Double.parseDouble(value) * 100, nation.getName());
+                    break;
+                // Constitutional policies (require 2/3 majority, cannot be vetoed)
+                case LEADER_TERM_DURATION:
+                    int termDays = Integer.parseInt(value);
+                    nation.setLeaderTermDays(termDays);
+                    StateCraft.LOGGER.info("Constitutional amendment: Leader term duration set to {} days for nation {}",
+                        termDays, nation.getName());
+                    break;
+                case ELECTION_DURATION:
+                    int electionDays = Integer.parseInt(value);
+                    nation.setElectionDurationDays(electionDays);
+                    StateCraft.LOGGER.info("Constitutional amendment: Election duration set to {} days for nation {}",
+                        electionDays, nation.getName());
+                    break;
+                case MAX_OFFICERS:
+                    int maxOfficers = Integer.parseInt(value);
+                    nation.setMaxOfficers(maxOfficers);
+                    StateCraft.LOGGER.info("Constitutional amendment: Max officers set to {} for nation {}",
+                        maxOfficers, nation.getName());
+                    // Note: If current officers exceed new max, they are NOT automatically removed
+                    // This allows for grandfathering but prevents new appointments
+                    if (nation.getOfficers().size() > maxOfficers) {
+                        StateCraft.LOGGER.warn("Nation {} has {} officers but max is now {}. Excess officers remain until removed.",
+                            nation.getName(), nation.getOfficers().size(), maxOfficers);
+                    }
+                    break;
                 // Custom laws don't need direct application
                 default:
                     StateCraft.LOGGER.info("Policy change (roleplay): {} = {}", policy.getDisplayName(), value);
@@ -350,6 +457,13 @@ public class LegislatureManager {
 
     public void markDirty() {
         this.dirty = true;
+        // Also trigger world save to persist legislature data
+        if (server != null) {
+            ServerLevel overworld = server.getLevel(Level.OVERWORLD);
+            if (overworld != null) {
+                NationSavedData.get(overworld).markForSave();
+            }
+        }
     }
 
     public boolean isDirty() {

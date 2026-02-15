@@ -12,7 +12,7 @@ import net.minecraftforge.network.NetworkEvent;
 import java.util.function.Supplier;
 
 /**
- * Packet sent from client to server to perform a sale at a Trading Hub
+ * Packet sent from client to server to perform a bulk sale at a Trading Hub
  */
 public class TradingHubSellPacket {
     private final BlockPos pos;
@@ -47,15 +47,19 @@ public class TradingHubSellPacket {
                 return;
             }
 
-            // Perform the sale
-            double valueBefore = tradingHub.calculateSellValue();
-            boolean success = tradingHub.sellItems(player);
+            // Count items before sale
+            int itemCount = tradingHub.countSellableItems();
+            if (itemCount == 0) {
+                player.sendSystemMessage(Component.literal("§cNo items to sell!"));
+                return;
+            }
 
-            if (success) {
-                // Get current balance for feedback
-                double newBalance = EconomyManager.getInstance().getBalance(player.getUUID());
+            // Perform the bulk sale
+            double totalValue = tradingHub.sellAllItems(player);
+
+            if (totalValue >= 0) {
                 player.sendSystemMessage(Component.literal(
-                    String.format("§aSold items for $%.2f! New balance: $%.2f", valueBefore, newBalance)));
+                    String.format("§aSold %d items for $%.2f!", itemCount, totalValue)));
             } else {
                 player.sendSystemMessage(Component.literal("§cCould not sell items!"));
             }

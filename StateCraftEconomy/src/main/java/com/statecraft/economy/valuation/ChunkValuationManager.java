@@ -111,13 +111,31 @@ public class ChunkValuationManager {
     }
 
     /**
+     * Mark all cached valuations as dirty (e.g., when legislation changes base values)
+     */
+    public void markAllDirty() {
+        for (ChunkValuation valuation : valuationCache.values()) {
+            valuation.setDirty(true);
+            dirtyChunks.add(ChunkValuation.makeKey(valuation.getChunkX(), valuation.getChunkZ(), valuation.getDimension()));
+        }
+        StateCraftEconomy.LOGGER.info("Marked {} chunk valuations as dirty for recalculation", valuationCache.size());
+    }
+
+    /**
      * Calculate a fresh valuation for a chunk
      */
     private ChunkValuation calculateValuation(int chunkX, int chunkZ, String dimension) {
         ChunkValuation valuation = new ChunkValuation(chunkX, chunkZ, dimension);
 
-        // 1. Base value (from config)
-        valuation.setBaseValue(ValuationConfig.getBaseChunkValue());
+        // 1. Base value - use nation's setting if in a nation, otherwise use config default
+        double baseValue = ValuationConfig.getBaseChunkValue(); // Default from config
+        if (server != null) {
+            double nationBaseValue = StateCraftIntegration.getNationBaseChunkValue(server, chunkX, chunkZ, dimension);
+            if (nationBaseValue > 0) {
+                baseValue = nationBaseValue; // Use nation's legislated base value
+            }
+        }
+        valuation.setBaseValue(baseValue);
 
         // 2. Location multiplier
         double locationMult = calculateLocationMultiplier(chunkX, chunkZ);

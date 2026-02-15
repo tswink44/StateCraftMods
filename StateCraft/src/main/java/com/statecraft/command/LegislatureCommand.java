@@ -434,9 +434,6 @@ public class LegislatureCommand {
         for (var entry : bill.getPolicyChanges().entrySet()) {
             try {
                 switch (entry.getKey()) {
-                    case NATION_TAX_RATE -> {
-                        // Would need economy integration
-                    }
                     case STATE_PASS_THROUGH_RATE -> {
                         double rate = Double.parseDouble(entry.getValue());
                         nation.setStatePassThroughRate(rate);

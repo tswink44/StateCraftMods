@@ -25,12 +25,21 @@ public class Nation {
     // Nation settings
     private int maxStates;
     private int maxChunksPerCity;
+    private int defaultMaxCitiesPerState; // Default max cities for new states
     private String description;
     private String tag; // Short tag/prefix for chat
     private boolean open; // Can players join without invite?
+    private boolean openBorders; // Can foreign players interact with blocks?
     private String flagUrl; // URL to flag image
     private double statePassThroughRate; // Rate states must give to nation (e.g., 0.20 = 20%)
     private double baseChunkValue; // Base valuation for chunks in the nation (default $100)
+    private double chunkClaimFee; // Fee cities pay to nation when claiming chunks
+    private double salesTaxRate; // Nation's sales tax rate (e.g., 0.20 = 20%) - set via legislature
+
+    // Constitutional settings (can only be changed via constitutional amendment)
+    private int leaderTermDays = 7;       // Default: 7 days term for leader
+    private int electionDurationDays = 1; // Default: 1 day election duration
+    private int maxOfficers = 3;          // Default: max 3 officers (can be 0-3)
 
     // Treasury (for future economy integration)
     private long balance;
@@ -47,12 +56,16 @@ public class Nation {
         this.enemies = new HashSet<>();
         this.maxStates = 5; // Default max states
         this.maxChunksPerCity = 50; // Default max chunks per city
+        this.defaultMaxCitiesPerState = 10; // Default max cities per state
         this.description = "";
         this.tag = "";
         this.open = false;
+        this.openBorders = false; // Default: closed borders
         this.flagUrl = "";
         this.statePassThroughRate = 0.20; // Default 20%
         this.baseChunkValue = 100.0; // Default $100
+        this.chunkClaimFee = 0.0; // Default: no fee
+        this.salesTaxRate = 0.0; // Default: no nation sales tax (set via legislature)
         this.balance = 0;
     }
 
@@ -142,6 +155,21 @@ public class Nation {
         this.maxChunksPerCity = maxChunksPerCity;
     }
 
+    public int getDefaultMaxCitiesPerState() {
+        return defaultMaxCitiesPerState;
+    }
+
+    public void setDefaultMaxCitiesPerState(int defaultMaxCitiesPerState) {
+        this.defaultMaxCitiesPerState = Math.max(1, defaultMaxCitiesPerState);
+    }
+
+    /**
+     * Alias for setMaxChunksPerCity - used by legislature policy
+     */
+    public void setDefaultMaxChunksPerCity(int maxChunks) {
+        setMaxChunksPerCity(maxChunks);
+    }
+
     public String getDescription() {
         return description;
     }
@@ -164,6 +192,50 @@ public class Nation {
 
     public void setOpen(boolean open) {
         this.open = open;
+    }
+
+    public boolean hasOpenBorders() {
+        return openBorders;
+    }
+
+    public void setOpenBorders(boolean openBorders) {
+        this.openBorders = openBorders;
+    }
+
+    /**
+     * Check if a player from another nation can interact with blocks in this nation.
+     * Returns true if:
+     * - Player is a member of this nation
+     * - Open borders is enabled AND the player's nation is not at war with this nation
+     * - Player is from an allied nation
+     *
+     * @param playerId The player to check
+     * @param playerNation The nation the player belongs to (can be null)
+     * @return true if the player can interact
+     */
+    public boolean canForeignerInteract(UUID playerId, Nation playerNation) {
+        // Citizens can always interact
+        if (isMember(playerId)) {
+            return true;
+        }
+
+        // If player has no nation, check open borders only
+        if (playerNation == null) {
+            return openBorders;
+        }
+
+        // If at war with player's nation, they cannot interact regardless of open borders
+        if (isEnemy(playerNation.getId())) {
+            return false;
+        }
+
+        // Allies can always interact
+        if (isAlly(playerNation.getId())) {
+            return true;
+        }
+
+        // Otherwise, check open borders policy
+        return openBorders;
     }
 
     public String getFlagUrl() {
@@ -190,6 +262,82 @@ public class Nation {
     public void setBaseChunkValue(double baseChunkValue) {
         // Clamp to reasonable range ($1 to $100,000)
         this.baseChunkValue = Math.max(1, Math.min(100000, baseChunkValue));
+    }
+
+    public double getChunkClaimFee() {
+        return chunkClaimFee;
+    }
+
+    public void setChunkClaimFee(double chunkClaimFee) {
+        // Clamp to reasonable range ($0 to $1,000,000)
+        this.chunkClaimFee = Math.max(0, Math.min(1000000, chunkClaimFee));
+    }
+
+    public double getSalesTaxRate() {
+        return salesTaxRate;
+    }
+
+    public void setSalesTaxRate(double salesTaxRate) {
+        // Clamp between 0 and 0.5 (0% to 50%)
+        this.salesTaxRate = Math.max(0, Math.min(0.5, salesTaxRate));
+    }
+
+    // Constitutional settings getters and setters
+
+    /**
+     * Get the leader term duration in days
+     * Default: 7 days
+     */
+    public int getLeaderTermDays() {
+        return leaderTermDays;
+    }
+
+    /**
+     * Set the leader term duration in days (1-365)
+     * Can only be changed via constitutional amendment
+     */
+    public void setLeaderTermDays(int days) {
+        this.leaderTermDays = Math.max(1, Math.min(365, days));
+    }
+
+    /**
+     * Get the election duration in days
+     * Default: 1 day
+     */
+    public int getElectionDurationDays() {
+        return electionDurationDays;
+    }
+
+    /**
+     * Set the election duration in days (1-30)
+     * Can only be changed via constitutional amendment
+     */
+    public void setElectionDurationDays(int days) {
+        this.electionDurationDays = Math.max(1, Math.min(30, days));
+    }
+
+    /**
+     * Get the maximum number of officers allowed
+     * Default: 3 (can be 0-3)
+     */
+    public int getMaxOfficers() {
+        return maxOfficers;
+    }
+
+    /**
+     * Set the maximum number of officers (0-3)
+     * Can only be changed via constitutional amendment
+     * Note: If current officers exceed new max, excess officers are NOT automatically removed
+     */
+    public void setMaxOfficers(int max) {
+        this.maxOfficers = Math.max(0, Math.min(3, max));
+    }
+
+    /**
+     * Check if another officer can be added
+     */
+    public boolean canAddOfficer() {
+        return officers.size() < maxOfficers;
     }
 
     public long getBalance() {
@@ -254,6 +402,8 @@ public class Nation {
             return null; // Max states reached
         }
         State state = new State(UUID.randomUUID(), stateName, this.id, governorId);
+        // Apply nation's default limits to new state
+        state.setMaxCities(defaultMaxCitiesPerState);
         states.put(state.getId(), state);
         return state;
     }
@@ -357,13 +507,22 @@ public class Nation {
         tag.putUUID("leaderId", leaderId);
         tag.putInt("maxStates", maxStates);
         tag.putInt("maxChunksPerCity", maxChunksPerCity);
+        tag.putInt("defaultMaxCitiesPerState", defaultMaxCitiesPerState);
         tag.putString("description", description);
         tag.putString("tag", this.tag);
         tag.putBoolean("open", open);
+        tag.putBoolean("openBorders", openBorders);
         tag.putString("flagUrl", flagUrl);
         tag.putLong("balance", balance);
         tag.putDouble("statePassThroughRate", statePassThroughRate);
         tag.putDouble("baseChunkValue", baseChunkValue);
+        tag.putDouble("chunkClaimFee", chunkClaimFee);
+        tag.putDouble("salesTaxRate", salesTaxRate);
+
+        // Constitutional settings
+        tag.putInt("leaderTermDays", leaderTermDays);
+        tag.putInt("electionDurationDays", electionDurationDays);
+        tag.putInt("maxOfficers", maxOfficers);
 
         // Save admins
         ListTag adminsList = new ListTag();
@@ -428,13 +587,22 @@ public class Nation {
         Nation nation = new Nation(id, name, leaderId);
         nation.maxStates = tag.getInt("maxStates");
         nation.maxChunksPerCity = tag.getInt("maxChunksPerCity");
+        nation.defaultMaxCitiesPerState = tag.contains("defaultMaxCitiesPerState") ? tag.getInt("defaultMaxCitiesPerState") : 10;
         nation.description = tag.getString("description");
         nation.tag = tag.getString("tag");
         nation.open = tag.getBoolean("open");
+        nation.openBorders = tag.contains("openBorders") ? tag.getBoolean("openBorders") : false;
         nation.flagUrl = tag.getString("flagUrl");
         nation.balance = tag.getLong("balance");
         nation.statePassThroughRate = tag.contains("statePassThroughRate") ? tag.getDouble("statePassThroughRate") : 0.20;
         nation.baseChunkValue = tag.contains("baseChunkValue") ? tag.getDouble("baseChunkValue") : 100.0;
+        nation.chunkClaimFee = tag.contains("chunkClaimFee") ? tag.getDouble("chunkClaimFee") : 0.0;
+        nation.salesTaxRate = tag.contains("salesTaxRate") ? tag.getDouble("salesTaxRate") : 0.0;
+
+        // Constitutional settings (with defaults for backwards compatibility)
+        nation.leaderTermDays = tag.contains("leaderTermDays") ? tag.getInt("leaderTermDays") : 7;
+        nation.electionDurationDays = tag.contains("electionDurationDays") ? tag.getInt("electionDurationDays") : 1;
+        nation.maxOfficers = tag.contains("maxOfficers") ? tag.getInt("maxOfficers") : 3;
 
         // Load admins
         ListTag adminsList = tag.getList("admins", Tag.TAG_COMPOUND);

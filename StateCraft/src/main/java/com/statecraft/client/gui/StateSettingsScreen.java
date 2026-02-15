@@ -21,18 +21,20 @@ public class StateSettingsScreen extends StateCraftScreen {
     private EditBox descriptionField;
     private EditBox flagUrlField;
     private EditBox cityPassThroughField; // Rate cities must give to state
+    private EditBox salesTaxField; // State's sales tax rate
     private Button saveButton;
 
     private boolean hasChanges = false;
     private String currentFlagUrl = "";
     private String currentDescription = "";
     private double currentCityPassThrough = 20.0; // Default 20% from cities
+    private double currentSalesTax = 0.0; // Default 0% state sales tax
 
     public StateSettingsScreen(String nationName, String stateName) {
         super(Component.literal("State Settings"));
         this.nationName = nationName;
         this.stateName = stateName;
-        this.guiWidth = 280; this.guiHeight = 220;
+        this.guiWidth = 280; this.guiHeight = 245;
     }
 
     @Override
@@ -72,6 +74,13 @@ public class StateSettingsScreen extends StateCraftScreen {
         this.cityPassThroughField.setResponder(s -> hasChanges = true);
         this.addRenderableWidget(this.cityPassThroughField);
 
+        // Sales tax rate field
+        this.salesTaxField = new EditBox(this.font, fieldX, startY + rowSpacing * 4, 60, 16, Component.literal("Sales Tax"));
+        this.salesTaxField.setMaxLength(5);
+        this.salesTaxField.setValue(String.format("%.1f", currentSalesTax));
+        this.salesTaxField.setResponder(s -> hasChanges = true);
+        this.addRenderableWidget(this.salesTaxField);
+
 
         // Save button
         this.saveButton = this.addRenderableWidget(createButton(
@@ -103,6 +112,8 @@ public class StateSettingsScreen extends StateCraftScreen {
         graphics.drawString(this.font, "§7Flag:", labelX, startY + rowSpacing * 2 + 4, COLOR_TEXT);
         graphics.drawString(this.font, "§7From Cities:", labelX, startY + rowSpacing * 3 + 4, COLOR_TEXT);
         graphics.drawString(this.font, "§8%", guiLeft + 165, startY + rowSpacing * 3 + 4, 0xFF888888);
+        graphics.drawString(this.font, "§7Sales Tax:", labelX, startY + rowSpacing * 4 + 4, COLOR_TEXT);
+        graphics.drawString(this.font, "§8%", guiLeft + 165, startY + rowSpacing * 4 + 4, 0xFF888888);
 
         // Unsaved changes indicator
         if (hasChanges) {
@@ -118,9 +129,13 @@ public class StateSettingsScreen extends StateCraftScreen {
         double cityPassThrough = parseDouble(cityPassThroughField.getValue(), currentCityPassThrough);
         cityPassThrough = Math.max(0, Math.min(100, cityPassThrough));
 
-        // Send update packet - taxRate field used for city pass-through (maxChunks now server config only)
+        // Parse sales tax rate
+        double salesTax = parseDouble(salesTaxField.getValue(), currentSalesTax);
+        salesTax = Math.max(0, Math.min(50, salesTax)); // Max 50%
+
+        // Send update packet - taxRate field used for city pass-through, salesTax in second packet
         NetworkHandler.sendToServer(new UpdateEntitySettingsPacket(
-            UpdateEntitySettingsPacket.EntityType.STATE, stateName, newName, flagUrl, false, cityPassThrough, 0));
+            UpdateEntitySettingsPacket.EntityType.STATE, stateName, newName, flagUrl, false, cityPassThrough, salesTax));
 
         hasChanges = false;
         String finalName = newName.isEmpty() ? stateName : newName;
@@ -154,13 +169,18 @@ public class StateSettingsScreen extends StateCraftScreen {
 
     // Called to populate current settings
     public void setCurrentSettings(String description, String flagUrl) {
-        setCurrentSettings(description, flagUrl, 20.0);
+        setCurrentSettings(description, flagUrl, 20.0, 0.0);
     }
 
     public void setCurrentSettings(String description, String flagUrl, double cityPassThrough) {
+        setCurrentSettings(description, flagUrl, cityPassThrough, 0.0);
+    }
+
+    public void setCurrentSettings(String description, String flagUrl, double cityPassThrough, double salesTax) {
         this.currentDescription = description != null ? description : "";
         this.currentFlagUrl = flagUrl != null ? flagUrl : "";
         this.currentCityPassThrough = cityPassThrough;
+        this.currentSalesTax = salesTax;
 
         if (this.descriptionField != null) {
             this.descriptionField.setValue(currentDescription);
@@ -171,11 +191,14 @@ public class StateSettingsScreen extends StateCraftScreen {
         if (this.cityPassThroughField != null) {
             this.cityPassThroughField.setValue(String.format("%.1f", cityPassThrough));
         }
+        if (this.salesTaxField != null) {
+            this.salesTaxField.setValue(String.format("%.1f", salesTax));
+        }
         this.hasChanges = false;
     }
 
-    // Keep overload for backward compatibility
-    public void setCurrentSettings(String description, String flagUrl, double cityPassThrough, int maxChunks) {
-        setCurrentSettings(description, flagUrl, cityPassThrough);
+    // Keep overload for backward compatibility with maxChunks parameter
+    public void setCurrentSettingsLegacy(String description, String flagUrl, double cityPassThrough, int maxChunks) {
+        setCurrentSettings(description, flagUrl, cityPassThrough, 0.0);
     }
 }

@@ -7,7 +7,9 @@ import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
@@ -28,8 +30,10 @@ import javax.annotation.Nullable;
 /**
  * Trading Hub Block - Players interact with this to sell items for currency
  * Items are inserted into the trading hub and sold based on their configured values.
- *
- * Future: Will integrate with StateCraft for nation taxation
+ * Features:
+ * - Chest-like inventory for bulk selling
+ * - Owner-locked settings
+ * - Configurable profit distribution
  */
 public class TradingHubBlock extends Block implements EntityBlock {
     public static final DirectionProperty FACING = HorizontalDirectionalBlock.FACING;
@@ -56,6 +60,19 @@ public class TradingHubBlock extends Block implements EntityBlock {
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
         return this.defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite());
+    }
+
+    @Override
+    public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
+        super.setPlacedBy(level, pos, state, placer, stack);
+
+        // Set owner when placed
+        if (!level.isClientSide && placer instanceof Player player) {
+            BlockEntity be = level.getBlockEntity(pos);
+            if (be instanceof TradingHubBlockEntity tradingHub) {
+                tradingHub.setOwner(player);
+            }
+        }
     }
 
     @SuppressWarnings("deprecation")

@@ -91,11 +91,34 @@ public class Legislature {
     }
 
     /**
+     * Generate a constitutional amendment number
+     */
+    public String generateAmendmentNumber() {
+        int year = java.time.LocalDate.now().getYear();
+        if (year != currentYear) {
+            currentYear = year;
+            nextBillNumber = 1;
+        }
+        return String.format("AMEND-%d-%03d", year, nextBillNumber++);
+    }
+
+    /**
      * Create a new draft bill
      */
     public Bill createDraft(UUID authorId, String authorName, String title, String description) {
         String billNumber = generateBillNumber();
         Bill bill = new Bill(nationId, billNumber, title, description, authorId, authorName);
+        draftBills.put(bill.getBillId(), bill);
+        return bill;
+    }
+
+    /**
+     * Create a new draft constitutional amendment
+     * Constitutional amendments require 2/3 majority to pass and cannot be vetoed
+     */
+    public Bill createConstitutionalAmendment(UUID authorId, String authorName, String title, String description) {
+        String billNumber = generateAmendmentNumber();
+        Bill bill = new Bill(nationId, billNumber, title, description, authorId, authorName, Bill.BillType.CONSTITUTIONAL);
         draftBills.put(bill.getBillId(), bill);
         return bill;
     }

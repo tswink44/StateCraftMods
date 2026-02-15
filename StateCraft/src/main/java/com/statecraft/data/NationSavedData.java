@@ -2,6 +2,7 @@ package com.statecraft.data;
 
 import com.statecraft.StateCraft;
 import com.statecraft.core.*;
+import com.statecraft.legislature.LegislatureManager;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -56,6 +57,12 @@ public class NationSavedData extends SavedData {
         // Load election data
         if (tag.contains("elections")) {
             ElectionManager.getInstance().load(tag.getCompound("elections"));
+        }
+
+        // Load legislature data
+        if (tag.contains("legislature")) {
+            LegislatureManager.getInstance().load(tag.getCompound("legislature"));
+            StateCraft.LOGGER.info("Loaded legislature data");
         }
 
         StateCraft.LOGGER.info("Loaded {} nations with {} total claimed chunks",
@@ -116,9 +123,13 @@ public class NationSavedData extends SavedData {
         // Save election data
         tag.put("elections", ElectionManager.getInstance().save());
 
+        // Save legislature data
+        tag.put("legislature", LegislatureManager.getInstance().save());
+
         manager.clearDirty();
         InvitationManager.getInstance().clearDirty();
         ElectionManager.getInstance().clearDirty();
+        LegislatureManager.getInstance().clearDirty();
 
         StateCraft.LOGGER.debug("Saved {} nations", manager.getTotalNationCount());
 

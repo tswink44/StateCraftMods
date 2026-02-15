@@ -106,10 +106,12 @@ public class ElectionManager {
         Election election = new Election(nationId, nation.getLeaderId());
 
         long now = System.currentTimeMillis();
-        int durationHours = StateCraftConfig.ELECTION_DURATION_HOURS.get();
+        // Use nation's constitutional election duration (in days), fall back to config hours if not set
+        int durationDays = nation.getElectionDurationDays();
+        long durationMs = durationDays * 24L * 60L * 60L * 1000L;
 
         election.setStartTime(now);
-        election.setEndTime(now + (durationHours * 60L * 60L * 1000L));
+        election.setEndTime(now + durationMs);
         election.setStatus(Election.Status.ACTIVE);
 
         // Auto-register incumbent as candidate
@@ -123,7 +125,7 @@ public class ElectionManager {
         notifyNationMembers(nation, server,
             Component.literal("§6[Election] §eVoting has begun for " + nation.getName() + " leadership! Use §f/sc election§e to participate."));
 
-        StateCraft.LOGGER.info("Election started for nation '{}' - ends in {} hours", nation.getName(), durationHours);
+        StateCraft.LOGGER.info("Election started for nation '{}' - ends in {} day(s)", nation.getName(), durationDays);
 
         return election;
     }
@@ -305,15 +307,31 @@ public class ElectionManager {
 
     /**
      * Schedule the next automatic election for a nation
+     * Uses the nation's constitutional leader term duration
      */
     public void scheduleNextElection(UUID nationId) {
-        int intervalDays = StateCraftConfig.ELECTION_INTERVAL_DAYS.get();
-        if (intervalDays <= 0) {
+        // Check if elections are enabled globally
+        if (!StateCraftConfig.ENABLE_NATION_ELECTIONS.get()) {
             nextElectionTimes.remove(nationId);
             return;
         }
 
-        long nextTime = System.currentTimeMillis() + (intervalDays * 24L * 60L * 60L * 1000L);
+        // Get the nation to read its constitutional settings
+        Nation nation = ChunkClaimManager.getInstance().getNation(nationId);
+        int termDays;
+        if (nation != null) {
+            termDays = nation.getLeaderTermDays();
+        } else {
+            // Fallback to config if nation not found
+            termDays = StateCraftConfig.ELECTION_INTERVAL_DAYS.get();
+        }
+
+        if (termDays <= 0) {
+            nextElectionTimes.remove(nationId);
+            return;
+        }
+
+        long nextTime = System.currentTimeMillis() + (termDays * 24L * 60L * 60L * 1000L);
         nextElectionTimes.put(nationId, nextTime);
         markDirty();
     }

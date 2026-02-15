@@ -1,59 +1,26 @@
 
-Diplomacy between nations
-Peace treaties
 
-Summary of Legislature Policies
-🟢 IMPLEMENTED (Have In-Game Effects)
-Policy
-Category
-Range
-Effect
-STATE_PASS_THROUGH_RATE
-Taxation
-0-100%
-Sets the percentage of state revenue that must be passed to the nation treasury. Stored on the Nation and used in economy calculations.
-CHUNK_TAX_RATE
-Taxation
-0-100%
-Sets the base tax rate applied to chunk claims in the nation. Stored on the Nation but not yet used in any economy calculations (field exists but no consumers).
-MAX_STATES_PER_NATION
-Territory
-1-100
-Limits how many states a nation can create. Displayed in nation info but enforcement not verified.
-MAX_CHUNKS_PER_CITY
-Territory
-1-10000
-Limits how many chunks each city can claim. Field exists but enforcement not verified.
-OPEN_NATION
-Membership
-true/false
-Controls whether players can join the nation without an invitation. Fully enforced - the /nation join command and GUI both check this.
- 
 🟡 STORED BUT NOT APPLIED
 Policy
 Category
 Range
 Notes
-NATION_TAX_RATE
-Taxation
-0-50%
-Placeholder - comment says "Would need economy integration". No setter called.
-IMPORT_TARIFF
+IMPORT_TARIFF  - Need marketplace to implement
 Taxation
 0-100%
 Not implemented - no field on Nation, no handler in applyPolicyChanges.
-MAX_CITIES_PER_STATE
+MAX_CITIES_PER_STATE - Applied, pending validation
 Territory
 1-100
 Not implemented - no handler in applyPolicyChanges.
-OPEN_BORDERS
+OPEN_BORDERS - implemented pending validation
 Territory
 true/false
 Not implemented - no field on Nation, no handler. Would allow foreign players to interact.
-CHUNK_CLAIM_FEE
+CHUNK_CLAIM_TAX
 Economy
 $0-1M
-Not implemented - would charge cities to claim chunks.
+Not implemented - would levy a tax on cities for each chunk claimed
 MINIMUM_WAGE
 Economy
 $0-10K
@@ -63,9 +30,9 @@ Not implemented - roleplay only currently.
 Policy
 Category
 Notes
-CITIZENSHIP_REQUIREMENTS
+CITIZENSHIP_FEE
 Membership
-Text field for roleplay - no enforcement
+Set fee for joining nation
 DECLARE_WAR
 Diplomacy
 Targets a nation - no handler implemented
@@ -78,14 +45,27 @@ Targets a nation - no handler implemented
 BREAK_ALLIANCE
 Diplomacy
 Targets a nation - no handler implemented
-CUSTOM_LAW
+CUSTOM_LAW - need to make text box bigger for this one specifically
 Custom
 Free text for roleplay laws
 
 
-Candidate registration doesn't detect money in bank or inventory
-Remove past election history from election GUIs, add button to view history to clear space
 
-Wilderness protection doesn't work if part of a nation
+Diplomacy between nations
+Peace treaties
 
-Transfers always deduct from personal account even when selecting gov account
+Change my mind, sales taxes can be independently implemented on each level. For now, city/state set in settings screen. Nation set via legislature.
+
+Government contracting mechanics
+
+Seems bill was not passed automatically despite >2/3rds votes
+
+Remove State pass through setting from nation settings
+
+Bill history does not persist through server restarts. 
+
+New category of bills: Constitutional Amendments. Require 2/3rds vote to pass, can not be veto'd
+
+Term duration for Leader: default 7 days
+Election Duration: default 1 day
+Max officers (can not exceed 3, but can be 0-2)

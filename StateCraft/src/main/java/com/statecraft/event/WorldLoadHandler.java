@@ -4,6 +4,7 @@ import com.statecraft.StateCraft;
 import com.statecraft.core.ChunkClaimManager;
 import com.statecraft.core.InvitationManager;
 import com.statecraft.data.NationSavedData;
+import com.statecraft.legislature.LegislatureManager;
 import com.statecraft.mail.MailManager;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
@@ -51,7 +52,9 @@ public class WorldLoadHandler {
         // Save mail data
         MailManager.getInstance().save();
 
-        if (ChunkClaimManager.getInstance().isDirty() || InvitationManager.getInstance().isDirty()) {
+        if (ChunkClaimManager.getInstance().isDirty() ||
+            InvitationManager.getInstance().isDirty() ||
+            LegislatureManager.getInstance().isDirty()) {
             NationSavedData data = NationSavedData.get(level);
             data.markForSave();
             StateCraft.LOGGER.debug("StateCraft data marked for save");
@@ -67,6 +70,7 @@ public class WorldLoadHandler {
 
         ChunkClaimManager.resetInstance();
         InvitationManager.resetInstance();
+        LegislatureManager.resetInstance();
     }
 }
 

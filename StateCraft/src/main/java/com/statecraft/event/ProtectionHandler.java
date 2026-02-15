@@ -208,11 +208,42 @@ public class ProtectionHandler {
             return false;
         }
 
-        // Get player's role in this chunk
-        PermissionLevel role = manager.getPlayerRoleInChunk(player.getUUID(), chunk);
+        // Get the nation that owns this chunk through city -> state -> nation hierarchy
+        City city = manager.getCity(chunk.getCityId());
+        if (city == null) {
+            // Chunk's city doesn't exist anymore - allow interaction
+            return true;
+        }
 
-        // Check permission based on role
-        return chunk.hasPermission(player.getUUID(), permission, role);
+        State state = manager.getState(city.getStateId());
+        if (state == null) {
+            return true;
+        }
+
+        Nation chunkNation = manager.getNation(state.getNationId());
+        if (chunkNation == null) {
+            // Chunk's nation doesn't exist anymore - allow interaction
+            return true;
+        }
+
+        // Check if player is a member of the nation that owns this chunk
+        if (chunkNation.isMember(player.getUUID())) {
+            // Player is a citizen - check their role-based permissions
+            PermissionLevel role = manager.getPlayerRoleInChunk(player.getUUID(), chunk);
+            return chunk.hasPermission(player.getUUID(), permission, role);
+        }
+
+        // Player is a foreigner - check open borders policy
+        Nation playerNation = manager.getPlayerNation(player.getUUID());
+
+        if (!chunkNation.canForeignerInteract(player.getUUID(), playerNation)) {
+            // Foreigners not allowed due to closed borders or war
+            return false;
+        }
+
+        // Open borders allows foreigners - but still respect chunk-specific permissions
+        // Foreigners get OUTSIDER level permission check
+        return chunk.hasPermission(player.getUUID(), permission, PermissionLevel.OUTSIDER);
     }
 
     /**
@@ -257,11 +288,45 @@ public class ProtectionHandler {
                 true
             );
         } else {
-            // Claimed chunk - no permission
-            player.displayClientMessage(
-                Component.literal("§cYou don't have permission to " + action + " here!"),
-                true
-            );
+            // Claimed chunk - check why denied
+            City city = manager.getCity(chunk.getCityId());
+            Nation chunkNation = null;
+            if (city != null) {
+                State state = manager.getState(city.getStateId());
+                if (state != null) {
+                    chunkNation = manager.getNation(state.getNationId());
+                }
+            }
+            Nation playerNation = manager.getPlayerNation(player.getUUID());
+
+            if (chunkNation != null && !chunkNation.isMember(player.getUUID())) {
+                // Player is a foreigner
+                if (playerNation != null && chunkNation.isEnemy(playerNation.getId())) {
+                    // At war
+                    player.displayClientMessage(
+                        Component.literal("§cYour nation is at war with " + chunkNation.getName() + "! Cannot interact."),
+                        true
+                    );
+                } else if (!chunkNation.hasOpenBorders()) {
+                    // Closed borders
+                    player.displayClientMessage(
+                        Component.literal("§c" + chunkNation.getName() + " has closed borders. Cannot " + action + "."),
+                        true
+                    );
+                } else {
+                    // Open borders but no permission for this specific action
+                    player.displayClientMessage(
+                        Component.literal("§cYou don't have permission to " + action + " here!"),
+                        true
+                    );
+                }
+            } else {
+                // Citizen but no permission
+                player.displayClientMessage(
+                    Component.literal("§cYou don't have permission to " + action + " here!"),
+                    true
+                );
+            }
         }
     }
 }

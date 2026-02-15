@@ -2,39 +2,44 @@ package com.statecraft.economy.client.screen;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.statecraft.economy.StateCraftEconomy;
-import com.statecraft.economy.config.ItemValueConfig;
+import com.statecraft.economy.block.entity.TradingHubBlockEntity;
 import com.statecraft.economy.gui.TradingHubMenu;
 import com.statecraft.economy.network.NetworkHandler;
 import com.statecraft.economy.network.packets.TradingHubSellPacket;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.item.ItemStack;
 
 /**
- * Trading Hub GUI Screen
- * Allows players to sell items for currency
+ * Trading Hub GUI Screen - Chest-like interface for bulk selling items
+ * Features:
+ * - 27 slot inventory (like a single chest)
+ * - Settings button (opens settings screen)
+ * - Sell All button to sell entire inventory
+ * - Real-time value display
  */
 public class TradingHubScreen extends AbstractContainerScreen<TradingHubMenu> {
-    private static final ResourceLocation TEXTURE =
-        new ResourceLocation(StateCraftEconomy.MOD_ID, "textures/gui/trading_hub.png");
-
-    // Using generic container texture as fallback
-    private static final ResourceLocation FALLBACK_TEXTURE =
+    // Use generic chest texture as base
+    private static final ResourceLocation CONTAINER_BACKGROUND =
         new ResourceLocation("minecraft", "textures/gui/container/generic_54.png");
 
     private Button sellButton;
+    private Button settingsButton;
     private String statusMessage = "";
     private int statusMessageTicks = 0;
     private boolean statusSuccess = false;
 
     public TradingHubScreen(TradingHubMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
+        // Same dimensions as a single chest (3 rows)
         this.imageWidth = 176;
         this.imageHeight = 166;
+        // Adjust label positions
+        this.inventoryLabelY = this.imageHeight - 94;
     }
 
     @Override
@@ -43,24 +48,31 @@ public class TradingHubScreen extends AbstractContainerScreen<TradingHubMenu> {
         int x = (width - imageWidth) / 2;
         int y = (height - imageHeight) / 2;
 
-        // Sell button
+        // Sell All button (bottom right of trading hub inventory)
         sellButton = this.addRenderableWidget(Button.builder(
-            Component.literal("Sell"),
-            btn -> performSell()
-        ).bounds(x + 110, y + 32, 50, 20).build());
+            Component.literal("Sell All"),
+            btn -> performSellAll()
+        ).bounds(x + imageWidth - 58, y + 4, 50, 12).build());
+
+        // Settings button (gear icon next to sell button) - only show if can modify
+        if (menu.canModifySettings()) {
+            settingsButton = this.addRenderableWidget(Button.builder(
+                Component.literal("⚙"),
+                btn -> openSettings()
+            ).bounds(x + imageWidth - 72, y + 4, 14, 12).build());
+        }
 
         updateSellButton();
     }
 
     private void updateSellButton() {
-        ItemStack sellStack = menu.getSlot(0).getItem();
-        boolean canSell = !sellStack.isEmpty() && ItemValueConfig.canSell(sellStack);
-        sellButton.active = canSell;
+        int itemCount = menu.getSellableItemCount();
+        sellButton.active = itemCount > 0;
     }
 
-    private void performSell() {
-        ItemStack sellStack = menu.getSlot(0).getItem();
-        if (sellStack.isEmpty() || !ItemValueConfig.canSell(sellStack)) {
+    private void performSellAll() {
+        int itemCount = menu.getSellableItemCount();
+        if (itemCount == 0) {
             setStatusMessage("Nothing to sell!", false);
             return;
         }
@@ -70,7 +82,19 @@ public class TradingHubScreen extends AbstractContainerScreen<TradingHubMenu> {
         // Send sell packet to server
         NetworkHandler.sendToServer(new TradingHubSellPacket(menu.getBlockEntity().getBlockPos()));
 
-        setStatusMessage(String.format("Sold for $%.2f!", value), true);
+        setStatusMessage(String.format("Sold %d items for $%.2f!", itemCount, value), true);
+    }
+
+    private void openSettings() {
+        // Open the settings screen
+        Minecraft.getInstance().setScreen(new TradingHubSettingsScreen(this, menu.getBlockEntity()));
+    }
+
+    /**
+     * Return to main trading hub screen from settings
+     */
+    public void returnFromSettings() {
+        Minecraft.getInstance().setScreen(this);
     }
 
     private void setStatusMessage(String message, boolean success) {
@@ -95,84 +119,55 @@ public class TradingHubScreen extends AbstractContainerScreen<TradingHubMenu> {
         int x = (width - imageWidth) / 2;
         int y = (height - imageHeight) / 2;
 
-        // Draw background - use a dark rectangle since we may not have custom texture yet
-        graphics.fill(x, y, x + imageWidth, y + imageHeight, 0xFFC6C6C6);
-        graphics.fill(x + 1, y + 1, x + imageWidth - 1, y + imageHeight - 1, 0xFF8B8B8B);
+        // Draw chest-like background (modified for 3 rows)
+        // Top part (title area)
+        graphics.blit(CONTAINER_BACKGROUND, x, y, 0, 0, imageWidth, 17);
 
-        // Draw title area
-        graphics.fill(x + 3, y + 3, x + imageWidth - 3, y + 16, 0xFF3F3F3F);
+        // Container slots (3 rows)
+        graphics.blit(CONTAINER_BACKGROUND, x, y + 17, 0, 17, imageWidth, 54);
 
-        // Draw sell slot area (highlighted)
-        int slotX = x + 79;
-        int slotY = y + 34;
-        graphics.fill(slotX - 1, slotY - 1, slotX + 18, slotY + 18, 0xFF373737);
-        graphics.fill(slotX, slotY, slotX + 16, slotY + 16, 0xFF8B8B8B);
+        // Gap between container and player inventory
+        graphics.fill(x, y + 71, x + imageWidth, y + 83, 0xFFC6C6C6);
 
-        // Draw info area
-        graphics.fill(x + 7, y + 55, x + 169, y + 78, 0xFF4A4A4A);
+        // Player inventory section
+        graphics.blit(CONTAINER_BACKGROUND, x, y + 83, 0, 126, imageWidth, 96);
 
-        // Draw player inventory area
-        graphics.fill(x + 7, y + 83, x + 169, y + 141, 0xFF8B8B8B);
-        graphics.fill(x + 7, y + 141, x + 169, y + 163, 0xFF8B8B8B);
-
-        // Draw inventory slot backgrounds
-        for (int row = 0; row < 3; ++row) {
-            for (int col = 0; col < 9; ++col) {
-                int sx = x + 8 + col * 18;
-                int sy = y + 84 + row * 18;
-                graphics.fill(sx - 1, sy - 1, sx + 17, sy + 17, 0xFF373737);
-            }
-        }
-        // Hotbar
-        for (int col = 0; col < 9; ++col) {
-            int sx = x + 8 + col * 18;
-            int sy = y + 142;
-            graphics.fill(sx - 1, sy - 1, sx + 17, sy + 17, 0xFF373737);
-        }
+        // Draw info bar background (between trading hub slots and player inventory)
+        graphics.fill(x + 7, y + 72, x + 169, y + 82, 0xFF4A4A4A);
     }
 
     @Override
     protected void renderLabels(GuiGraphics graphics, int mouseX, int mouseY) {
         // Title
-        graphics.drawString(this.font, "Trading Hub", 8, 6, 0xFFFFFF, false);
+        TradingHubBlockEntity be = menu.getBlockEntity();
+        String ownerText = be.getOwnerName().isEmpty() ? "" : " (" + be.getOwnerName() + ")";
+        graphics.drawString(this.font, "Trading Hub" + ownerText, 8, 6, 0x404040, false);
 
-        // Item info
-        ItemStack sellStack = menu.getSlot(0).getItem();
-        if (!sellStack.isEmpty()) {
-            double perItem = ItemValueConfig.getItemValue(sellStack);
-            double total = menu.getCurrentSellValue();
-            double tax = menu.getCurrentTaxAmount();
+        // Value summary in info bar
+        int itemCount = menu.getSellableItemCount();
+        double totalValue = menu.getCurrentSellValue();
+        double taxAmount = menu.getCurrentTaxAmount();
 
-            if (perItem > 0) {
-                // Per item value
-                graphics.drawString(this.font,
-                    String.format("Per item: $%.2f", perItem),
-                    10, 58, 0xAAAAAA, false);
-
-                // Total value (after tax)
-                String totalStr = String.format("Total: $%.2f", total);
-                if (tax > 0) {
-                    totalStr += String.format(" (tax: $%.2f)", tax);
-                }
-                graphics.drawString(this.font, totalStr, 10, 68, 0x55FF55, false);
-            } else {
-                graphics.drawString(this.font, "This item cannot be sold", 10, 63, 0xFF5555, false);
+        if (itemCount > 0) {
+            String valueStr = String.format("%d items = $%.2f", itemCount, totalValue);
+            if (taxAmount > 0) {
+                valueStr += String.format(" (tax: $%.2f)", taxAmount);
             }
+            graphics.drawString(this.font, valueStr, 10, 74, 0x55FF55, false);
         } else {
-            graphics.drawString(this.font, "Insert items to sell", 10, 58, 0x888888, false);
-            graphics.drawString(this.font, "Value shown before selling", 10, 68, 0x666666, false);
+            graphics.drawString(this.font, "Insert items to sell", 10, 74, 0xAAAAAA, false);
         }
 
-        // Status message
+        // Status message (centered above player inventory)
         if (statusMessageTicks > 0 && !statusMessage.isEmpty()) {
             int color = statusSuccess ? 0x55FF55 : 0xFF5555;
             int msgWidth = this.font.width(statusMessage);
             graphics.drawString(this.font, statusMessage,
-                (imageWidth - msgWidth) / 2, 22, color, false);
+                (imageWidth - msgWidth) / 2, 62, color, false);
         }
 
         // Inventory label
-        graphics.drawString(this.font, this.playerInventoryTitle, 8, 73, 0x404040, false);
+        graphics.drawString(this.font, this.playerInventoryTitle, 8, this.inventoryLabelY, 0x404040, false);
     }
 
     @Override

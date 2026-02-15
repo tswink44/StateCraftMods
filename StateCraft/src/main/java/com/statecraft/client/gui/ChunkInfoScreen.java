@@ -48,7 +48,7 @@ public class ChunkInfoScreen extends StateCraftScreen {
         NetworkHandler.sendToServer(new RequestChunkInfoPacket(chunkX, chunkZ));
 
         int centerX = this.width / 2;
-        int buttonY = guiTop + guiHeight - 75;
+        int buttonY = guiTop + guiHeight - 70;
         int buttonWidth = 75;
         int spacing = 80;
 
@@ -77,26 +77,29 @@ public class ChunkInfoScreen extends StateCraftScreen {
             btn -> openMarketScreen()
         ));
 
-        // Row 2: Valuation button (only if Economy mod is loaded)
+        // Row 2: Valuation (left) | Abandon Chunk (right) - side by side, smaller
+        int halfWidth = (guiWidth - 25) / 2;
+
+        // Valuation button (only if Economy mod is loaded)
         this.addRenderableWidget(createButton(
             guiLeft + 10, buttonY + 22,
-            guiWidth - 20, 18,
-            Component.literal("§e$ View Valuation"),
+            halfWidth, 18,
+            Component.literal("§e$ Valuation"),
             btn -> openValuationScreen()
         ));
 
-        // Row 3: Abandon button (only visible if player owns the chunk)
+        // Abandon button (only visible if player owns the chunk)
         abandonButton = this.addRenderableWidget(createButton(
-            guiLeft + 10, buttonY + 44,
-            guiWidth - 20, 18,
-            Component.literal("§cAbandon Chunk"),
+            guiLeft + 15 + halfWidth, buttonY + 22,
+            halfWidth, 18,
+            Component.literal("§cAbandon"),
             btn -> abandonChunk()
         ));
         abandonButton.visible = false; // Hidden until we know if player owns it
 
         // Back button
         this.addRenderableWidget(createButton(
-            centerX - 40, guiTop + guiHeight - 28,
+            centerX - 40, guiTop + guiHeight - 25,
             80, 20,
             Component.literal("Back"),
             btn -> goBack()

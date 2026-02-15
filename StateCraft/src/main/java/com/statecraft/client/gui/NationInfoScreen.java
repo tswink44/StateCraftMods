@@ -52,6 +52,7 @@ public class NationInfoScreen extends StateCraftScreen {
     private Button leaveButton;
     private Button joinButton;
     private Button legislatureButton;
+    private Button viewLawsButton;
 
     @Override
     protected void init() {
@@ -90,10 +91,18 @@ public class NationInfoScreen extends StateCraftScreen {
             btn -> openElectionsScreen()
         ));
 
+        // View Laws button (visible to all members)
+        viewLawsButton = this.addRenderableWidget(createButton(
+            startX + buttonSpacing * 3, row1Y, buttonWidth, 20,
+            Component.literal("§fView Laws"),
+            btn -> openViewLawsScreen()
+        ));
+        viewLawsButton.visible = false; // Hidden until we know if member
+
         // Legislature button (only for legislature members - governors/officers)
         legislatureButton = this.addRenderableWidget(createButton(
-            startX + buttonSpacing * 3, row1Y, buttonWidth, 20,
-            Component.literal("§bLaws"),
+            startX + buttonSpacing * 4, row1Y, buttonWidth, 20,
+            Component.literal("§bPropose"),
             btn -> openLegislatureScreen()
         ));
         legislatureButton.visible = false;
@@ -256,6 +265,10 @@ public class NationInfoScreen extends StateCraftScreen {
         this.minecraft.setScreen(new LegislatureScreen(nationName));
     }
 
+    private void openViewLawsScreen() {
+        this.minecraft.setScreen(new NationLawsScreen(nationName));
+    }
+
     private void openSettingsScreen() {
         this.minecraft.setScreen(new NationSettingsScreen(nationName));
     }
@@ -347,6 +360,10 @@ public class NationInfoScreen extends StateCraftScreen {
         // Show legislature button for members (actual access is checked server-side)
         if (legislatureButton != null) {
             legislatureButton.visible = isMember;
+        }
+        // Show view laws button for all members
+        if (viewLawsButton != null) {
+            viewLawsButton.visible = isMember;
         }
         // Show leave button only for members who are not the leader
         if (leaveButton != null) {

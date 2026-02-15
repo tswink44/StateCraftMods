@@ -15,7 +15,7 @@ import java.util.Map;
 
 /**
  * Screen for proposing new legislation
- * Allows selecting policy changes and writing bill title/description
+ * Uses dropdown menus for policy selection to avoid overlapping UI elements
  */
 public class ProposeBillScreen extends StateCraftScreen {
 
@@ -24,18 +24,22 @@ public class ProposeBillScreen extends StateCraftScreen {
     // Input fields
     private EditBox titleField;
     private EditBox descriptionField;
-
-    // Policy selection
-    private PolicyType.Category selectedCategory = PolicyType.Category.TAXATION;
-    private PolicyType selectedPolicy = null;
     private EditBox policyValueField;
+
+    // Policy selection - dropdown approach
+    private PolicyType.Category selectedCategory = null;
+    private PolicyType selectedPolicy = null;
+    private boolean showCategoryDropdown = false;
+    private boolean showPolicyDropdown = false;
+    private int dropdownScrollOffset = 0;
+    private static final int DROPDOWN_MAX_VISIBLE = 6;
 
     // Current bill policy changes
     private final Map<PolicyType, String> policyChanges = new HashMap<>();
 
-    // Scrolling for policy list
-    private int policyScrollOffset = 0;
-    private static final int MAX_VISIBLE_POLICIES = 5;
+    // Added policies scroll
+    private int addedPoliciesScrollOffset = 0;
+    private static final int MAX_VISIBLE_ADDED = 3;
 
     // Error message
     private String errorMessage = null;
@@ -44,86 +48,66 @@ public class ProposeBillScreen extends StateCraftScreen {
     public ProposeBillScreen(String nationName) {
         super(Component.literal("Propose Legislation"));
         this.nationName = nationName;
-        this.guiWidth = 340;
-        this.guiHeight = 260;
+        this.guiWidth = 320;
+        this.guiHeight = 240;
     }
 
     @Override
     protected void init() {
         super.init();
 
-        int fieldX = guiLeft + 80;
-        int fieldWidth = guiWidth - 95;
-        int y = guiTop + 28;
+        int fieldX = guiLeft + 75;
+        int fieldWidth = guiWidth - 90;
+        int y = guiTop + 25;
 
         // Title field
-        this.titleField = new EditBox(this.font, fieldX, y, fieldWidth, 16, Component.literal("Title"));
+        this.titleField = new EditBox(this.font, fieldX, y, fieldWidth, 14, Component.literal("Title"));
         this.titleField.setMaxLength(64);
         this.titleField.setHint(Component.literal("Bill title..."));
         this.addRenderableWidget(this.titleField);
 
-        // Description field (multiline would be nice but EditBox is single line)
-        y += 22;
-        this.descriptionField = new EditBox(this.font, fieldX, y, fieldWidth, 16, Component.literal("Description"));
+        // Description field
+        y += 18;
+        this.descriptionField = new EditBox(this.font, fieldX, y, fieldWidth, 14, Component.literal("Description"));
         this.descriptionField.setMaxLength(256);
         this.descriptionField.setHint(Component.literal("Brief description..."));
         this.addRenderableWidget(this.descriptionField);
 
-        // Category buttons
-        y += 28;
-        int catBtnWidth = 50;
-        int catX = guiLeft + 10;
-
-        for (PolicyType.Category category : PolicyType.Category.values()) {
-            final PolicyType.Category cat = category;
-            String label = category.getDisplayName();
-            if (label.length() > 6) label = label.substring(0, 6);
-
-            Button catBtn = this.addRenderableWidget(createButton(
-                catX, y, catBtnWidth, 14,
-                Component.literal(label),
-                btn -> selectCategory(cat)
-            ));
-            catX += catBtnWidth + 2;
-            if (catX + catBtnWidth > guiLeft + guiWidth - 10) {
-                catX = guiLeft + 10;
-                y += 16;
-            }
-        }
-
-        // Policy value field (appears when a policy is selected)
-        this.policyValueField = new EditBox(this.font, guiLeft + guiWidth - 80, guiTop + guiHeight - 95, 65, 14, Component.literal("Value"));
+        // Policy value field (next to policy dropdown)
+        y += 38;
+        this.policyValueField = new EditBox(this.font, guiLeft + guiWidth - 75, y, 60, 14, Component.literal("Value"));
         this.policyValueField.setMaxLength(32);
-        this.policyValueField.setVisible(false);
+        this.policyValueField.setHint(Component.literal("Value"));
         this.addRenderableWidget(this.policyValueField);
 
         // Add Policy button
+        y += 18;
         this.addRenderableWidget(createButton(
-            guiLeft + guiWidth - 85, guiTop + guiHeight - 76, 70, 16,
-            Component.literal("§aAdd Policy"),
+            guiLeft + guiWidth - 85, y, 70, 14,
+            Component.literal("§a+ Add"),
             btn -> addSelectedPolicy()
         ));
 
         // Bottom buttons
-        int buttonY = guiTop + guiHeight - 28;
+        int buttonY = guiTop + guiHeight - 25;
 
         // Submit button
         this.addRenderableWidget(createButton(
-            guiLeft + 15, buttonY, 80, 20,
-            Component.literal("§aSubmit Bill"),
+            guiLeft + 10, buttonY, 70, 18,
+            Component.literal("§aSubmit"),
             btn -> submitBill()
         ));
 
         // Clear button
         this.addRenderableWidget(createButton(
-            guiLeft + 100, buttonY, 60, 20,
+            guiLeft + 85, buttonY, 55, 18,
             Component.literal("Clear"),
             btn -> clearForm()
         ));
 
         // Cancel button
         this.addRenderableWidget(createButton(
-            guiLeft + guiWidth - 75, buttonY, 60, 20,
+            guiLeft + guiWidth - 65, buttonY, 55, 18,
             Component.literal("Cancel"),
             btn -> goBack()
         ));
@@ -131,115 +115,178 @@ public class ProposeBillScreen extends StateCraftScreen {
 
     @Override
     protected void renderContent(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        int y = guiTop + 28;
+        int y = guiTop + 25;
 
         // Labels
-        graphics.drawString(this.font, "§7Title:", guiLeft + 15, y + 4, COLOR_TEXT);
-        y += 22;
-        graphics.drawString(this.font, "§7Description:", guiLeft + 15, y + 4, COLOR_TEXT);
-        y += 28;
+        graphics.drawString(this.font, "§7Title:", guiLeft + 12, y + 3, COLOR_TEXT);
+        y += 18;
+        graphics.drawString(this.font, "§7Desc:", guiLeft + 12, y + 3, COLOR_TEXT);
 
-        // Divider
-        renderDivider(graphics, guiLeft + 10, y - 5, guiWidth - 20);
+        // Divider after basic info
+        y += 20;
+        renderDivider(graphics, guiLeft + 5, y, guiWidth - 10);
 
-        // Category indicator
-        y += 18; // Skip category buttons row
-        if (selectedCategory != null) {
-            y += 4;
-            graphics.drawString(this.font, "§6" + selectedCategory.getDisplayName() + " Policies:",
-                guiLeft + 15, y, COLOR_PRIMARY);
-        }
+        // Policy Selection Section
+        y += 8;
+        graphics.drawString(this.font, "§6Add Policy:", guiLeft + 12, y, COLOR_PRIMARY);
+
+        // Category dropdown button
         y += 14;
+        int dropdownWidth = 90;
+        String categoryText = selectedCategory != null ? selectedCategory.getDisplayName() : "Category...";
+        renderDropdownButton(graphics, guiLeft + 12, y, dropdownWidth, categoryText, mouseX, mouseY, showCategoryDropdown);
 
-        // Policy list for selected category
-        renderPolicyList(graphics, guiLeft + 15, y, mouseX, mouseY);
+        // Policy dropdown button (only if category selected)
+        int policyDropdownX = guiLeft + 12 + dropdownWidth + 5;
+        int policyDropdownWidth = 100;
+        if (selectedCategory != null) {
+            String policyText = selectedPolicy != null ? truncate(selectedPolicy.getDisplayName(), 12) : "Policy...";
+            renderDropdownButton(graphics, policyDropdownX, y, policyDropdownWidth, policyText, mouseX, mouseY, showPolicyDropdown);
+        }
 
-        // Selected policies summary
-        int summaryY = guiTop + guiHeight - 115;
-        renderDivider(graphics, guiLeft + 10, summaryY - 3, guiWidth - 20);
+        // Value hint
+        if (selectedPolicy != null) {
+            String hint = getValueHint(selectedPolicy);
+            graphics.drawString(this.font, "§8" + hint, guiLeft + guiWidth - 72, y + 18, 0xFF888888);
+        }
 
-        graphics.drawString(this.font, "§6Bill Policies §7(" + policyChanges.size() + "):",
-            guiLeft + 15, summaryY, COLOR_PRIMARY);
-        summaryY += 12;
+        // Render dropdowns (on top of everything else, so render last)
+        // These are rendered after the rest so they appear on top
+
+        // Divider before added policies
+        int policiesY = guiTop + 125;
+        renderDivider(graphics, guiLeft + 5, policiesY, guiWidth - 10);
+
+        // Added Policies Section
+        policiesY += 8;
+        graphics.drawString(this.font, "§6Bill Policies §7(" + policyChanges.size() + "):", guiLeft + 12, policiesY, COLOR_PRIMARY);
+        policiesY += 14;
 
         if (policyChanges.isEmpty()) {
-            graphics.drawString(this.font, "§8No policies added yet", guiLeft + 20, summaryY, 0xFFAAAAAA);
+            graphics.drawString(this.font, "§8No policies added yet", guiLeft + 15, policiesY, 0xFFAAAAAA);
         } else {
-            int count = 0;
-            for (Map.Entry<PolicyType, String> entry : policyChanges.entrySet()) {
-                if (count >= 2) {
-                    graphics.drawString(this.font, "§8..." + (policyChanges.size() - 2) + " more",
-                        guiLeft + 20, summaryY, 0xFFAAAAAA);
-                    break;
+            List<Map.Entry<PolicyType, String>> entries = new ArrayList<>(policyChanges.entrySet());
+            int endIdx = Math.min(addedPoliciesScrollOffset + MAX_VISIBLE_ADDED, entries.size());
+
+            for (int i = addedPoliciesScrollOffset; i < endIdx; i++) {
+                Map.Entry<PolicyType, String> entry = entries.get(i);
+                String display = "§7• §f" + truncate(entry.getKey().getDisplayName(), 15) + ": §a" + formatValue(entry.getKey(), entry.getValue());
+                graphics.drawString(this.font, display, guiLeft + 15, policiesY, COLOR_TEXT);
+
+                // Remove button (X)
+                int removeX = guiLeft + guiWidth - 25;
+                boolean hoverRemove = mouseX >= removeX && mouseX < removeX + 12 && mouseY >= policiesY - 1 && mouseY < policiesY + 10;
+                graphics.drawString(this.font, hoverRemove ? "§c✕" : "§8✕", removeX, policiesY, COLOR_TEXT);
+
+                policiesY += 12;
+            }
+
+            // Scroll indicators for added policies
+            if (entries.size() > MAX_VISIBLE_ADDED) {
+                if (addedPoliciesScrollOffset > 0) {
+                    graphics.drawString(this.font, "§7▲", guiLeft + guiWidth - 15, guiTop + 140, 0xFF888888);
                 }
-                String display = "§7• " + entry.getKey().getDisplayName() + ": §f" + formatValue(entry.getKey(), entry.getValue());
-                if (this.font.width(display.replaceAll("§.", "")) > guiWidth - 40) {
-                    display = this.font.plainSubstrByWidth(display.replaceAll("§.", ""), guiWidth - 50) + "...";
+                if (addedPoliciesScrollOffset + MAX_VISIBLE_ADDED < entries.size()) {
+                    graphics.drawString(this.font, "§7▼", guiLeft + guiWidth - 15, guiTop + 165, 0xFF888888);
                 }
-                graphics.drawString(this.font, display, guiLeft + 20, summaryY, COLOR_TEXT);
-                summaryY += 10;
-                count++;
             }
         }
 
-        // Error message
+        // Error message at bottom
         if (errorMessage != null && errorTicks > 0) {
             graphics.drawCenteredString(this.font, "§c" + errorMessage,
-                this.width / 2, guiTop + guiHeight - 45, COLOR_WARNING);
+                this.width / 2, guiTop + guiHeight - 40, COLOR_WARNING);
+        }
+
+        // Render dropdowns last so they appear on top
+        y = guiTop + 25 + 18 + 20 + 8 + 14; // recalc y position for dropdowns
+        if (showCategoryDropdown) {
+            renderCategoryDropdown(graphics, guiLeft + 12, y + 14, dropdownWidth, mouseX, mouseY);
+        }
+        if (showPolicyDropdown && selectedCategory != null) {
+            renderPolicyDropdown(graphics, policyDropdownX, y + 14, policyDropdownWidth, mouseX, mouseY);
         }
     }
 
-    private void renderPolicyList(GuiGraphics graphics, int x, int y, int mouseX, int mouseY) {
-        List<PolicyType> policies = getPoliciesForCategory(selectedCategory);
+    private void renderDropdownButton(GuiGraphics graphics, int x, int y, int width, String text, int mouseX, int mouseY, boolean isOpen) {
+        boolean hovered = mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + 14;
+        int bgColor = isOpen ? 0xFF4A4A6A : (hovered ? 0xFF3A3A5A : 0xFF2A2A4A);
 
-        if (policies.isEmpty()) {
-            graphics.drawString(this.font, "§8No policies in this category", x, y, 0xFFAAAAAA);
-            return;
-        }
+        graphics.fill(x, y, x + width, y + 14, bgColor);
+        graphics.fill(x, y, x + width, y + 1, 0xFF5A5A7A); // top border
+        graphics.fill(x, y + 13, x + width, y + 14, 0xFF1A1A2A); // bottom border
 
-        int listHeight = MAX_VISIBLE_POLICIES * 14;
-        int endIndex = Math.min(policyScrollOffset + MAX_VISIBLE_POLICIES, policies.size());
+        graphics.drawString(this.font, text, x + 3, y + 3, 0xFFFFFFFF);
+        graphics.drawString(this.font, isOpen ? "▲" : "▼", x + width - 10, y + 3, 0xFFAAAAAA);
+    }
 
-        for (int i = policyScrollOffset; i < endIndex; i++) {
-            PolicyType policy = policies.get(i);
-            boolean isSelected = policy == selectedPolicy;
-            boolean isHovered = mouseX >= x && mouseX < x + 180 && mouseY >= y && mouseY < y + 12;
-            boolean alreadyAdded = policyChanges.containsKey(policy);
+    private void renderCategoryDropdown(GuiGraphics graphics, int x, int y, int width, int mouseX, int mouseY) {
+        PolicyType.Category[] categories = PolicyType.Category.values();
+        int height = Math.min(categories.length, DROPDOWN_MAX_VISIBLE) * 12 + 4;
 
-            // Background for selection/hover
-            if (isSelected) {
-                graphics.fill(x - 2, y - 1, x + 180, y + 11, 0x44FFFFFF);
-            } else if (isHovered && !alreadyAdded) {
-                graphics.fill(x - 2, y - 1, x + 180, y + 11, 0x22FFFFFF);
+        // Background
+        graphics.fill(x - 1, y - 1, x + width + 1, y + height + 1, 0xFF1A1A2A);
+        graphics.fill(x, y, x + width, y + height, 0xFF2A2A4A);
+
+        int itemY = y + 2;
+        for (int i = 0; i < Math.min(categories.length, DROPDOWN_MAX_VISIBLE); i++) {
+            PolicyType.Category cat = categories[i];
+            boolean hovered = mouseX >= x && mouseX < x + width && mouseY >= itemY && mouseY < itemY + 12;
+
+            if (hovered) {
+                graphics.fill(x, itemY, x + width, itemY + 12, 0xFF4A4A6A);
             }
 
-            String color = alreadyAdded ? "§8" : (isSelected ? "§e" : "§f");
-            String checkmark = alreadyAdded ? "§a✓ " : "  ";
-            graphics.drawString(this.font, checkmark + color + policy.getDisplayName(), x, y, COLOR_TEXT);
+            String color = cat == selectedCategory ? "§e" : "§f";
+            graphics.drawString(this.font, color + cat.getDisplayName(), x + 3, itemY + 2, COLOR_TEXT);
+            itemY += 12;
+        }
+    }
 
-            y += 14;
+    private void renderPolicyDropdown(GuiGraphics graphics, int x, int y, int width, int mouseX, int mouseY) {
+        List<PolicyType> policies = getPoliciesForCategory(selectedCategory);
+        if (policies.isEmpty()) return;
+
+        int visibleCount = Math.min(policies.size() - dropdownScrollOffset, DROPDOWN_MAX_VISIBLE);
+        int height = visibleCount * 12 + 4;
+
+        // Background
+        graphics.fill(x - 1, y - 1, x + width + 1, y + height + 1, 0xFF1A1A2A);
+        graphics.fill(x, y, x + width, y + height, 0xFF2A2A4A);
+
+        int itemY = y + 2;
+        for (int i = dropdownScrollOffset; i < dropdownScrollOffset + visibleCount; i++) {
+            PolicyType policy = policies.get(i);
+            boolean hovered = mouseX >= x && mouseX < x + width && mouseY >= itemY && mouseY < itemY + 12;
+            boolean alreadyAdded = policyChanges.containsKey(policy);
+
+            if (hovered && !alreadyAdded) {
+                graphics.fill(x, itemY, x + width, itemY + 12, 0xFF4A4A6A);
+            }
+
+            String color = alreadyAdded ? "§8" : (policy == selectedPolicy ? "§e" : "§f");
+            String check = alreadyAdded ? "§a✓" : " ";
+            graphics.drawString(this.font, check + color + truncate(policy.getDisplayName(), 11), x + 3, itemY + 2, COLOR_TEXT);
+            itemY += 12;
         }
 
         // Scroll indicators
-        if (policyScrollOffset > 0) {
-            graphics.drawString(this.font, "§7▲", x + 185, guiTop + 115, 0xFF888888);
+        if (dropdownScrollOffset > 0) {
+            graphics.drawString(this.font, "§7▲", x + width - 10, y + 2, 0xFF888888);
         }
-        if (policyScrollOffset + MAX_VISIBLE_POLICIES < policies.size()) {
-            graphics.drawString(this.font, "§7▼", x + 185, guiTop + 115 + listHeight - 14, 0xFF888888);
+        if (dropdownScrollOffset + DROPDOWN_MAX_VISIBLE < policies.size()) {
+            graphics.drawString(this.font, "§7▼", x + width - 10, y + height - 12, 0xFF888888);
         }
+    }
 
-        // Show value input hint when policy is selected
-        if (selectedPolicy != null) {
-            policyValueField.setVisible(true);
-            String hint = getValueHint(selectedPolicy);
-            graphics.drawString(this.font, "§7Value: " + hint, guiLeft + guiWidth - 150, guiTop + guiHeight - 92, 0xFFAAAAAA);
-        } else {
-            policyValueField.setVisible(false);
-        }
+    private String truncate(String text, int maxLen) {
+        if (text.length() <= maxLen) return text;
+        return text.substring(0, maxLen - 2) + "..";
     }
 
     private List<PolicyType> getPoliciesForCategory(PolicyType.Category category) {
         List<PolicyType> result = new ArrayList<>();
+        if (category == null) return result;
         for (PolicyType policy : PolicyType.values()) {
             if (policy.getCategory() == category) {
                 result.add(policy);
@@ -250,12 +297,12 @@ public class ProposeBillScreen extends StateCraftScreen {
 
     private String getValueHint(PolicyType policy) {
         return switch (policy.getValueType()) {
-            case BOOLEAN -> "(true/false)";
-            case INTEGER -> "(" + (int)policy.getMinValue() + "-" + (int)policy.getMaxValue() + ")";
-            case PERCENTAGE -> "(0-" + (int)(policy.getMaxValue() * 100) + "%)";
-            case CURRENCY -> "($)";
-            case TEXT -> "(text)";
-            case NATION_TARGET -> "(nation name)";
+            case BOOLEAN -> "true/false";
+            case INTEGER -> (int)policy.getMinValue() + "-" + (int)policy.getMaxValue();
+            case PERCENTAGE -> "0-100%";
+            case CURRENCY -> "$amount";
+            case TEXT -> "text";
+            case NATION_TARGET -> "nation";
         };
     }
 
@@ -275,23 +322,92 @@ public class ProposeBillScreen extends StateCraftScreen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button == 0) {
-            // Check if clicking on a policy in the list
-            int listX = guiLeft + 15;
-            int listY = guiTop + 115;
-            List<PolicyType> policies = getPoliciesForCategory(selectedCategory);
+            int y = guiTop + 25 + 18 + 20 + 8 + 14; // dropdown button Y position
+            int dropdownWidth = 90;
+            int policyDropdownX = guiLeft + 12 + dropdownWidth + 5;
+            int policyDropdownWidth = 100;
 
-            int endIndex = Math.min(policyScrollOffset + MAX_VISIBLE_POLICIES, policies.size());
-            for (int i = policyScrollOffset; i < endIndex; i++) {
-                if (mouseX >= listX && mouseX < listX + 180 && mouseY >= listY && mouseY < listY + 12) {
-                    PolicyType policy = policies.get(i);
-                    if (!policyChanges.containsKey(policy)) {
-                        selectedPolicy = policy;
-                        policyValueField.setValue("");
-                        policyValueField.setFocused(true);
+            // Category dropdown button click
+            if (mouseX >= guiLeft + 12 && mouseX < guiLeft + 12 + dropdownWidth &&
+                mouseY >= y && mouseY < y + 14) {
+                showCategoryDropdown = !showCategoryDropdown;
+                showPolicyDropdown = false;
+                dropdownScrollOffset = 0;
+                return true;
+            }
+
+            // Policy dropdown button click
+            if (selectedCategory != null && mouseX >= policyDropdownX && mouseX < policyDropdownX + policyDropdownWidth &&
+                mouseY >= y && mouseY < y + 14) {
+                showPolicyDropdown = !showPolicyDropdown;
+                showCategoryDropdown = false;
+                dropdownScrollOffset = 0;
+                return true;
+            }
+
+            // Category dropdown item click
+            if (showCategoryDropdown) {
+                int dropY = y + 14 + 2;
+                PolicyType.Category[] categories = PolicyType.Category.values();
+                for (int i = 0; i < Math.min(categories.length, DROPDOWN_MAX_VISIBLE); i++) {
+                    if (mouseX >= guiLeft + 12 && mouseX < guiLeft + 12 + dropdownWidth &&
+                        mouseY >= dropY && mouseY < dropY + 12) {
+                        selectedCategory = categories[i];
+                        selectedPolicy = null;
+                        showCategoryDropdown = false;
+                        dropdownScrollOffset = 0;
+                        return true;
                     }
-                    return true;
+                    dropY += 12;
                 }
-                listY += 14;
+                // Clicked outside dropdown, close it
+                showCategoryDropdown = false;
+            }
+
+            // Policy dropdown item click
+            if (showPolicyDropdown && selectedCategory != null) {
+                List<PolicyType> policies = getPoliciesForCategory(selectedCategory);
+                int dropY = y + 14 + 2;
+                int visibleCount = Math.min(policies.size() - dropdownScrollOffset, DROPDOWN_MAX_VISIBLE);
+
+                for (int i = dropdownScrollOffset; i < dropdownScrollOffset + visibleCount; i++) {
+                    if (mouseX >= policyDropdownX && mouseX < policyDropdownX + policyDropdownWidth &&
+                        mouseY >= dropY && mouseY < dropY + 12) {
+                        PolicyType policy = policies.get(i);
+                        if (!policyChanges.containsKey(policy)) {
+                            selectedPolicy = policy;
+                            policyValueField.setValue("");
+                            policyValueField.setFocused(true);
+                        }
+                        showPolicyDropdown = false;
+                        return true;
+                    }
+                    dropY += 12;
+                }
+                // Clicked outside dropdown, close it
+                showPolicyDropdown = false;
+            }
+
+            // Remove policy click (X button)
+            if (!policyChanges.isEmpty()) {
+                List<Map.Entry<PolicyType, String>> entries = new ArrayList<>(policyChanges.entrySet());
+                int policiesY = guiTop + 125 + 8 + 14;
+                int endIdx = Math.min(addedPoliciesScrollOffset + MAX_VISIBLE_ADDED, entries.size());
+
+                for (int i = addedPoliciesScrollOffset; i < endIdx; i++) {
+                    int removeX = guiLeft + guiWidth - 25;
+                    if (mouseX >= removeX && mouseX < removeX + 12 && mouseY >= policiesY - 1 && mouseY < policiesY + 10) {
+                        policyChanges.remove(entries.get(i).getKey());
+                        return true;
+                    }
+                    policiesY += 12;
+                }
+            }
+
+            // Close dropdowns if clicking elsewhere
+            if (showCategoryDropdown || showPolicyDropdown) {
+                showCategoryDropdown = false;
+                showPolicyDropdown = false;
             }
         }
         return super.mouseClicked(mouseX, mouseY, button);
@@ -299,22 +415,31 @@ public class ProposeBillScreen extends StateCraftScreen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        List<PolicyType> policies = getPoliciesForCategory(selectedCategory);
-        int maxScroll = Math.max(0, policies.size() - MAX_VISIBLE_POLICIES);
-
-        if (delta > 0) {
-            policyScrollOffset = Math.max(0, policyScrollOffset - 1);
-        } else {
-            policyScrollOffset = Math.min(maxScroll, policyScrollOffset + 1);
+        // Scroll policy dropdown
+        if (showPolicyDropdown && selectedCategory != null) {
+            List<PolicyType> policies = getPoliciesForCategory(selectedCategory);
+            int maxScroll = Math.max(0, policies.size() - DROPDOWN_MAX_VISIBLE);
+            if (delta > 0) {
+                dropdownScrollOffset = Math.max(0, dropdownScrollOffset - 1);
+            } else {
+                dropdownScrollOffset = Math.min(maxScroll, dropdownScrollOffset + 1);
+            }
+            return true;
         }
-        return true;
-    }
 
-    private void selectCategory(PolicyType.Category category) {
-        this.selectedCategory = category;
-        this.selectedPolicy = null;
-        this.policyScrollOffset = 0;
-        this.policyValueField.setValue("");
+        // Scroll added policies list
+        int policiesY = guiTop + 125;
+        if (mouseY >= policiesY && mouseY < guiTop + guiHeight - 30) {
+            int maxScroll = Math.max(0, policyChanges.size() - MAX_VISIBLE_ADDED);
+            if (delta > 0) {
+                addedPoliciesScrollOffset = Math.max(0, addedPoliciesScrollOffset - 1);
+            } else {
+                addedPoliciesScrollOffset = Math.min(maxScroll, addedPoliciesScrollOffset + 1);
+            }
+            return true;
+        }
+
+        return super.mouseScrolled(mouseX, mouseY, delta);
     }
 
     private void addSelectedPolicy() {
@@ -332,7 +457,7 @@ public class ProposeBillScreen extends StateCraftScreen {
         // Convert percentage input (e.g., "25" -> "0.25")
         if (selectedPolicy.getValueType() == PolicyType.ValueType.PERCENTAGE) {
             try {
-                double pct = Double.parseDouble(value);
+                double pct = Double.parseDouble(value.replace("%", ""));
                 if (pct > 1) {
                     value = String.valueOf(pct / 100.0);
                 }
@@ -347,7 +472,6 @@ public class ProposeBillScreen extends StateCraftScreen {
         policyChanges.put(selectedPolicy, value);
         selectedPolicy = null;
         policyValueField.setValue("");
-        policyValueField.setVisible(false);
     }
 
     private void submitBill() {
@@ -388,9 +512,11 @@ public class ProposeBillScreen extends StateCraftScreen {
         titleField.setValue("");
         descriptionField.setValue("");
         policyChanges.clear();
+        selectedCategory = null;
         selectedPolicy = null;
         policyValueField.setValue("");
         errorMessage = null;
+        addedPoliciesScrollOffset = 0;
     }
 
     private void showError(String message) {
