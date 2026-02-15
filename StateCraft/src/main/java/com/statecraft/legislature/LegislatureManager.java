@@ -384,6 +384,8 @@ public class LegislatureManager {
                     nation.setBaseChunkValue(Double.parseDouble(value));
                     StateCraft.LOGGER.info("Policy change: Base chunk value set to ${} for nation {}",
                         value, nation.getName());
+                    // Invalidate chunk valuation cache so valuations are recalculated
+                    invalidateChunkValuationCache();
                     break;
                 case CHUNK_CLAIM_FEE:
                     nation.setChunkClaimFee(Double.parseDouble(value));
@@ -472,6 +474,24 @@ public class LegislatureManager {
 
     public void clearDirty() {
         this.dirty = false;
+    }
+
+    /**
+     * Invalidate chunk valuation cache when legislation changes values that affect chunk pricing
+     * Uses reflection to call StateCraftEconomy without hard dependency
+     */
+    private void invalidateChunkValuationCache() {
+        try {
+            Class<?> valuationManagerClass = Class.forName("com.statecraft.economy.valuation.ChunkValuationManager");
+            Object manager = valuationManagerClass.getMethod("getInstance").invoke(null);
+            valuationManagerClass.getMethod("markAllDirty").invoke(manager);
+            StateCraft.LOGGER.info("Invalidated chunk valuation cache due to policy change");
+        } catch (ClassNotFoundException e) {
+            // StateCraftEconomy mod not loaded, ignore
+            StateCraft.LOGGER.debug("StateCraftEconomy not loaded, skipping valuation cache invalidation");
+        } catch (Exception e) {
+            StateCraft.LOGGER.warn("Failed to invalidate chunk valuation cache: {}", e.getMessage());
+        }
     }
 
     // NBT Serialization
