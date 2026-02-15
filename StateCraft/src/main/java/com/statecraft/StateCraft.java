@@ -1,6 +1,7 @@
 package com.statecraft;
 
 import com.statecraft.command.StateCraftCommands;
+import com.statecraft.config.StateCraftConfig;
 import com.statecraft.core.ChunkClaimManager;
 import com.statecraft.event.PlayerJoinHandler;
 import com.statecraft.event.WorldLoadHandler;
@@ -12,7 +13,9 @@ import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import org.slf4j.Logger;
@@ -35,6 +38,9 @@ public class StateCraft {
 
     public StateCraft() {
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
+
+        // Register config
+        ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, StateCraftConfig.SPEC, "statecraft.toml");
 
         // Register mod lifecycle events
         modEventBus.addListener(this::commonSetup);

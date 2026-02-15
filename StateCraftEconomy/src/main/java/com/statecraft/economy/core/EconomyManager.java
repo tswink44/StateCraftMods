@@ -245,6 +245,124 @@ public class EconomyManager {
         return new TransactionResult(true, "Force withdrew " + formatCurrency(amount), account.getBalance());
     }
 
+    // ==================== Inventory Currency Methods ====================
+
+    /**
+     * Calculate the total value of currency items in a player's inventory
+     * @param player The player whose inventory to check
+     * @return The total value of currency items
+     */
+    public double getInventoryCurrencyValue(net.minecraft.world.entity.player.Player player) {
+        double total = 0;
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            net.minecraft.world.item.ItemStack stack = player.getInventory().getItem(i);
+            total += getCurrencyValue(stack);
+        }
+        return total;
+    }
+
+    /**
+     * Get a player's total available balance (bank account + inventory currency)
+     * @param player The player to check
+     * @return Total available balance
+     */
+    public double getTotalAvailableBalance(net.minecraft.world.entity.player.Player player) {
+        double bankBalance = getBalance(player.getUUID());
+        double inventoryValue = getInventoryCurrencyValue(player);
+        return bankBalance + inventoryValue;
+    }
+
+    /**
+     * Withdraw from a player, using bank first then inventory currency if needed
+     * @param player The player to withdraw from
+     * @param amount The amount to withdraw
+     * @param description Transaction description
+     * @return Transaction result
+     */
+    public TransactionResult withdrawSmart(net.minecraft.world.entity.player.Player player, double amount, String description) {
+        if (amount <= 0) {
+            return new TransactionResult(false, "Amount must be positive", 0);
+        }
+
+        double bankBalance = getBalance(player.getUUID());
+        double inventoryValue = getInventoryCurrencyValue(player);
+        double totalAvailable = bankBalance + inventoryValue;
+
+        if (totalAvailable < amount) {
+            return new TransactionResult(false, "Insufficient funds. Bank: " + formatCurrency(bankBalance) +
+                ", Inventory: " + formatCurrency(inventoryValue) + ", Need: " + formatCurrency(amount), bankBalance);
+        }
+
+        double remainingToWithdraw = amount;
+
+        // First, take from bank
+        if (bankBalance > 0) {
+            double fromBank = Math.min(bankBalance, remainingToWithdraw);
+            BankAccount account = getOrCreateAccount(player.getUUID());
+            account.subtract(fromBank);
+            remainingToWithdraw -= fromBank;
+            dirty = true;
+        }
+
+        // If still need more, take from inventory
+        if (remainingToWithdraw > 0.001) { // Small epsilon for floating point
+            remainingToWithdraw = withdrawCurrencyFromInventory(player, remainingToWithdraw);
+        }
+
+        // Record the transaction
+        recordTransaction(player.getUUID(), Transaction.Type.WITHDRAWAL, amount, null, description);
+
+        double newBankBalance = getBalance(player.getUUID());
+        return new TransactionResult(true, "Withdrew " + formatCurrency(amount), newBankBalance);
+    }
+
+    /**
+     * Remove currency items from player inventory up to specified value
+     * @param player The player
+     * @param amount The value to remove
+     * @return The remaining amount that couldn't be removed (0 if successful)
+     */
+    private double withdrawCurrencyFromInventory(net.minecraft.world.entity.player.Player player, double amount) {
+        double remaining = amount;
+
+        // Sort by value descending - prefer removing higher value bills first
+        List<Map.Entry<String, Double>> sortedCurrency = new ArrayList<>(currencyValues.entrySet());
+        sortedCurrency.sort((a, b) -> Double.compare(b.getValue(), a.getValue()));
+
+        for (int i = 0; i < player.getInventory().getContainerSize() && remaining > 0.001; i++) {
+            net.minecraft.world.item.ItemStack stack = player.getInventory().getItem(i);
+            if (stack.isEmpty()) continue;
+
+            net.minecraft.resources.ResourceLocation itemId = net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(stack.getItem());
+            if (itemId == null) continue;
+
+            Double itemValue = currencyValues.get(itemId.toString());
+            if (itemValue == null || itemValue <= 0) continue;
+
+            // Calculate how many items we need to remove
+            int itemsToRemove = (int) Math.ceil(remaining / itemValue);
+            itemsToRemove = Math.min(itemsToRemove, stack.getCount());
+
+            if (itemsToRemove > 0) {
+                double valueRemoved = itemsToRemove * itemValue;
+                stack.shrink(itemsToRemove);
+                remaining -= valueRemoved;
+
+                // If we removed too much, we need to give change
+                if (remaining < 0) {
+                    double change = -remaining;
+                    // Deposit the change to their bank account
+                    BankAccount account = getOrCreateAccount(player.getUUID());
+                    account.add(change);
+                    dirty = true;
+                    remaining = 0;
+                }
+            }
+        }
+
+        return Math.max(0, remaining);
+    }
+
     public TransactionResult transfer(UUID fromId, UUID toId, double amount, String description) {
         if (amount <= 0) {
             return new TransactionResult(false, "Amount must be positive", 0);

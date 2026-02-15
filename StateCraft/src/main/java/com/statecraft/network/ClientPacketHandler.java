@@ -495,5 +495,46 @@ public class ClientPacketHandler {
         });
         ctx.get().setPacketHandled(true);
     }
+
+    public static void handleSyncElectionData(SyncElectionDataPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof ElectionScreen screen) {
+                screen.updateElectionData(packet);
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncLegislatureData(SyncLegislatureDataPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof LegislatureScreen screen) {
+                screen.updateData(
+                    packet.isLegislatureMember(),
+                    packet.isNationLeader(),
+                    packet.getActiveBills(),
+                    packet.getRecentHistory(),
+                    packet.getVotingMemberNames(),
+                    packet.getTotalMembers()
+                );
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncOfficerManagementData(SyncOfficerManagementDataPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof OfficerManagementScreen screen) {
+                screen.updateData(
+                    packet.isLeader(),
+                    packet.getCitizens(),
+                    packet.getOfficers()
+                );
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
 }
 

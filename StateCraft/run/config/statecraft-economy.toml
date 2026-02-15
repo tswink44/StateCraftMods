@@ -32,18 +32,3 @@
 	#Range: 1 ~ 16
 	range = 5
 
-#StateCraft Integration Settings
-[statecraft]
-	#Enable nation treasury integration (requires StateCraft mod)
-	enableNationTreasury = true
-	#Default nation tax rate on transactions (0.0 = no tax)
-	#Range: 0.0 ~ 0.5
-	nationTaxRate = 0.0
-	#Allow cities to have their own treasury
-	cityCanHaveTreasury = true
-	#Enable chunk claim fee (cities must pay to claim chunks)
-	chunkClaimFeeEnabled = true
-	#Fee amount cities must pay to claim each chunk
-	#Range: 0.0 ~ 1000000.0
-	chunkClaimFee = 100.0
-

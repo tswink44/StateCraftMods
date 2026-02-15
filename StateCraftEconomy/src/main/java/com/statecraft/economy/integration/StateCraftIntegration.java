@@ -18,6 +18,7 @@ import java.util.UUID;
  * Integration with StateCraft mod for nation treasury features
  * This class uses reflection/soft dependency to avoid hard compile-time dependency
  */
+@SuppressWarnings("unchecked")
 public class StateCraftIntegration {
 
     private static boolean initialized = false;
@@ -65,6 +66,9 @@ public class StateCraftIntegration {
                         case "onNationDisbanded" -> economyIntegrationImpl.onNationDisbanded((UUID) args[0]);
                         case "onStateDisbanded" -> economyIntegrationImpl.onStateDisbanded((UUID) args[0]);
                         case "onCityDisbanded" -> economyIntegrationImpl.onCityDisbanded((UUID) args[0]);
+                        case "getPlayerBalance" -> { return economyIntegrationImpl.getPlayerBalance((UUID) args[0]); }
+                        case "withdrawFromPlayer" -> { return economyIntegrationImpl.withdrawFromPlayer((UUID) args[0], (Double) args[1], (String) args[2]); }
+                        case "formatCurrency" -> { return economyIntegrationImpl.formatCurrency((Double) args[0]); }
                     }
                     return null;
                 }
@@ -112,6 +116,50 @@ public class StateCraftIntegration {
 
         public void onCityDisbanded(UUID cityId) {
             StateCraftEconomy.LOGGER.info("City disbanded: {}", cityId);
+        }
+
+        public double getPlayerBalance(UUID playerId) {
+            EconomyManager manager = EconomyManager.getInstance();
+            double bankBalance = manager.getBalance(playerId);
+
+            // Try to get player from server to include inventory currency
+            net.minecraft.server.MinecraftServer server = net.minecraftforge.server.ServerLifecycleHooks.getCurrentServer();
+            if (server != null) {
+                net.minecraft.server.level.ServerPlayer player = server.getPlayerList().getPlayer(playerId);
+                if (player != null) {
+                    double inventoryValue = manager.getInventoryCurrencyValue(player);
+                    return bankBalance + inventoryValue;
+                }
+            }
+
+            // Fallback to bank balance only if player not found (offline)
+            return bankBalance;
+        }
+
+        public boolean withdrawFromPlayer(UUID playerId, double amount, String description) {
+            EconomyManager manager = EconomyManager.getInstance();
+
+            // Try to get player from server to use smart withdrawal
+            net.minecraft.server.MinecraftServer server = net.minecraftforge.server.ServerLifecycleHooks.getCurrentServer();
+            if (server != null) {
+                net.minecraft.server.level.ServerPlayer player = server.getPlayerList().getPlayer(playerId);
+                if (player != null) {
+                    var result = manager.withdrawSmart(player, amount, description);
+                    return result.isSuccess();
+                }
+            }
+
+            // Fallback to bank-only withdrawal if player not found
+            var result = manager.withdraw(playerId, amount, description);
+            return result.isSuccess();
+        }
+
+        public String formatCurrency(double amount) {
+            EconomyManager manager = EconomyManager.getInstance();
+            if (manager != null) {
+                return manager.formatCurrency(amount);
+            }
+            return String.format("$%.2f", amount);
         }
     }
 

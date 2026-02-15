@@ -151,6 +151,9 @@ public class ChunkClaimManager {
         // Notify economy integration
         IntegrationRegistry.notifyNationCreated(nation.getId(), nation.getName());
 
+        // Schedule first election
+        ElectionManager.getInstance().onNationCreated(nation.getId());
+
         StateCraft.LOGGER.info("Nation '{}' created by player {}", name, leaderId);
         return nation;
     }
@@ -181,6 +184,9 @@ public class ChunkClaimManager {
 
         // Notify economy integration
         IntegrationRegistry.notifyNationDisbanded(nationId);
+
+        // Clean up election data
+        ElectionManager.getInstance().onNationDisbanded(nationId);
 
         markDirty();
         StateCraft.LOGGER.info("Nation '{}' disbanded", nation.getName());
@@ -322,6 +328,7 @@ public class ChunkClaimManager {
         ALREADY_CLAIMED,
         CITY_CHUNK_LIMIT,
         STATE_CHUNK_LIMIT,
+        NATION_CHUNK_LIMIT,  // Nation's maxChunksPerCity limit exceeded
         NOT_CONTIGUOUS,
         INSUFFICIENT_FUNDS
     }
@@ -396,7 +403,14 @@ public class ChunkClaimManager {
             return ClaimResult.NOT_CONTIGUOUS; // No state means invalid
         }
 
-        // Check city chunk limit
+        Nation nation = nations.get(state.getNationId());
+
+        // Check nation's maxChunksPerCity limit (can be changed via legislation)
+        if (nation != null && city.getChunkCount() >= nation.getMaxChunksPerCity()) {
+            return ClaimResult.NATION_CHUNK_LIMIT;
+        }
+
+        // Check city's own chunk limit (city-specific override)
         if (city.getChunkCount() >= city.getMaxChunks()) {
             return ClaimResult.CITY_CHUNK_LIMIT;
         }

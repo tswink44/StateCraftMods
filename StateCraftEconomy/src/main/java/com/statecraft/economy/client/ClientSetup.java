@@ -2,6 +2,7 @@ package com.statecraft.economy.client;
 
 import com.statecraft.economy.StateCraftEconomy;
 import com.statecraft.economy.client.screen.ATMScreen;
+import com.statecraft.economy.client.screen.TradingHubScreen;
 import com.statecraft.economy.gui.ModMenuTypes;
 import net.minecraft.client.gui.screens.MenuScreens;
 import net.minecraftforge.api.distmarker.Dist;
@@ -20,6 +21,7 @@ public class ClientSetup {
         event.enqueueWork(() -> {
             // Register screens
             MenuScreens.register(ModMenuTypes.ATM.get(), ATMScreen::new);
+            MenuScreens.register(ModMenuTypes.TRADING_HUB.get(), TradingHubScreen::new);
 
             StateCraftEconomy.LOGGER.info("Client setup complete - screens registered");
         });

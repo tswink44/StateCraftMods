@@ -18,6 +18,9 @@ public class ModBlockEntities {
     public static final RegistryObject<BlockEntityType<ATMBlockEntity>> ATM = BLOCK_ENTITIES.register("atm",
         () -> BlockEntityType.Builder.of(ATMBlockEntity::new, ModBlocks.ATM.get()).build(null));
 
+    public static final RegistryObject<BlockEntityType<TradingHubBlockEntity>> TRADING_HUB = BLOCK_ENTITIES.register("trading_hub",
+        () -> BlockEntityType.Builder.of(TradingHubBlockEntity::new, ModBlocks.TRADING_HUB.get()).build(null));
+
     public static void register(IEventBus eventBus) {
         BLOCK_ENTITIES.register(eventBus);
     }

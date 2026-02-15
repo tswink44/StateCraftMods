@@ -29,10 +29,27 @@ sourceSets {
         resources {
             srcDirs = [economyResources]
         }
-        // Economy compiles against the same classpath as main
-        compileClasspath += sourceSets.main.compileClasspath
-        runtimeClasspath += sourceSets.main.runtimeClasspath
     }
+}
+
+// Configure economy source set classpath after sourceSets block
+configurations {
+    economyCompileClasspath.extendsFrom compileClasspath
+    economyRuntimeClasspath.extendsFrom runtimeClasspath
+}
+
+// Make economy source set self-referential so economy classes can find each other
+sourceSets.economy {
+    java.srcDirs = [economyJava]
+    resources.srcDirs = [economyResources]
+    compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+    runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+}
+
+// Ensure compileEconomyJava can see all economy classes
+tasks.named('compileEconomyJava') {
+    // The economy source set needs to compile all its files together
+    options.sourcepath = files(economyJava)
 }
 
 minecraft {
@@ -65,7 +82,7 @@ minecraft {
         client2 {
             parent runs.client
             workingDirectory project.file('run-client2')
-            args '--username', 'Player2'
+            args '--username', 'Dev2'
         }
 
         server {

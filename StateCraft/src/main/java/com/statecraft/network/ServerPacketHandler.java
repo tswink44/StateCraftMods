@@ -1,8 +1,10 @@
 package com.statecraft.network;
 
 import com.statecraft.StateCraft;
+import com.statecraft.config.StateCraftConfig;
 import com.statecraft.core.*;
 import com.statecraft.data.NationSavedData;
+import com.statecraft.integration.IntegrationRegistry;
 import com.statecraft.mail.Mail;
 import com.statecraft.mail.Mailbox;
 import com.statecraft.mail.MailManager;
@@ -86,10 +88,27 @@ public class ServerPacketHandler {
                 return;
             }
 
+            // Check creation fee
+            double creationFee = StateCraftConfig.NATION_CREATION_FEE.get();
+            if (creationFee > 0 && IntegrationRegistry.hasEconomyIntegration()) {
+                double playerBalance = IntegrationRegistry.getPlayerBalance(player.getUUID());
+                if (playerBalance < creationFee) {
+                    NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                        "Insufficient funds! Nation creation costs " + IntegrationRegistry.formatCurrency(creationFee) +
+                        ". You have " + IntegrationRegistry.formatCurrency(playerBalance) + "."), player);
+                    return;
+                }
+            }
+
             Nation nation = manager.createNation(packet.getName(), player.getUUID());
             if (nation == null) {
                 NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Could not create nation. Name may be taken."), player);
                 return;
+            }
+
+            // Charge creation fee after successful creation
+            if (creationFee > 0 && IntegrationRegistry.hasEconomyIntegration()) {
+                IntegrationRegistry.withdrawFromPlayer(player.getUUID(), creationFee, "Nation creation fee: " + packet.getName());
             }
 
             if (!packet.getTag().isEmpty()) {
@@ -304,6 +323,12 @@ public class ServerPacketHandler {
                         case STATE_CHUNK_LIMIT -> {
                             NetworkHandler.sendToPlayer(new ActionResultPacket(false,
                                 "State has reached its chunk limit"), player);
+                        }
+                        case NATION_CHUNK_LIMIT -> {
+                            // Get nation's maxChunksPerCity for the error message (nation already defined above)
+                            int limit = nation != null ? nation.getMaxChunksPerCity() : 50;
+                            NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                                "Nation law limits cities to " + limit + " chunks. Enact legislation to increase."), player);
                         }
                         case NOT_CONTIGUOUS -> {
                             NetworkHandler.sendToPlayer(new ActionResultPacket(false,
@@ -570,9 +595,20 @@ public class ServerPacketHandler {
                     }
                 }
 
-                // Add regular members
+                // Add officers (not already listed as admin)
+                for (UUID officerId : nation.getOfficers()) {
+                    if (!officerId.equals(nation.getLeaderId()) && !nation.getAdmins().contains(officerId)) {
+                        String name = getPlayerName(player.server, officerId);
+                        boolean online = isPlayerOnline(player.server, officerId);
+                        members.add(new SyncMembersPacket.MemberInfo(name, "Officer", online));
+                    }
+                }
+
+                // Add regular members (not leader, admin, or officer)
                 for (UUID memberId : nation.getMembers()) {
-                    if (!memberId.equals(nation.getLeaderId()) && !nation.getAdmins().contains(memberId)) {
+                    if (!memberId.equals(nation.getLeaderId()) &&
+                        !nation.getAdmins().contains(memberId) &&
+                        !nation.getOfficers().contains(memberId)) {
                         String name = getPlayerName(player.server, memberId);
                         boolean online = isPlayerOnline(player.server, memberId);
                         members.add(new SyncMembersPacket.MemberInfo(name, "Member", online));
@@ -647,10 +683,34 @@ public class ServerPacketHandler {
                 return;
             }
 
+            // Check if nation can create more states (legislature can change this limit)
+            if (!nation.canCreateState()) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                    "Nation has reached maximum states (" + nation.getMaxStates() + "). Enact legislation to increase the limit."), player);
+                return;
+            }
+
+            // Check creation fee
+            double creationFee = StateCraftConfig.STATE_CREATION_FEE.get();
+            if (creationFee > 0 && IntegrationRegistry.hasEconomyIntegration()) {
+                double playerBalance = IntegrationRegistry.getPlayerBalance(player.getUUID());
+                if (playerBalance < creationFee) {
+                    NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                        "Insufficient funds! State creation costs " + IntegrationRegistry.formatCurrency(creationFee) +
+                        ". You have " + IntegrationRegistry.formatCurrency(playerBalance) + "."), player);
+                    return;
+                }
+            }
+
             State state = manager.createState(nation, name, player.getUUID());
             if (state == null) {
-                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Could not create state. Max states may be reached."), player);
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Could not create state. An error occurred."), player);
                 return;
+            }
+
+            // Charge creation fee after successful creation
+            if (creationFee > 0 && IntegrationRegistry.hasEconomyIntegration()) {
+                IntegrationRegistry.withdrawFromPlayer(player.getUUID(), creationFee, "State creation fee: " + name);
             }
 
             // Mark data dirty
@@ -658,7 +718,9 @@ public class ServerPacketHandler {
                 NationSavedData.get(serverLevel).markForSave();
             }
 
-            NetworkHandler.sendToPlayer(new ActionResultPacket(true, "State '" + name + "' created successfully!"), player);
+            String feeMsg = creationFee > 0 && IntegrationRegistry.hasEconomyIntegration()
+                ? " (Cost: " + IntegrationRegistry.formatCurrency(creationFee) + ")" : "";
+            NetworkHandler.sendToPlayer(new ActionResultPacket(true, "State '" + name + "' created successfully!" + feeMsg), player);
         });
         ctx.get().setPacketHandled(true);
     }
@@ -790,10 +852,27 @@ public class ServerPacketHandler {
                 return;
             }
 
+            // Check creation fee
+            double creationFee = StateCraftConfig.CITY_CREATION_FEE.get();
+            if (creationFee > 0 && IntegrationRegistry.hasEconomyIntegration()) {
+                double playerBalance = IntegrationRegistry.getPlayerBalance(player.getUUID());
+                if (playerBalance < creationFee) {
+                    NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                        "Insufficient funds! City creation costs " + IntegrationRegistry.formatCurrency(creationFee) +
+                        ". You have " + IntegrationRegistry.formatCurrency(playerBalance) + "."), player);
+                    return;
+                }
+            }
+
             City city = manager.createCity(state, name, player.getUUID());
             if (city == null) {
                 NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Could not create city. Max cities may be reached."), player);
                 return;
+            }
+
+            // Charge creation fee after successful creation
+            if (creationFee > 0 && IntegrationRegistry.hasEconomyIntegration()) {
+                IntegrationRegistry.withdrawFromPlayer(player.getUUID(), creationFee, "City creation fee: " + name);
             }
 
             // Mark data dirty
@@ -801,7 +880,9 @@ public class ServerPacketHandler {
                 NationSavedData.get(serverLevel).markForSave();
             }
 
-            NetworkHandler.sendToPlayer(new ActionResultPacket(true, "City '" + name + "' created successfully!"), player);
+            String feeMsg = creationFee > 0 && IntegrationRegistry.hasEconomyIntegration()
+                ? " (Cost: " + IntegrationRegistry.formatCurrency(creationFee) + ")" : "";
+            NetworkHandler.sendToPlayer(new ActionResultPacket(true, "City '" + name + "' created successfully!" + feeMsg), player);
         });
         ctx.get().setPacketHandled(true);
     }
@@ -1256,11 +1337,8 @@ public class ServerPacketHandler {
                         state.setCityPassThroughRate(cityPassThrough / 100.0); // Convert to decimal
                     }
 
-                    // Update max chunks if provided (using passThroughRate field as int)
-                    if (packet.getPassThroughRate() > 0) {
-                        int maxChunks = (int) packet.getPassThroughRate();
-                        state.setMaxChunks(Math.max(1, Math.min(100000, maxChunks)));
-                    }
+                    // Note: Max chunks per state is now controlled by server config (statecraft.toml)
+                    // and cannot be changed via GUI
 
                     manager.markDirty();
                     player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§aState settings updated"));
@@ -1320,11 +1398,8 @@ public class ServerPacketHandler {
                         city.setTaxRate(taxRate / 100.0); // Convert to decimal
                     }
 
-                    // Update max chunks if provided (using passThroughRate field as int)
-                    if (packet.getPassThroughRate() > 0) {
-                        int maxChunks = (int) packet.getPassThroughRate();
-                        city.setMaxChunks(Math.max(1, Math.min(10000, maxChunks)));
-                    }
+                    // Note: Max chunks per city is now controlled by server config (statecraft.toml)
+                    // and cannot be changed via GUI
                     // Note: City pass-through rate is controlled by the State, not the City
 
                     manager.markDirty();
@@ -1541,7 +1616,48 @@ public class ServerPacketHandler {
                 return;
             }
 
-            // Check if player is a member of this nation
+            // Handle NATION join type
+            if (packet.getType() == JoinCitizenshipPacket.JoinType.NATION) {
+                // Check if player is already in a nation
+                Nation playerNation = manager.getPlayerNation(playerId);
+                if (playerNation != null) {
+                    NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                        "You are already in a nation! Leave first before joining another."), player);
+                    return;
+                }
+
+                // Check if nation is open
+                if (!nation.isOpen()) {
+                    NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                        "This nation is not open to new members. Ask for an invite!"), player);
+                    return;
+                }
+
+                // Add player to nation
+                nation.addMember(playerId);
+
+                // Mark data dirty
+                if (player.level() instanceof ServerLevel serverLevel) {
+                    NationSavedData.get(serverLevel).markForSave();
+                }
+
+                NetworkHandler.sendToPlayer(new ActionResultPacket(true,
+                    "You have joined " + nation.getName() + "!"), player);
+
+                // Notify other nation members
+                for (UUID memberId : nation.getMembers()) {
+                    if (!memberId.equals(playerId)) {
+                        ServerPlayer member = player.getServer().getPlayerList().getPlayer(memberId);
+                        if (member != null) {
+                            member.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                "§e" + player.getName().getString() + " §ahas joined the nation!"));
+                        }
+                    }
+                }
+                return;
+            }
+
+            // Check if player is a member of this nation (for STATE/CITY joins)
             Nation playerNation = manager.getPlayerNation(playerId);
             if (playerNation == null || !playerNation.getId().equals(nation.getId())) {
                 NetworkHandler.sendToPlayer(new ActionResultPacket(false,
@@ -1916,6 +2032,91 @@ public class ServerPacketHandler {
         ctx.get().setPacketHandled(true);
     }
 
+    public static void handleInvitePlayer(InvitePlayerPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer sender = ctx.get().getSender();
+            if (sender == null) return;
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+
+            // Find the target player
+            ServerPlayer target = sender.server.getPlayerList().getPlayerByName(packet.getPlayerName());
+            if (target == null) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                    "Player '" + packet.getPlayerName() + "' not found or is offline!"), sender);
+                return;
+            }
+
+            switch (packet.getType()) {
+                case NATION -> {
+                    Nation nation = manager.getNationByName(packet.getEntityName());
+                    if (nation == null) {
+                        NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Nation not found!"), sender);
+                        return;
+                    }
+
+                    // Check if sender has permission to invite
+                    if (!nation.isAdmin(sender.getUUID())) {
+                        NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                            "You don't have permission to invite players to this nation!"), sender);
+                        return;
+                    }
+
+                    // Check if target is already in a nation
+                    if (manager.getPlayerNation(target.getUUID()) != null) {
+                        NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                            "That player is already in a nation!"), sender);
+                        return;
+                    }
+
+                    // Create invitation
+                    Invitation invite = InvitationManager.getInstance().createInvitation(
+                        target.getUUID(),
+                        sender.getUUID(),
+                        nation.getId(),
+                        Invitation.InvitationType.NATION
+                    );
+
+                    if (invite == null) {
+                        NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                            "That player already has a pending invite to your nation!"), sender);
+                        return;
+                    }
+
+                    // Mark data dirty
+                    if (sender.level() instanceof ServerLevel serverLevel) {
+                        NationSavedData.get(serverLevel).markForSave();
+                    }
+
+                    // Notify sender
+                    NetworkHandler.sendToPlayer(new ActionResultPacket(true,
+                        "Invited " + target.getName().getString() + " to " + nation.getName() + "!"), sender);
+
+                    // Notify target
+                    target.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                        "§6You've been invited to join §e" + nation.getName() + "§6!"));
+                    target.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                        "§7Use §e/sc nation accept " + nation.getName() + " §7to join, or §e/sc nation deny " + nation.getName() + " §7to decline."));
+                    target.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                        "§7This invite expires in 5 minutes."));
+                }
+
+                case STATE -> {
+                    // TODO: Implement state invitations if needed
+                    NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                        "State invitations are not yet implemented!"), sender);
+                }
+
+                case CITY -> {
+                    // TODO: Implement city invitations if needed
+                    NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                        "City invitations are not yet implemented!"), sender);
+                }
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
     public static void handleRequestAllNations(RequestAllNationsPacket packet, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
             ServerPlayer player = ctx.get().getSender();
@@ -2006,31 +2207,24 @@ public class ServerPacketHandler {
     // ==================== Economy Integration Helpers ====================
 
     /**
-     * Get the configured chunk claim fee from StateCraft Economy config
-     * Returns 0 if economy mod is not loaded or fee is disabled
+     * Get the configured chunk claim fee from StateCraft config
+     * Returns 0 if fee is disabled or economy mod is not loaded
      */
     private static double getChunkClaimFee() {
         try {
-            // Check if StateCraft Economy is loaded
+            // Check if StateCraft Economy is loaded (required for fee to work)
             if (!net.minecraftforge.fml.ModList.get().isLoaded("statecraft_economy")) {
                 return 0;
             }
 
-            // Use reflection to access economy config to avoid hard dependency
-            Class<?> configClass = Class.forName("com.statecraft.economy.config.EconomyConfig");
-
-            // Check if fee is enabled
-            Object enabledField = configClass.getField("CHUNK_CLAIM_FEE_ENABLED").get(null);
-            boolean enabled = (boolean) enabledField.getClass().getMethod("get").invoke(enabledField);
-            if (!enabled) {
+            // Use StateCraft's own config
+            if (!com.statecraft.config.StateCraftConfig.CHUNK_CLAIM_FEE_ENABLED.get()) {
                 return 0;
             }
 
-            // Get fee amount
-            Object feeField = configClass.getField("CHUNK_CLAIM_FEE").get(null);
-            return (double) feeField.getClass().getMethod("get").invoke(feeField);
+            return com.statecraft.config.StateCraftConfig.CHUNK_CLAIM_FEE.get();
         } catch (Exception e) {
-            StateCraft.LOGGER.debug("Could not get chunk claim fee from economy config: {}", e.getMessage());
+            StateCraft.LOGGER.debug("Could not get chunk claim fee from config: {}", e.getMessage());
             return 0;
         }
     }
@@ -2074,5 +2268,705 @@ public class ServerPacketHandler {
             StateCraft.LOGGER.error("Could not deduct from city treasury: {}", e.getMessage());
         }
     }
+
+    // ==================== Election Handlers ====================
+
+    public static void handleRequestElectionData(RequestElectionDataPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            Nation nation = manager.getPlayerNation(player.getUUID());
+
+            if (nation == null) {
+                // Send empty election data
+                NetworkHandler.sendToPlayer(new SyncElectionDataPacket(
+                    false, "", Election.Status.COMPLETED, 0,
+                    new ArrayList<>(), 0, false, 0, new ArrayList<>(), "", new HashMap<>()
+                ), player);
+                return;
+            }
+
+            ElectionManager electionManager = ElectionManager.getInstance();
+            Election election = electionManager.getActiveElection(nation.getId());
+
+            boolean hasActiveElection = election != null && election.getStatus() == Election.Status.ACTIVE;
+            List<SyncElectionDataPacket.CandidateInfo> candidates = new ArrayList<>();
+            int totalVotes = 0;
+            boolean hasVoted = false;
+            String winnerName = "";
+            Map<UUID, Integer> results = new HashMap<>();
+
+            if (election != null) {
+                UUID incumbentId = election.getIncumbentId();
+                for (Map.Entry<UUID, String> entry : election.getCandidates().entrySet()) {
+                    candidates.add(new SyncElectionDataPacket.CandidateInfo(
+                        entry.getKey(),
+                        entry.getValue(),
+                        entry.getKey().equals(incumbentId)
+                    ));
+                }
+                totalVotes = election.getVoteCount();
+                hasVoted = election.hasVoted(player.getUUID());
+
+                if (election.getStatus() == Election.Status.COMPLETED) {
+                    winnerName = election.getWinnerName();
+                    results = election.getResults();
+                }
+            }
+
+            // Get next election time
+            Long nextTime = electionManager.getNextElectionTime(nation.getId());
+            long nextElectionTime = nextTime != null ? nextTime : 0;
+
+            // Get history
+            List<SyncElectionDataPacket.HistoryEntry> history = new ArrayList<>();
+            for (ElectionResult result : electionManager.getElectionHistory(nation.getId())) {
+                history.add(new SyncElectionDataPacket.HistoryEntry(
+                    result.winnerName(),
+                    result.voteCount(),
+                    result.totalVoters(),
+                    result.timestamp()
+                ));
+            }
+
+            NetworkHandler.sendToPlayer(new SyncElectionDataPacket(
+                hasActiveElection,
+                nation.getName(),
+                election != null ? election.getStatus() : Election.Status.COMPLETED,
+                election != null ? election.getEndTime() : 0,
+                candidates,
+                totalVotes,
+                hasVoted,
+                nextElectionTime,
+                history,
+                winnerName,
+                results
+            ), player);
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleCastVote(CastVotePacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            Nation nation = manager.getPlayerNation(player.getUUID());
+
+            if (nation == null) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "You are not in a nation!"), player);
+                return;
+            }
+
+            String error = ElectionManager.getInstance().castVote(nation, player.getUUID(), packet.getCandidateId());
+            if (error != null) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, error), player);
+            } else {
+                if (player.level() instanceof ServerLevel level) {
+                    NationSavedData.get(level).markForSave();
+                }
+                NetworkHandler.sendToPlayer(new ActionResultPacket(true, "Vote cast successfully!"), player);
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleRegisterCandidate(RegisterCandidatePacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            Nation nation = manager.getPlayerNation(player.getUUID());
+
+            if (nation == null) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "You are not in a nation!"), player);
+                return;
+            }
+
+            String error = ElectionManager.getInstance().registerCandidate(
+                nation, player.getUUID(), player.getName().getString(), player.server);
+
+            if (error != null) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, error), player);
+            } else {
+                if (player.level() instanceof ServerLevel level) {
+                    NationSavedData.get(level).markForSave();
+                }
+                NetworkHandler.sendToPlayer(new ActionResultPacket(true, "You are now a candidate!"), player);
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleRequestLegislatureData(RequestLegislatureDataPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            Nation nation = manager.getNationByName(packet.getNationName());
+
+            if (nation == null) {
+                // Send empty data
+                NetworkHandler.sendToPlayer(new SyncLegislatureDataPacket(
+                    packet.getNationName(), false, false,
+                    new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), 0
+                ), player);
+                return;
+            }
+
+            com.statecraft.legislature.LegislatureManager legManager = com.statecraft.legislature.LegislatureManager.getInstance();
+            com.statecraft.legislature.Legislature legislature = legManager.getOrCreateLegislature(nation.getId());
+
+            // Check if player is a legislature member (governor or officer, but not leader)
+            Set<UUID> votingMembers = legislature.getVotingMembers(nation);
+            boolean isLegislatureMember = votingMembers.contains(player.getUUID());
+            boolean isNationLeader = player.getUUID().equals(nation.getLeaderId());
+
+            // Build active bills list
+            List<SyncLegislatureDataPacket.BillSummary> activeBills = new ArrayList<>();
+            long now = System.currentTimeMillis();
+
+            for (com.statecraft.legislature.Bill bill : legislature.getActiveBills()) {
+                long timeRemaining = 0;
+                if (bill.getStatus() == com.statecraft.legislature.Bill.Status.DEBATE) {
+                    timeRemaining = Math.max(0, bill.getDebateEndTime() - now);
+                } else if (bill.getStatus() == com.statecraft.legislature.Bill.Status.VOTING) {
+                    timeRemaining = Math.max(0, bill.getVoteEndTime() - now);
+                }
+
+                boolean playerHasVoted = bill.getVotes().containsKey(player.getUUID());
+                boolean needsLeaderAction = bill.getStatus() == com.statecraft.legislature.Bill.Status.PASSED && !bill.isVetoProof();
+
+                activeBills.add(new SyncLegislatureDataPacket.BillSummary(
+                    bill.getBillId().toString(),
+                    bill.getBillNumber(),
+                    bill.getTitle(),
+                    bill.getAuthorName(),
+                    bill.getStatus().name(),
+                    bill.getYesVotes(),
+                    bill.getNoVotes(),
+                    timeRemaining,
+                    playerHasVoted,
+                    needsLeaderAction
+                ));
+            }
+
+            // Build history list (most recent 10)
+            List<SyncLegislatureDataPacket.BillSummary> recentHistory = new ArrayList<>();
+            List<com.statecraft.legislature.Bill> history = legislature.getBillHistory();
+            for (int i = 0; i < Math.min(10, history.size()); i++) {
+                com.statecraft.legislature.Bill bill = history.get(i);
+                recentHistory.add(new SyncLegislatureDataPacket.BillSummary(
+                    bill.getBillId().toString(),
+                    bill.getBillNumber(),
+                    bill.getTitle(),
+                    bill.getAuthorName(),
+                    bill.getStatus().name(),
+                    bill.getYesVotes(),
+                    bill.getNoVotes(),
+                    0,
+                    false,
+                    false
+                ));
+            }
+
+            // Build voting members list
+            List<String> votingMemberNames = new ArrayList<>();
+            for (UUID memberId : votingMembers) {
+                String memberName = player.getServer().getProfileCache()
+                    .get(memberId)
+                    .map(profile -> profile.getName())
+                    .orElse("Unknown");
+                votingMemberNames.add(memberName);
+            }
+
+            NetworkHandler.sendToPlayer(new SyncLegislatureDataPacket(
+                nation.getName(),
+                isLegislatureMember,
+                isNationLeader,
+                activeBills,
+                recentHistory,
+                votingMemberNames,
+                votingMembers.size()
+            ), player);
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleRequestOfficerManagementData(RequestOfficerManagementDataPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            Nation nation = manager.getNationByName(packet.getNationName());
+
+            if (nation == null) {
+                NetworkHandler.sendToPlayer(new SyncOfficerManagementDataPacket(
+                    packet.getNationName(), false, new ArrayList<>(), new ArrayList<>()
+                ), player);
+                return;
+            }
+
+            boolean isLeader = player.getUUID().equals(nation.getLeaderId());
+
+            // Build list of current officers
+            List<SyncOfficerManagementDataPacket.OfficerInfo> officers = new ArrayList<>();
+            for (UUID officerId : nation.getOfficers()) {
+                String officerName = player.getServer().getProfileCache()
+                    .get(officerId)
+                    .map(profile -> profile.getName())
+                    .orElse("Unknown");
+                boolean isOnline = player.getServer().getPlayerList().getPlayer(officerId) != null;
+                officers.add(new SyncOfficerManagementDataPacket.OfficerInfo(officerId, officerName, isOnline));
+            }
+
+            // Build list of citizens who can be appointed (all nation members except leader and current officers)
+            List<SyncOfficerManagementDataPacket.CitizenInfo> citizens = new ArrayList<>();
+            Set<UUID> allMembers = nation.getAllMembers();
+            Set<UUID> currentOfficers = nation.getOfficers();
+
+            // Check which members are governors
+            Set<UUID> governors = new HashSet<>();
+            for (State state : nation.getAllStates()) {
+                governors.add(state.getGovernorId());
+            }
+
+            for (UUID memberId : allMembers) {
+                // Skip leader - they can't be an officer
+                if (memberId.equals(nation.getLeaderId())) continue;
+                // Skip current officers (they're shown separately)
+                if (currentOfficers.contains(memberId)) continue;
+
+                String memberName = player.getServer().getProfileCache()
+                    .get(memberId)
+                    .map(profile -> profile.getName())
+                    .orElse("Unknown");
+                boolean isOnline = player.getServer().getPlayerList().getPlayer(memberId) != null;
+                boolean isGovernor = governors.contains(memberId);
+
+                citizens.add(new SyncOfficerManagementDataPacket.CitizenInfo(memberId, memberName, isGovernor, isOnline));
+            }
+
+            // Sort citizens: online first, then by name
+            citizens.sort((a, b) -> {
+                if (a.isOnline() != b.isOnline()) return a.isOnline() ? -1 : 1;
+                return a.getPlayerName().compareToIgnoreCase(b.getPlayerName());
+            });
+
+            NetworkHandler.sendToPlayer(new SyncOfficerManagementDataPacket(
+                nation.getName(), isLeader, citizens, officers
+            ), player);
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleModifyOfficer(ModifyOfficerPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            Nation nation = manager.getNationByName(packet.getNationName());
+
+            if (nation == null) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Nation not found!"), player);
+                return;
+            }
+
+            // Only the nation leader can modify officers
+            if (!player.getUUID().equals(nation.getLeaderId())) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Only the nation leader can manage officers!"), player);
+                return;
+            }
+
+            UUID targetId = packet.getTargetPlayerId();
+
+            if (packet.getAction() == ModifyOfficerPacket.Action.APPOINT) {
+                // Validate: max 3 officers
+                if (nation.getOfficers().size() >= 3) {
+                    NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Maximum of 3 officers allowed!"), player);
+                    return;
+                }
+
+                // Validate: must be a nation member
+                if (!nation.getAllMembers().contains(targetId)) {
+                    NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Player is not a member of this nation!"), player);
+                    return;
+                }
+
+                // Validate: can't appoint the leader
+                if (targetId.equals(nation.getLeaderId())) {
+                    NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Cannot appoint the leader as an officer!"), player);
+                    return;
+                }
+
+                // Validate: not already an officer
+                if (nation.isOfficer(targetId)) {
+                    NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Player is already an officer!"), player);
+                    return;
+                }
+
+                // Appoint the officer
+                nation.addOfficer(targetId);
+
+                // Save data
+                if (player.level() instanceof ServerLevel level) {
+                    NationSavedData.get(level).markForSave();
+                }
+
+                String targetName = player.getServer().getProfileCache()
+                    .get(targetId)
+                    .map(profile -> profile.getName())
+                    .orElse("Unknown");
+
+                NetworkHandler.sendToPlayer(new ActionResultPacket(true, targetName + " has been appointed as an officer!"), player);
+
+                // Notify the appointed player if online
+                ServerPlayer targetPlayer = player.getServer().getPlayerList().getPlayer(targetId);
+                if (targetPlayer != null) {
+                    targetPlayer.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                        "§a[" + nation.getName() + "] §eYou have been appointed as a nation officer!"));
+                }
+
+            } else if (packet.getAction() == ModifyOfficerPacket.Action.REMOVE) {
+                // Validate: must be an officer
+                if (!nation.isOfficer(targetId)) {
+                    NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Player is not an officer!"), player);
+                    return;
+                }
+
+                // Remove the officer
+                nation.removeOfficer(targetId);
+
+                // Save data
+                if (player.level() instanceof ServerLevel level) {
+                    NationSavedData.get(level).markForSave();
+                }
+
+                String targetName = player.getServer().getProfileCache()
+                    .get(targetId)
+                    .map(profile -> profile.getName())
+                    .orElse("Unknown");
+
+                NetworkHandler.sendToPlayer(new ActionResultPacket(true, targetName + " has been removed as an officer."), player);
+
+                // Notify the removed player if online
+                ServerPlayer targetPlayer = player.getServer().getPlayerList().getPlayer(targetId);
+                if (targetPlayer != null) {
+                    targetPlayer.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                        "§c[" + nation.getName() + "] §eYou have been removed as a nation officer."));
+                }
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleProposeBill(ProposeBillPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            Nation nation = manager.getNationByName(packet.getNationName());
+
+            if (nation == null) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Nation not found!"), player);
+                return;
+            }
+
+            com.statecraft.legislature.LegislatureManager legManager = com.statecraft.legislature.LegislatureManager.getInstance();
+            com.statecraft.legislature.Legislature legislature = legManager.getOrCreateLegislature(nation.getId());
+
+            // Check if player can propose bills (must be a voting member)
+            if (!legislature.canProposeBill(nation, player.getUUID())) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                    "You must be a governor or officer to propose legislation!"), player);
+                return;
+            }
+
+            // Validate bill data
+            String title = packet.getTitle().trim();
+            String description = packet.getDescription().trim();
+
+            if (title.length() < 5 || title.length() > 64) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Title must be 5-64 characters!"), player);
+                return;
+            }
+
+            if (packet.getPolicyChanges().isEmpty()) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Bill must have at least one policy change!"), player);
+                return;
+            }
+
+            // Create the draft bill
+            String playerName = player.getName().getString();
+            com.statecraft.legislature.Bill bill = legislature.createDraft(
+                player.getUUID(), playerName, title, description);
+
+            // Add policy changes
+            for (Map.Entry<String, String> entry : packet.getPolicyChanges().entrySet()) {
+                try {
+                    com.statecraft.legislature.PolicyType policyType =
+                        com.statecraft.legislature.PolicyType.valueOf(entry.getKey());
+
+                    if (policyType.isValidValue(entry.getValue())) {
+                        bill.addPolicyChange(policyType, entry.getValue());
+                    }
+                } catch (IllegalArgumentException e) {
+                    // Invalid policy type, skip
+                }
+            }
+
+            if (bill.getPolicyChanges().isEmpty()) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "No valid policy changes!"), player);
+                return;
+            }
+
+            // Submit for debate (default 24 hours debate period)
+            long debateDuration = com.statecraft.config.StateCraftConfig.LEGISLATURE_DEBATE_HOURS.get() * 60 * 60 * 1000L;
+            boolean submitted = legislature.submitForDebate(bill.getBillId(), debateDuration);
+
+            if (!submitted) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Failed to submit bill!"), player);
+                return;
+            }
+
+            // Save data
+            if (player.level() instanceof ServerLevel level) {
+                NationSavedData.get(level).markForSave();
+            }
+
+            // Notify legislature members
+            String message = "§6[Legislature] §e" + playerName + " proposed: §f" + title;
+            Set<UUID> votingMembers = legislature.getVotingMembers(nation);
+            for (UUID memberId : votingMembers) {
+                ServerPlayer memberPlayer = player.getServer().getPlayerList().getPlayer(memberId);
+                if (memberPlayer != null) {
+                    memberPlayer.sendSystemMessage(net.minecraft.network.chat.Component.literal(message));
+                }
+            }
+
+            // Also notify the leader
+            ServerPlayer leader = player.getServer().getPlayerList().getPlayer(nation.getLeaderId());
+            if (leader != null && !votingMembers.contains(nation.getLeaderId())) {
+                leader.sendSystemMessage(net.minecraft.network.chat.Component.literal(message));
+            }
+
+            NetworkHandler.sendToPlayer(new ActionResultPacket(true,
+                "Bill '" + title + "' submitted for debate! (" + bill.getBillNumber() + ")"), player);
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleVoteBill(VoteBillPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            Nation nation = manager.getNationByName(packet.getNationName());
+
+            if (nation == null) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Nation not found!"), player);
+                return;
+            }
+
+            com.statecraft.legislature.LegislatureManager legManager = com.statecraft.legislature.LegislatureManager.getInstance();
+            com.statecraft.legislature.Legislature legislature = legManager.getOrCreateLegislature(nation.getId());
+
+            // Check if player is a voting member
+            Set<UUID> votingMembers = legislature.getVotingMembers(nation);
+            if (!votingMembers.contains(player.getUUID())) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                    "You are not a voting member of the legislature!"), player);
+                return;
+            }
+
+            // Find the bill
+            UUID billUUID;
+            try {
+                billUUID = UUID.fromString(packet.getBillId());
+            } catch (IllegalArgumentException e) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Invalid bill ID!"), player);
+                return;
+            }
+
+            com.statecraft.legislature.Bill bill = legislature.getActiveBill(billUUID);
+            if (bill == null) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Bill not found!"), player);
+                return;
+            }
+
+            // Check if bill is in voting phase
+            if (bill.getStatus() != com.statecraft.legislature.Bill.Status.VOTING) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Bill is not in voting phase!"), player);
+                return;
+            }
+
+            // Check if already voted
+            if (bill.getVotes().containsKey(player.getUUID())) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "You have already voted on this bill!"), player);
+                return;
+            }
+
+            // Cast vote
+            com.statecraft.legislature.Bill.Vote vote = switch (packet.getVoteType()) {
+                case YES -> com.statecraft.legislature.Bill.Vote.YES;
+                case NO -> com.statecraft.legislature.Bill.Vote.NO;
+                case ABSTAIN -> com.statecraft.legislature.Bill.Vote.ABSTAIN;
+            };
+
+            boolean success = bill.castVote(player.getUUID(), vote);
+            if (!success) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Failed to cast vote!"), player);
+                return;
+            }
+
+            // Save data
+            if (player.level() instanceof ServerLevel level) {
+                NationSavedData.get(level).markForSave();
+            }
+
+            String voteText = switch (packet.getVoteType()) {
+                case YES -> "§aYES";
+                case NO -> "§cNO";
+                case ABSTAIN -> "§7ABSTAIN";
+            };
+
+            NetworkHandler.sendToPlayer(new ActionResultPacket(true,
+                "Vote recorded: " + voteText + " §fon " + bill.getBillNumber()), player);
+
+            // Notify other legislature members about the vote
+            String message = "§6[Legislature] §7" + player.getName().getString() + " voted on " + bill.getBillNumber();
+            for (UUID memberId : votingMembers) {
+                if (!memberId.equals(player.getUUID())) {
+                    ServerPlayer memberPlayer = player.getServer().getPlayerList().getPlayer(memberId);
+                    if (memberPlayer != null) {
+                        memberPlayer.sendSystemMessage(net.minecraft.network.chat.Component.literal(message));
+                    }
+                }
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleLeaderBillAction(LeaderBillActionPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            Nation nation = manager.getNationByName(packet.getNationName());
+
+            if (nation == null) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Nation not found!"), player);
+                return;
+            }
+
+            // Check if player is the nation leader
+            if (!nation.getLeaderId().equals(player.getUUID())) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                    "Only the nation leader can sign or veto bills!"), player);
+                return;
+            }
+
+            com.statecraft.legislature.LegislatureManager legManager = com.statecraft.legislature.LegislatureManager.getInstance();
+            com.statecraft.legislature.Legislature legislature = legManager.getOrCreateLegislature(nation.getId());
+
+            // Find the bill
+            UUID billUUID;
+            try {
+                billUUID = UUID.fromString(packet.getBillId());
+            } catch (IllegalArgumentException e) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Invalid bill ID!"), player);
+                return;
+            }
+
+            com.statecraft.legislature.Bill bill = legislature.getActiveBill(billUUID);
+            if (bill == null) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Bill not found!"), player);
+                return;
+            }
+
+            // Check if bill is in PASSED status
+            if (bill.getStatus() != com.statecraft.legislature.Bill.Status.PASSED) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                    "Bill is not awaiting leader action!"), player);
+                return;
+            }
+
+            String resultMessage;
+            String broadcastMessage;
+
+            if (packet.getActionType() == LeaderBillActionPacket.ActionType.SIGN) {
+                // Sign the bill into law
+                bill.enact();
+
+                // Apply policy changes through the LegislatureManager
+                legManager.applyPolicyChanges(nation, bill.getPolicyChanges());
+
+                // Create a law from this bill with proper constructor
+                String lawNumber = legislature.getCodex().generateLawNumber(com.statecraft.legislature.Law.Type.NATION_LAW);
+                com.statecraft.legislature.Law law = new com.statecraft.legislature.Law(
+                    nation.getId(),
+                    lawNumber,
+                    com.statecraft.legislature.Law.Type.NATION_LAW,
+                    bill.getTitle(),
+                    bill.getDescription(),
+                    bill.getAuthorName(),
+                    bill.getPolicyChanges(),
+                    bill.getYesVotes(),
+                    bill.getNoVotes(),
+                    bill.getAbstainVotes(),
+                    bill.isVetoProof(),
+                    null  // Full text for custom laws
+                );
+                legislature.getCodex().addLaw(law);
+
+                resultMessage = "Bill " + bill.getBillNumber() + " signed into law!";
+                broadcastMessage = "§6[Legislature] §a" + player.getName().getString() +
+                    " signed " + bill.getBillNumber() + " into law: §f" + bill.getTitle();
+            } else {
+                // Veto the bill
+                if (bill.isVetoProof()) {
+                    NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                        "This bill passed with a veto-proof majority and cannot be vetoed!"), player);
+                    return;
+                }
+
+                bill.veto();
+                resultMessage = "Bill " + bill.getBillNumber() + " vetoed.";
+                broadcastMessage = "§6[Legislature] §c" + player.getName().getString() +
+                    " vetoed " + bill.getBillNumber() + ": §f" + bill.getTitle();
+            }
+
+            // Archive the bill
+            legislature.archiveBill(billUUID);
+
+            // Save data
+            if (player.level() instanceof ServerLevel level) {
+                NationSavedData.get(level).markForSave();
+            }
+
+            NetworkHandler.sendToPlayer(new ActionResultPacket(true, resultMessage), player);
+
+            // Notify all legislature members and the leader
+            Set<UUID> votingMembers = legislature.getVotingMembers(nation);
+            for (UUID memberId : votingMembers) {
+                ServerPlayer memberPlayer = player.getServer().getPlayerList().getPlayer(memberId);
+                if (memberPlayer != null) {
+                    memberPlayer.sendSystemMessage(net.minecraft.network.chat.Component.literal(broadcastMessage));
+                }
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
 }
+
 

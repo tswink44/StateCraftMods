@@ -10,6 +10,7 @@ import net.minecraft.network.chat.Component;
 /**
  * Screen for managing city settings (mayor/governor/admin only)
  * Note: Cities set the base tax rate. States set the pass-through rate from cities.
+ *       Max chunks is controlled by server config (statecraft.toml)
  */
 public class CitySettingsScreen extends StateCraftScreen {
     private final String nationName;
@@ -20,7 +21,6 @@ public class CitySettingsScreen extends StateCraftScreen {
     private EditBox descriptionField;
     private EditBox flagUrlField;
     private EditBox taxRateField;
-    private EditBox maxChunksField;
     private Button publicJoinToggle;
     private Button saveButton;
 
@@ -29,14 +29,13 @@ public class CitySettingsScreen extends StateCraftScreen {
     private String currentFlagUrl = "";
     private String currentDescription = "";
     private double currentTaxRate = 5.0; // Default 5%
-    private int currentMaxChunks = 50; // Default 50 chunks
 
     public CitySettingsScreen(String nationName, String stateName, String cityName) {
         super(Component.literal("City Settings"));
         this.nationName = nationName;
         this.stateName = stateName;
         this.cityName = cityName;
-        this.guiWidth = 280; this.guiHeight = 250;
+        this.guiWidth = 280; this.guiHeight = 220;
     }
 
     @Override
@@ -83,12 +82,6 @@ public class CitySettingsScreen extends StateCraftScreen {
         this.taxRateField.setResponder(s -> hasChanges = true);
         this.addRenderableWidget(this.taxRateField);
 
-        // Max chunks field
-        this.maxChunksField = new EditBox(this.font, fieldX, startY + rowSpacing * 5, 60, 16, Component.literal("Max Chunks"));
-        this.maxChunksField.setMaxLength(5);
-        this.maxChunksField.setValue(String.valueOf(currentMaxChunks));
-        this.maxChunksField.setResponder(s -> hasChanges = true);
-        this.addRenderableWidget(this.maxChunksField);
 
         // Save button
         this.saveButton = this.addRenderableWidget(createButton(
@@ -121,7 +114,6 @@ public class CitySettingsScreen extends StateCraftScreen {
         graphics.drawString(this.font, "§7Join:", labelX, startY + rowSpacing * 3 + 4, COLOR_TEXT);
         graphics.drawString(this.font, "§7Tax Rate:", labelX, startY + rowSpacing * 4 + 4, COLOR_TEXT);
         graphics.drawString(this.font, "§8%", guiLeft + 165, startY + rowSpacing * 4 + 4, 0xFF888888);
-        graphics.drawString(this.font, "§7Max Chunks:", labelX, startY + rowSpacing * 5 + 4, COLOR_TEXT);
 
         // Unsaved changes indicator
         if (hasChanges) {
@@ -143,14 +135,9 @@ public class CitySettingsScreen extends StateCraftScreen {
         double taxRate = parseDouble(taxRateField.getValue(), currentTaxRate);
         taxRate = Math.max(0, Math.min(100, taxRate));
 
-        // Parse max chunks
-        int maxChunks = parseInt(maxChunksField.getValue(), currentMaxChunks);
-        maxChunks = Math.max(1, Math.min(10000, maxChunks));
-
-        // Send update packet - pass-through is -1 since states control that, not cities
-        // maxChunks is sent via a separate field (using passThroughRate slot as int)
+        // Send update packet (maxChunks is now server config only)
         NetworkHandler.sendToServer(new UpdateEntitySettingsPacket(
-            UpdateEntitySettingsPacket.EntityType.CITY, cityName, newName, flagUrl, publicJoin, taxRate, maxChunks));
+            UpdateEntitySettingsPacket.EntityType.CITY, cityName, newName, flagUrl, publicJoin, taxRate, 0));
 
         hasChanges = false;
         String finalName = newName.isEmpty() ? cityName : newName;
@@ -184,19 +171,14 @@ public class CitySettingsScreen extends StateCraftScreen {
 
     // Called to populate current settings
     public void setCurrentSettings(String description, String flagUrl, boolean publicJoin) {
-        setCurrentSettings(description, flagUrl, publicJoin, 5.0, 50);
+        setCurrentSettings(description, flagUrl, publicJoin, 5.0);
     }
 
     public void setCurrentSettings(String description, String flagUrl, boolean publicJoin, double taxRate) {
-        setCurrentSettings(description, flagUrl, publicJoin, taxRate, 50);
-    }
-
-    public void setCurrentSettings(String description, String flagUrl, boolean publicJoin, double taxRate, int maxChunks) {
         this.currentDescription = description != null ? description : "";
         this.currentFlagUrl = flagUrl != null ? flagUrl : "";
         this.publicJoin = publicJoin;
         this.currentTaxRate = taxRate;
-        this.currentMaxChunks = maxChunks;
 
         if (this.descriptionField != null) {
             this.descriptionField.setValue(currentDescription);
@@ -210,9 +192,11 @@ public class CitySettingsScreen extends StateCraftScreen {
         if (this.taxRateField != null) {
             this.taxRateField.setValue(String.format("%.1f", taxRate));
         }
-        if (this.maxChunksField != null) {
-            this.maxChunksField.setValue(String.valueOf(maxChunks));
-        }
         this.hasChanges = false;
+    }
+
+    // Keep overload for backward compatibility
+    public void setCurrentSettings(String description, String flagUrl, boolean publicJoin, double taxRate, int maxChunks) {
+        setCurrentSettings(description, flagUrl, publicJoin, taxRate);
     }
 }

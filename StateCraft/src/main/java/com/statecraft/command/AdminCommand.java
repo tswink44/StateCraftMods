@@ -43,7 +43,9 @@ public class AdminCommand {
                 .then(Commands.argument("player", EntityArgument.player())
                     .executes(AdminCommand::setChunkOwner)))
             .then(Commands.literal("reload")
-                .executes(AdminCommand::reloadConfig));
+                .executes(AdminCommand::reloadConfig))
+            .then(ElectionCommand.registerAdmin())
+            .then(LegislatureCommand.registerAdmin());
     }
 
     /**

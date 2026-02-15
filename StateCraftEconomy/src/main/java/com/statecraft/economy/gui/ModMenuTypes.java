@@ -22,6 +22,9 @@ public class ModMenuTypes {
             return new ATMMenu(windowId, inv, pos, bankId);
         }));
 
+    public static final RegistryObject<MenuType<TradingHubMenu>> TRADING_HUB = MENUS.register("trading_hub",
+        () -> IForgeMenuType.create(TradingHubMenu::new));
+
     public static void register(IEventBus eventBus) {
         MENUS.register(eventBus);
     }

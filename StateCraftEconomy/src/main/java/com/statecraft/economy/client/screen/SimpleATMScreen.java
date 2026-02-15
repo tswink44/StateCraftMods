@@ -851,10 +851,19 @@ public class SimpleATMScreen extends Screen {
                 showStatus("§cAmount must be positive", true);
                 return;
             }
+
+            // Get selected account info to tell server which account to deposit to
+            SyncAccountsPacket.AccountInfo selectedAccount = getSelectedAccount();
+            String accountTarget = "";
+            if (selectedAccount != null && !"PERSONAL".equals(selectedAccount.type())) {
+                // Format as TYPE:ID for government accounts
+                accountTarget = selectedAccount.type() + ":" + selectedAccount.id();
+            }
+
             NetworkHandler.sendToServer(new ATMTransactionPacket(
                 ATMTransactionPacket.Action.DEPOSIT,
                 amount,
-                ""
+                accountTarget
             ));
             showStatus("§aProcessing deposit...", false);
         } catch (NumberFormatException e) {
@@ -873,10 +882,19 @@ public class SimpleATMScreen extends Screen {
                 showStatus("§cInsufficient funds", true);
                 return;
             }
+
+            // Get selected account info to tell server which account to withdraw from
+            SyncAccountsPacket.AccountInfo selectedAccount = getSelectedAccount();
+            String accountTarget = "";
+            if (selectedAccount != null && !"PERSONAL".equals(selectedAccount.type())) {
+                // Format as TYPE:ID for government accounts
+                accountTarget = selectedAccount.type() + ":" + selectedAccount.id();
+            }
+
             NetworkHandler.sendToServer(new ATMTransactionPacket(
                 ATMTransactionPacket.Action.WITHDRAW,
                 amount,
-                ""
+                accountTarget
             ));
             showStatus("§aProcessing withdrawal...", false);
         } catch (NumberFormatException e) {

@@ -27,9 +27,19 @@ public class ModBlocks {
             .strength(3.0F, 6.0F)
             .noOcclusion()));
 
+    // Trading Hub Block
+    public static final RegistryObject<Block> TRADING_HUB = BLOCKS.register("trading_hub",
+        () -> new TradingHubBlock(BlockBehaviour.Properties.of()
+            .mapColor(MapColor.WOOD)
+            .strength(2.5F, 3.0F)
+            .noOcclusion()));
+
     // Register block items
     public static final RegistryObject<Item> ATM_ITEM = ModItems.ITEMS.register("atm",
         () -> new BlockItem(ATM.get(), new Item.Properties()));
+
+    public static final RegistryObject<Item> TRADING_HUB_ITEM = ModItems.ITEMS.register("trading_hub",
+        () -> new BlockItem(TRADING_HUB.get(), new Item.Properties()));
 
     public static void register(IEventBus eventBus) {
         BLOCKS.register(eventBus);

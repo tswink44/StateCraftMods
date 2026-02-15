@@ -31,7 +31,7 @@ public class NationSettingsScreen extends StateCraftScreen {
     public NationSettingsScreen(String nationName) {
         super(Component.literal("Nation Settings"));
         this.nationName = nationName;
-        this.guiWidth = 280; this.guiHeight = 250;
+        this.guiWidth = 280; this.guiHeight = 275;
     }
 
     @Override
@@ -83,6 +83,13 @@ public class NationSettingsScreen extends StateCraftScreen {
         this.statePassThroughField.setResponder(s -> hasChanges = true);
         this.addRenderableWidget(this.statePassThroughField);
 
+        // Officers management button
+        this.addRenderableWidget(createButton(
+            fieldX, startY + rowSpacing * 6, 100, 16,
+            Component.literal("§eManage Officers"),
+            btn -> openOfficerManagement()
+        ));
+
         // Save button
         this.saveButton = this.addRenderableWidget(createButton(
             guiLeft + guiWidth / 2 - 85, guiTop + guiHeight - 30,
@@ -115,6 +122,7 @@ public class NationSettingsScreen extends StateCraftScreen {
         graphics.drawString(this.font, "§7Status:", labelX, startY + rowSpacing * 4 + 4, COLOR_TEXT);
         graphics.drawString(this.font, "§7From States:", labelX, startY + rowSpacing * 5 + 4, COLOR_TEXT);
         graphics.drawString(this.font, "§8%", guiLeft + 165, startY + rowSpacing * 5 + 4, 0xFF888888);
+        graphics.drawString(this.font, "§7Officers:", labelX, startY + rowSpacing * 6 + 4, COLOR_TEXT);
 
         // Unsaved changes indicator
         if (hasChanges) {
@@ -163,6 +171,10 @@ public class NationSettingsScreen extends StateCraftScreen {
 
     private void goBack() {
         this.minecraft.setScreen(new NationInfoScreen(nationName));
+    }
+
+    private void openOfficerManagement() {
+        this.minecraft.setScreen(new OfficerManagementScreen(nationName));
     }
 
     @Override

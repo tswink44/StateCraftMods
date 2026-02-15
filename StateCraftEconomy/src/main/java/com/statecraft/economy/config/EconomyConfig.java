@@ -26,12 +26,6 @@ public class EconomyConfig {
     public static final ForgeConfigSpec.BooleanValue ATM_REQUIRES_POWER;
     public static final ForgeConfigSpec.IntValue ATM_RANGE;
 
-    // StateCraft integration
-    public static final ForgeConfigSpec.BooleanValue ENABLE_NATION_TREASURY;
-    public static final ForgeConfigSpec.DoubleValue NATION_TAX_RATE;
-    public static final ForgeConfigSpec.BooleanValue CITY_CAN_HAVE_TREASURY;
-    public static final ForgeConfigSpec.DoubleValue CHUNK_CLAIM_FEE;
-    public static final ForgeConfigSpec.BooleanValue CHUNK_CLAIM_FEE_ENABLED;
 
     static {
         BUILDER.comment("StateCraft Economy Configuration").push("economy");
@@ -81,24 +75,6 @@ public class EconomyConfig {
         BUILDER.comment("Range in blocks that ATM can be accessed from");
         ATM_RANGE = BUILDER.defineInRange("range", 5, 1, 16);
 
-        BUILDER.pop();
-
-        BUILDER.comment("StateCraft Integration Settings").push("statecraft");
-
-        BUILDER.comment("Enable nation treasury integration (requires StateCraft mod)");
-        ENABLE_NATION_TREASURY = BUILDER.define("enableNationTreasury", true);
-
-        BUILDER.comment("Default nation tax rate on transactions (0.0 = no tax)");
-        NATION_TAX_RATE = BUILDER.defineInRange("nationTaxRate", 0.0, 0.0, 0.5);
-
-        BUILDER.comment("Allow cities to have their own treasury");
-        CITY_CAN_HAVE_TREASURY = BUILDER.define("cityCanHaveTreasury", true);
-
-        BUILDER.comment("Enable chunk claim fee (cities must pay to claim chunks)");
-        CHUNK_CLAIM_FEE_ENABLED = BUILDER.define("chunkClaimFeeEnabled", true);
-
-        BUILDER.comment("Fee amount cities must pay to claim each chunk");
-        CHUNK_CLAIM_FEE = BUILDER.defineInRange("chunkClaimFee", 100.0, 0.0, 1000000.0);
 
         BUILDER.pop();
 

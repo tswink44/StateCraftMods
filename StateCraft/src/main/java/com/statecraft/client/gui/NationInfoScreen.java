@@ -2,6 +2,7 @@ package com.statecraft.client.gui;
 
 import com.statecraft.client.FlagTextureManager;
 import com.statecraft.network.NetworkHandler;
+import com.statecraft.network.packets.JoinCitizenshipPacket;
 import com.statecraft.network.packets.LeaveCitizenshipPacket;
 import com.statecraft.network.packets.RequestNationDetailsPacket;
 import net.minecraft.client.gui.GuiGraphics;
@@ -49,6 +50,8 @@ public class NationInfoScreen extends StateCraftScreen {
     private Button settingsButton;
     private Button mailButton;
     private Button leaveButton;
+    private Button joinButton;
+    private Button legislatureButton;
 
     @Override
     protected void init() {
@@ -57,27 +60,49 @@ public class NationInfoScreen extends StateCraftScreen {
         // Request detailed data
         NetworkHandler.sendToServer(new RequestNationDetailsPacket(nationName));
 
-        int buttonY = guiTop + guiHeight - 30;
-        int buttonSpacing = 45;
-        int startX = guiLeft + 8;
+        // Two rows of buttons
+        int row1Y = guiTop + guiHeight - 52;
+        int row2Y = guiTop + guiHeight - 28;
+        int buttonWidth = 55;
+        int buttonSpacing = 60;
+        int startX = guiLeft + 10;
+
+        // === Row 1: Navigation buttons (always visible) ===
 
         // Members button
         this.addRenderableWidget(createButton(
-            startX, buttonY, 44, 20,
+            startX, row1Y, buttonWidth, 20,
             Component.literal("Members"),
             btn -> openMembersScreen()
         ));
 
         // States button
         this.addRenderableWidget(createButton(
-            startX + buttonSpacing, buttonY, 44, 20,
+            startX + buttonSpacing, row1Y, buttonWidth, 20,
             Component.literal("States"),
             btn -> openStatesScreen()
         ));
 
+        // Elections button
+        this.addRenderableWidget(createButton(
+            startX + buttonSpacing * 2, row1Y, buttonWidth, 20,
+            Component.literal("§6Vote"),
+            btn -> openElectionsScreen()
+        ));
+
+        // Legislature button (only for legislature members - governors/officers)
+        legislatureButton = this.addRenderableWidget(createButton(
+            startX + buttonSpacing * 3, row1Y, buttonWidth, 20,
+            Component.literal("§bLaws"),
+            btn -> openLegislatureScreen()
+        ));
+        legislatureButton.visible = false;
+
+        // === Row 2: Admin/action buttons ===
+
         // Mailbox button (admin only) - hidden until we know permissions
         mailButton = this.addRenderableWidget(createButton(
-            startX + buttonSpacing * 2, buttonY, 44, 20,
+            startX, row2Y, buttonWidth, 20,
             Component.literal("§eMail"),
             btn -> openMailboxScreen()
         ));
@@ -85,7 +110,7 @@ public class NationInfoScreen extends StateCraftScreen {
 
         // Settings button (admin only) - hidden until we know permissions
         settingsButton = this.addRenderableWidget(createButton(
-            startX + buttonSpacing * 3, buttonY, 44, 20,
+            startX + buttonSpacing, row2Y, buttonWidth, 20,
             Component.literal("Settings"),
             btn -> openSettingsScreen()
         ));
@@ -93,15 +118,23 @@ public class NationInfoScreen extends StateCraftScreen {
 
         // Leave button (hidden for leaders) - hidden until we know permissions
         leaveButton = this.addRenderableWidget(createButton(
-            startX + buttonSpacing * 4, buttonY, 44, 20,
+            startX + buttonSpacing * 2, row2Y, buttonWidth, 20,
             Component.literal("§cLeave"),
             btn -> leaveNation()
         ));
         leaveButton.visible = false;
 
-        // Back button
+        // Join button (only visible for non-members when nation is open)
+        joinButton = this.addRenderableWidget(createButton(
+            startX + buttonSpacing * 2, row2Y, buttonWidth, 20,
+            Component.literal("§aJoin"),
+            btn -> joinNation()
+        ));
+        joinButton.visible = false;
+
+        // Back button (always visible, right side)
         this.addRenderableWidget(createButton(
-            guiLeft + guiWidth - 50, buttonY, 42, 20,
+            guiLeft + guiWidth - 55, row2Y, 45, 20,
             Component.literal("Back"),
             btn -> goBack()
         ));
@@ -184,9 +217,9 @@ public class NationInfoScreen extends StateCraftScreen {
         // Enemies
         graphics.drawString(this.font, "§cEnemies: §f" + (enemyNames.isEmpty() ? "None" : String.join(", ", enemyNames)), rightCol, y, COLOR_TEXT);
 
-        // Description at bottom
+        // Description at bottom (above the two button rows)
         if (!description.isEmpty()) {
-            int descY = guiTop + guiHeight - 55;
+            int descY = guiTop + guiHeight - 75;
             renderDivider(graphics, guiLeft + 10, descY - 5, guiWidth - 20);
 
             // Truncate if too long
@@ -215,6 +248,14 @@ public class NationInfoScreen extends StateCraftScreen {
         this.minecraft.setScreen(new StatesListScreen(nationName));
     }
 
+    private void openElectionsScreen() {
+        this.minecraft.setScreen(new ElectionScreen());
+    }
+
+    private void openLegislatureScreen() {
+        this.minecraft.setScreen(new LegislatureScreen(nationName));
+    }
+
     private void openSettingsScreen() {
         this.minecraft.setScreen(new NationSettingsScreen(nationName));
     }
@@ -228,6 +269,13 @@ public class NationInfoScreen extends StateCraftScreen {
         NetworkHandler.sendToServer(LeaveCitizenshipPacket.leaveNation(nationName));
         // Return to nations list
         this.minecraft.setScreen(new NationsListScreen());
+    }
+
+    private void joinNation() {
+        // Send join request to server
+        NetworkHandler.sendToServer(JoinCitizenshipPacket.joinNation(nationName));
+        // Refresh the screen to show updated status
+        this.minecraft.setScreen(new NationInfoScreen(nationName));
     }
 
     private void goBack() {
@@ -296,9 +344,17 @@ public class NationInfoScreen extends StateCraftScreen {
         if (mailButton != null) {
             mailButton.visible = isAdmin;
         }
+        // Show legislature button for members (actual access is checked server-side)
+        if (legislatureButton != null) {
+            legislatureButton.visible = isMember;
+        }
         // Show leave button only for members who are not the leader
         if (leaveButton != null) {
             leaveButton.visible = isMember && !isLeader;
+        }
+        // Show join button only for non-members when nation is open
+        if (joinButton != null) {
+            joinButton.visible = !isMember && isOpen;
         }
     }
 

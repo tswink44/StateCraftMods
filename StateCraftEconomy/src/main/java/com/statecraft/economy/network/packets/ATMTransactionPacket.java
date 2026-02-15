@@ -59,6 +59,11 @@ public class ATMTransactionPacket {
                     NetworkHandler.sendToPlayer(new SyncBalancePacket(balance, 0), player);
                 }
                 case DEPOSIT -> {
+                    // Check if depositing to a specific account (government treasury)
+                    String accountTarget = packet.recipient;
+                    boolean isGovernmentAccount = accountTarget != null && !accountTarget.isEmpty()
+                        && accountTarget.contains(":");
+
                     // Check player inventory for currency items worth the specified amount
                     double requiredAmount = packet.amount;
                     if (requiredAmount <= 0) {
@@ -85,6 +90,7 @@ public class ATMTransactionPacket {
 
                     // Remove currency items from inventory
                     double remaining = requiredAmount;
+                    double totalRemoved = 0;
                     for (int i = 0; i < player.getInventory().getContainerSize() && remaining > 0; i++) {
                         var stack = player.getInventory().getItem(i);
                         if (stack.isEmpty()) continue;
@@ -98,22 +104,124 @@ public class ATMTransactionPacket {
 
                         double valueRemoved = valuePerItem * itemsToRemove;
                         stack.shrink(itemsToRemove);
+                        totalRemoved += valueRemoved;
                         remaining -= valueRemoved;
                     }
 
-                    // Deposit the amount
-                    manager.deposit(player.getUUID(), requiredAmount, "ATM deposit");
-                    double newBalance = manager.getBalance(player.getUUID());
-                    NetworkHandler.sendToPlayer(new TransactionResultPacket(true,
-                        "Deposited " + manager.formatCurrency(requiredAmount), newBalance), player);
+                    // Calculate change (if we removed more than needed)
+                    double change = totalRemoved - requiredAmount;
+                    if (change > 0.001) { // Small epsilon for floating point comparison
+                        // Give change back to player as currency items
+                        var changeItems = manager.convertToItems(change);
+                        for (var changeItem : changeItems) {
+                            if (!player.getInventory().add(changeItem)) {
+                                // Drop items that don't fit
+                                player.drop(changeItem, false);
+                            }
+                        }
+                    }
+
+                    // Deposit the amount to the appropriate account
+                    String changeMessage = change > 0.001 ? " (Change: " + manager.formatCurrency(change) + ")" : "";
+
+                    if (isGovernmentAccount) {
+                        String[] parts = accountTarget.split(":", 2);
+                        String targetType = parts[0];
+                        try {
+                            UUID targetUUID = UUID.fromString(parts[1]);
+
+                            switch (targetType) {
+                                case "NATION" -> manager.getOrCreateNationTreasury(targetUUID).add(requiredAmount);
+                                case "STATE" -> manager.getOrCreateStateTreasury(targetUUID).add(requiredAmount);
+                                case "CITY" -> manager.getOrCreateCityTreasury(targetUUID).add(requiredAmount);
+                                default -> {
+                                    // Unknown type, deposit to personal account as fallback
+                                    manager.deposit(player.getUUID(), requiredAmount, "ATM deposit");
+                                }
+                            }
+
+                            double entityBalance = switch (targetType) {
+                                case "NATION" -> manager.getNationBalance(targetUUID);
+                                case "STATE" -> manager.getStateBalance(targetUUID);
+                                case "CITY" -> manager.getCityBalance(targetUUID);
+                                default -> manager.getBalance(player.getUUID());
+                            };
+
+                            NetworkHandler.sendToPlayer(new TransactionResultPacket(true,
+                                "Deposited " + manager.formatCurrency(requiredAmount) + " to " + targetType.toLowerCase() + " treasury" + changeMessage,
+                                entityBalance), player);
+                        } catch (IllegalArgumentException e) {
+                            // Invalid UUID, deposit to personal as fallback
+                            manager.deposit(player.getUUID(), requiredAmount, "ATM deposit");
+                            double newBalance = manager.getBalance(player.getUUID());
+                            NetworkHandler.sendToPlayer(new TransactionResultPacket(true,
+                                "Deposited " + manager.formatCurrency(requiredAmount) + changeMessage, newBalance), player);
+                        }
+                    } else {
+                        // Personal account deposit
+                        manager.deposit(player.getUUID(), requiredAmount, "ATM deposit");
+                        double newBalance = manager.getBalance(player.getUUID());
+                        NetworkHandler.sendToPlayer(new TransactionResultPacket(true,
+                            "Deposited " + manager.formatCurrency(requiredAmount) + changeMessage, newBalance), player);
+                    }
                 }
                 case WITHDRAW -> {
-                    TransactionResult result = manager.withdraw(player.getUUID(), packet.amount, "ATM withdrawal");
+                    // Check if withdrawing from a specific account (government treasury)
+                    String accountTarget = packet.recipient;
+                    boolean isGovernmentAccount = accountTarget != null && !accountTarget.isEmpty()
+                        && accountTarget.contains(":");
+
+                    TransactionResult result;
+
+                    if (isGovernmentAccount) {
+                        String[] parts = accountTarget.split(":", 2);
+                        String targetType = parts[0];
+                        try {
+                            UUID targetUUID = UUID.fromString(parts[1]);
+
+                            // Check balance and withdraw from government treasury
+                            double treasuryBalance = switch (targetType) {
+                                case "NATION" -> manager.getNationBalance(targetUUID);
+                                case "STATE" -> manager.getStateBalance(targetUUID);
+                                case "CITY" -> manager.getCityBalance(targetUUID);
+                                default -> 0;
+                            };
+
+                            if (treasuryBalance < packet.amount) {
+                                NetworkHandler.sendToPlayer(new TransactionResultPacket(false,
+                                    "Insufficient funds in " + targetType.toLowerCase() + " treasury", treasuryBalance), player);
+                                return;
+                            }
+
+                            // Withdraw from government treasury
+                            switch (targetType) {
+                                case "NATION" -> manager.getOrCreateNationTreasury(targetUUID).subtract(packet.amount);
+                                case "STATE" -> manager.getOrCreateStateTreasury(targetUUID).subtract(packet.amount);
+                                case "CITY" -> manager.getOrCreateCityTreasury(targetUUID).subtract(packet.amount);
+                            }
+
+                            double newTreasuryBalance = switch (targetType) {
+                                case "NATION" -> manager.getNationBalance(targetUUID);
+                                case "STATE" -> manager.getStateBalance(targetUUID);
+                                case "CITY" -> manager.getCityBalance(targetUUID);
+                                default -> 0;
+                            };
+
+                            result = new TransactionResult(true,
+                                "Withdrew " + manager.formatCurrency(packet.amount) + " from " + targetType.toLowerCase() + " treasury",
+                                newTreasuryBalance);
+                        } catch (IllegalArgumentException e) {
+                            // Invalid UUID, use personal account as fallback
+                            result = manager.withdraw(player.getUUID(), packet.amount, "ATM withdrawal");
+                        }
+                    } else {
+                        // Personal account withdrawal
+                        result = manager.withdraw(player.getUUID(), packet.amount, "ATM withdrawal");
+                    }
 
                     if (result.isSuccess()) {
                         // Give currency items to the player
                         var items = manager.convertToItems(packet.amount);
-                        boolean allAdded = true;
 
                         for (var itemStack : items) {
                             if (!player.getInventory().add(itemStack)) {

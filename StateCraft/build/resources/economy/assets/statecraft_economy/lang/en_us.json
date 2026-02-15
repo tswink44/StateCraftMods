@@ -8,6 +8,7 @@
   "item.statecraft_economy.bill_1000000": "$1,000,000 Bill",
   "item.statecraft_economy.bank_card": "Bank Card",
   "block.statecraft_economy.atm": "ATM",
+  "block.statecraft_economy.trading_hub": "Trading Hub",
 
   "gui.statecraft_economy.atm.title": "ATM",
   "gui.statecraft_economy.atm.main_menu": "Main Menu",

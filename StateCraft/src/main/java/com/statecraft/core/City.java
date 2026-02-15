@@ -1,5 +1,6 @@
 package com.statecraft.core;
 
+import com.statecraft.config.StateCraftConfig;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -148,6 +149,11 @@ public class City {
     }
 
     public int getMaxChunks() {
+        // If maxChunks hasn't been explicitly set (still at default), use config value
+        // This allows server admins to set global limits while still allowing per-city overrides
+        if (maxChunks == 50 && StateCraftConfig.MAX_CHUNKS_PER_CITY != null) {
+            return StateCraftConfig.MAX_CHUNKS_PER_CITY.get();
+        }
         return maxChunks;
     }
 

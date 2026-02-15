@@ -75,11 +75,13 @@ public class MembersListScreen extends StateCraftScreen {
 
             // Role color
             String roleColor = member.role.equals("Leader") ? "§6" :
-                              (member.role.equals("Admin") ? "§e" : "§f");
+                              (member.role.equals("Admin") ? "§e" :
+                              (member.role.equals("Officer") ? "§b" : "§f"));
 
             // Role badge
             String roleBadge = member.role.equals("Leader") ? " §8[§6L§8]" :
-                              (member.role.equals("Admin") ? " §8[§eA§8]" : "");
+                              (member.role.equals("Admin") ? " §8[§eA§8]" :
+                              (member.role.equals("Officer") ? " §8[§bO§8]" : ""));
 
             graphics.drawString(this.font, onlineIndicator + roleColor + member.name + roleBadge,
                                guiLeft + 15, y, COLOR_TEXT);
@@ -108,10 +110,12 @@ public class MembersListScreen extends StateCraftScreen {
     }
 
     private void invitePlayer() {
-        // Show chat message with command hint
-        if (this.minecraft != null && this.minecraft.player != null) {
-            this.minecraft.player.sendSystemMessage(Component.literal("§7Use §e/sc nation invite <player>§7 to invite someone"));
-        }
+        // Open the invite player dialog
+        this.minecraft.setScreen(new InvitePlayerScreen(
+            InvitePlayerScreen.InviteTarget.NATION,
+            nationName,
+            () -> this.minecraft.setScreen(new MembersListScreen(nationName))
+        ));
     }
 
     private void goBack() {

@@ -4,10 +4,15 @@ import com.statecraft.StateCraft;
 import com.statecraft.network.packets.*;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.network.NetworkDirection;
+import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
+
+import java.util.function.Supplier;
 
 /**
  * Handles network packet registration and sending for client-server sync
@@ -206,6 +211,13 @@ public class NetworkHandler {
             .consumerMainThread(ServerPacketHandler::handleLeaveCitizenship)
             .add();
 
+        // Invite packets
+        CHANNEL.messageBuilder(InvitePlayerPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(InvitePlayerPacket::encode)
+            .decoder(InvitePlayerPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleInvitePlayer)
+            .add();
+
         // My States/Cities packets
         CHANNEL.messageBuilder(RequestMyStatesPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
             .encoder(RequestMyStatesPacket::encode)
@@ -225,128 +237,214 @@ public class NetworkHandler {
             .consumerMainThread(ServerPacketHandler::handleRequestAllNations)
             .add();
 
-        // Server -> Client packets (responses)
+        // Server -> Client packets (responses) - use dist-safe handlers
         CHANNEL.messageBuilder(SyncAllNationsPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncAllNationsPacket::encode)
             .decoder(SyncAllNationsPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleSyncAllNations)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncAllNations(pkt, ctx), ctx))
             .add();
 
         CHANNEL.messageBuilder(SyncMyStatesPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncMyStatesPacket::encode)
             .decoder(SyncMyStatesPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleSyncMyStates)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncMyStates(pkt, ctx), ctx))
             .add();
 
         CHANNEL.messageBuilder(SyncMyCitiesPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncMyCitiesPacket::encode)
             .decoder(SyncMyCitiesPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleSyncMyCities)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncMyCities(pkt, ctx), ctx))
             .add();
 
         CHANNEL.messageBuilder(SyncNationDataPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncNationDataPacket::encode)
             .decoder(SyncNationDataPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleSyncNationData)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncNationData(pkt, ctx), ctx))
             .add();
 
         CHANNEL.messageBuilder(SyncChunkMapPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncChunkMapPacket::encode)
             .decoder(SyncChunkMapPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleSyncChunkMap)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncChunkMap(pkt, ctx), ctx))
             .add();
 
         CHANNEL.messageBuilder(SyncInvitationsPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncInvitationsPacket::encode)
             .decoder(SyncInvitationsPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleSyncInvitations)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncInvitations(pkt, ctx), ctx))
             .add();
 
         CHANNEL.messageBuilder(ActionResultPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(ActionResultPacket::encode)
             .decoder(ActionResultPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleActionResult)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleActionResult(pkt, ctx), ctx))
             .add();
 
         CHANNEL.messageBuilder(OpenGuiPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(OpenGuiPacket::encode)
             .decoder(OpenGuiPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleOpenGui)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleOpenGui(pkt, ctx), ctx))
             .add();
 
         CHANNEL.messageBuilder(SyncChunkBordersPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncChunkBordersPacket::encode)
             .decoder(SyncChunkBordersPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleSyncChunkBorders)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncChunkBorders(pkt, ctx), ctx))
             .add();
 
         CHANNEL.messageBuilder(SetBorderModePacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SetBorderModePacket::encode)
             .decoder(SetBorderModePacket::new)
-            .consumerMainThread(ClientPacketHandler::handleSetBorderMode)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSetBorderMode(pkt, ctx), ctx))
             .add();
 
         CHANNEL.messageBuilder(SyncMembersPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncMembersPacket::encode)
             .decoder(SyncMembersPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleSyncMembers)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncMembers(pkt, ctx), ctx))
             .add();
 
         CHANNEL.messageBuilder(SyncStatesPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncStatesPacket::encode)
             .decoder(SyncStatesPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleSyncStates)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncStates(pkt, ctx), ctx))
             .add();
 
         CHANNEL.messageBuilder(SyncStateDetailsPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncStateDetailsPacket::encode)
             .decoder(SyncStateDetailsPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleSyncStateDetails)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncStateDetails(pkt, ctx), ctx))
             .add();
 
         CHANNEL.messageBuilder(SyncCitiesPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncCitiesPacket::encode)
             .decoder(SyncCitiesPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleSyncCities)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncCities(pkt, ctx), ctx))
             .add();
 
         CHANNEL.messageBuilder(SyncCityDetailsPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncCityDetailsPacket::encode)
             .decoder(SyncCityDetailsPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleSyncCityDetails)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncCityDetails(pkt, ctx), ctx))
             .add();
 
         CHANNEL.messageBuilder(SyncAutoClaimPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncAutoClaimPacket::encode)
             .decoder(SyncAutoClaimPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleSyncAutoClaim)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncAutoClaim(pkt, ctx), ctx))
             .add();
 
         CHANNEL.messageBuilder(SyncChunkPermitsPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncChunkPermitsPacket::encode)
             .decoder(SyncChunkPermitsPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleSyncChunkPermits)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncChunkPermits(pkt, ctx), ctx))
             .add();
 
         CHANNEL.messageBuilder(SyncChunkInfoPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncChunkInfoPacket::encode)
             .decoder(SyncChunkInfoPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleSyncChunkInfo)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncChunkInfo(pkt, ctx), ctx))
             .add();
 
         CHANNEL.messageBuilder(SyncMarketplaceDataPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncMarketplaceDataPacket::encode)
             .decoder(SyncMarketplaceDataPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleSyncMarketplaceData)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncMarketplaceData(pkt, ctx), ctx))
             .add();
 
         CHANNEL.messageBuilder(SyncMailDataPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncMailDataPacket::encode)
             .decoder(SyncMailDataPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleSyncMailData)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncMailData(pkt, ctx), ctx))
+            .add();
+
+        // Election packets (Client -> Server)
+        CHANNEL.messageBuilder(RequestElectionDataPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestElectionDataPacket::encode)
+            .decoder(RequestElectionDataPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestElectionData)
+            .add();
+
+        CHANNEL.messageBuilder(CastVotePacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(CastVotePacket::encode)
+            .decoder(CastVotePacket::new)
+            .consumerMainThread(ServerPacketHandler::handleCastVote)
+            .add();
+
+        CHANNEL.messageBuilder(RegisterCandidatePacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RegisterCandidatePacket::encode)
+            .decoder(RegisterCandidatePacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRegisterCandidate)
+            .add();
+
+        // Election packets (Server -> Client)
+        CHANNEL.messageBuilder(SyncElectionDataPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncElectionDataPacket::encode)
+            .decoder(SyncElectionDataPacket::new)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncElectionData(pkt, ctx), ctx))
+            .add();
+
+        // Legislature packets (Client -> Server)
+        CHANNEL.messageBuilder(RequestLegislatureDataPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestLegislatureDataPacket::encode)
+            .decoder(RequestLegislatureDataPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestLegislatureData)
+            .add();
+
+        CHANNEL.messageBuilder(ProposeBillPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(ProposeBillPacket::encode)
+            .decoder(ProposeBillPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleProposeBill)
+            .add();
+
+        CHANNEL.messageBuilder(VoteBillPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(VoteBillPacket::encode)
+            .decoder(VoteBillPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleVoteBill)
+            .add();
+
+        CHANNEL.messageBuilder(LeaderBillActionPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(LeaderBillActionPacket::encode)
+            .decoder(LeaderBillActionPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleLeaderBillAction)
+            .add();
+
+        // Legislature packets (Server -> Client)
+        CHANNEL.messageBuilder(SyncLegislatureDataPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncLegislatureDataPacket::encode)
+            .decoder(SyncLegislatureDataPacket::new)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncLegislatureData(pkt, ctx), ctx))
+            .add();
+
+        // Officer management packets (Client -> Server)
+        CHANNEL.messageBuilder(RequestOfficerManagementDataPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestOfficerManagementDataPacket::encode)
+            .decoder(RequestOfficerManagementDataPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestOfficerManagementData)
+            .add();
+
+        CHANNEL.messageBuilder(ModifyOfficerPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(ModifyOfficerPacket::encode)
+            .decoder(ModifyOfficerPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleModifyOfficer)
+            .add();
+
+        // Officer management packets (Server -> Client)
+        CHANNEL.messageBuilder(SyncOfficerManagementDataPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncOfficerManagementDataPacket::encode)
+            .decoder(SyncOfficerManagementDataPacket::new)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncOfficerManagementData(pkt, ctx), ctx))
             .add();
 
         StateCraft.LOGGER.info("StateCraft network packets registered");
+    }
+
+    /**
+     * Helper method to safely handle client-side packets using DistExecutor
+     */
+    private static void handleClientSide(Runnable handler, Supplier<NetworkEvent.Context> ctx) {
+        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> handler);
+        ctx.get().setPacketHandled(true);
     }
 
     /**

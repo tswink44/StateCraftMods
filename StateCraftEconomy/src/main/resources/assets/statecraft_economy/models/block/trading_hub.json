@@ -1,0 +1,13 @@
+{
+  "parent": "block/cube",
+  "textures": {
+    "particle": "statecraft_economy:block/trading_hub_side",
+    "north": "statecraft_economy:block/trading_hub_front",
+    "south": "statecraft_economy:block/trading_hub_side",
+    "east": "statecraft_economy:block/trading_hub_side",
+    "west": "statecraft_economy:block/trading_hub_side",
+    "up": "statecraft_economy:block/trading_hub_side",
+    "down": "statecraft_economy:block/trading_hub_side"
+  }
+}
+

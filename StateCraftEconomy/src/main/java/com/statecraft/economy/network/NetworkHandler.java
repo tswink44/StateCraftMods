@@ -4,10 +4,15 @@ import com.statecraft.economy.StateCraftEconomy;
 import com.statecraft.economy.network.packets.*;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.network.NetworkDirection;
+import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
+
+import java.util.function.Supplier;
 
 /**
  * Handles network packet registration and sending
@@ -78,35 +83,42 @@ public class NetworkHandler {
             .consumerMainThread(ServerPacketHandler::handleRequestTransferRecipients)
             .add();
 
-        // Server -> Client packets
+        // Trading Hub packet
+        CHANNEL.messageBuilder(TradingHubSellPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(TradingHubSellPacket::toBytes)
+            .decoder(TradingHubSellPacket::new)
+            .consumerMainThread(TradingHubSellPacket::handle)
+            .add();
+
+        // Server -> Client packets - use dist-safe handlers
         CHANNEL.messageBuilder(SyncBalancePacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncBalancePacket::encode)
             .decoder(SyncBalancePacket::new)
-            .consumerMainThread(ClientPacketHandler::handleSyncBalance)
+            .consumerMainThread(NetworkHandler::handleSyncBalanceClient)
             .add();
 
         CHANNEL.messageBuilder(TransactionResultPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(TransactionResultPacket::encode)
             .decoder(TransactionResultPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleTransactionResult)
+            .consumerMainThread(NetworkHandler::handleTransactionResultClient)
             .add();
 
         CHANNEL.messageBuilder(OpenATMScreenPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(OpenATMScreenPacket::encode)
             .decoder(OpenATMScreenPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleOpenATMScreen)
+            .consumerMainThread(NetworkHandler::handleOpenATMScreenClient)
             .add();
 
         CHANNEL.messageBuilder(SyncAccountsPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncAccountsPacket::encode)
             .decoder(SyncAccountsPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleSyncAccounts)
+            .consumerMainThread(NetworkHandler::handleSyncAccountsClient)
             .add();
 
         CHANNEL.messageBuilder(SyncTransferRecipientsPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncTransferRecipientsPacket::encode)
             .decoder(SyncTransferRecipientsPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleSyncTransferRecipients)
+            .consumerMainThread(NetworkHandler::handleSyncTransferRecipientsClient)
             .add();
 
         // Chunk market packets
@@ -119,7 +131,7 @@ public class NetworkHandler {
         CHANNEL.messageBuilder(SyncChunkMarketInfoPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncChunkMarketInfoPacket::encode)
             .decoder(SyncChunkMarketInfoPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleSyncChunkMarketInfo)
+            .consumerMainThread(NetworkHandler::handleSyncChunkMarketInfoClient)
             .add();
 
         // Chunk valuation packets
@@ -132,10 +144,46 @@ public class NetworkHandler {
         CHANNEL.messageBuilder(SyncChunkValuationPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncChunkValuationPacket::encode)
             .decoder(SyncChunkValuationPacket::new)
-            .consumerMainThread(ClientPacketHandler::handleSyncChunkValuation)
+            .consumerMainThread(NetworkHandler::handleSyncChunkValuationClient)
             .add();
 
         StateCraftEconomy.LOGGER.info("StateCraft Economy network packets registered");
+    }
+
+    // Client packet handlers using DistExecutor for safe loading
+    private static void handleSyncBalanceClient(SyncBalancePacket packet, Supplier<NetworkEvent.Context> ctx) {
+        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientPacketHandler.handleSyncBalance(packet, ctx));
+        ctx.get().setPacketHandled(true);
+    }
+
+    private static void handleTransactionResultClient(TransactionResultPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientPacketHandler.handleTransactionResult(packet, ctx));
+        ctx.get().setPacketHandled(true);
+    }
+
+    private static void handleOpenATMScreenClient(OpenATMScreenPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientPacketHandler.handleOpenATMScreen(packet, ctx));
+        ctx.get().setPacketHandled(true);
+    }
+
+    private static void handleSyncAccountsClient(SyncAccountsPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientPacketHandler.handleSyncAccounts(packet, ctx));
+        ctx.get().setPacketHandled(true);
+    }
+
+    private static void handleSyncTransferRecipientsClient(SyncTransferRecipientsPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientPacketHandler.handleSyncTransferRecipients(packet, ctx));
+        ctx.get().setPacketHandled(true);
+    }
+
+    private static void handleSyncChunkMarketInfoClient(SyncChunkMarketInfoPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientPacketHandler.handleSyncChunkMarketInfo(packet, ctx));
+        ctx.get().setPacketHandled(true);
+    }
+
+    private static void handleSyncChunkValuationClient(SyncChunkValuationPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientPacketHandler.handleSyncChunkValuation(packet, ctx));
+        ctx.get().setPacketHandled(true);
     }
 
     public static <T> void sendToServer(T packet) {
@@ -150,4 +198,3 @@ public class NetworkHandler {
         CHANNEL.send(PacketDistributor.ALL.noArg(), packet);
     }
 }
-

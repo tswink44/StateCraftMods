@@ -4,6 +4,7 @@ import com.statecraft.economy.block.ModBlocks;
 import com.statecraft.economy.block.entity.ModBlockEntities;
 import com.statecraft.economy.command.EconomyCommands;
 import com.statecraft.economy.config.EconomyConfig;
+import com.statecraft.economy.config.ItemValueConfig;
 import com.statecraft.economy.core.EconomyManager;
 import com.statecraft.economy.core.TaxationManager;
 import com.statecraft.economy.integration.StateCraftIntegration;
@@ -63,6 +64,7 @@ public class StateCraftEconomy {
         // Register config
         ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, EconomyConfig.SPEC, "statecraft-economy.toml");
         ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, ValuationConfig.SPEC, "statecraft-valuation.toml");
+        ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, ItemValueConfig.SPEC, "statecraft-item-values.toml");
 
         // Register game events
         MinecraftForge.EVENT_BUS.register(this);
@@ -87,9 +89,10 @@ public class StateCraftEconomy {
     }
 
     private void addCreative(BuildCreativeModeTabContentsEvent event) {
-        // Add ATM block to Functional Blocks creative tab
+        // Add ATM block and Trading Hub to Functional Blocks creative tab
         if (event.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) {
             event.accept(ModBlocks.ATM_ITEM);
+            event.accept(ModBlocks.TRADING_HUB_ITEM);
         }
 
         // Add currency bills to Tools & Utilities creative tab

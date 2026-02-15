@@ -104,5 +104,51 @@ public class IntegrationRegistry {
             }
         }
     }
+
+    /**
+     * Get a player's balance from the economy system
+     */
+    public static double getPlayerBalance(UUID playerId) {
+        if (economyIntegration != null) {
+            try {
+                return economyIntegration.getPlayerBalance(playerId);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error getting player balance: {}", e.getMessage());
+            }
+        }
+        return 0;
+    }
+
+    /**
+     * Withdraw funds from a player's account
+     * @return true if successful
+     */
+    public static boolean withdrawFromPlayer(UUID playerId, double amount, String description) {
+        if (economyIntegration != null) {
+            try {
+                return economyIntegration.withdrawFromPlayer(playerId, amount, description);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error withdrawing from player: {}", e.getMessage());
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Format a currency amount for display
+     */
+    public static String formatCurrency(double amount) {
+        if (economyIntegration != null) {
+            try {
+                String result = economyIntegration.formatCurrency(amount);
+                if (result != null) {
+                    return result;
+                }
+            } catch (Exception e) {
+                // Fall through to default
+            }
+        }
+        return String.format("$%.2f", amount);
+    }
 }
 

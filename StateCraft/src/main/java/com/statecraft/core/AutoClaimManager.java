@@ -203,18 +203,47 @@ public class AutoClaimManager {
         }
 
         // Try to claim the chunk
-        ClaimedChunk claimed = claimManager.claimChunk(city, pos, player.level().dimension());
-        if (claimed != null) {
-            // Save data
-            if (player.level() instanceof ServerLevel serverLevel) {
-                NationSavedData.get(serverLevel).markForSave();
-            }
+        ChunkClaimManager.ClaimResult result = claimManager.claimChunkWithResult(city, pos, player.level().dimension());
 
-            // Notify player
-            player.displayClientMessage(
-                net.minecraft.network.chat.Component.literal("§aClaimed chunk at " + pos.x + ", " + pos.z),
-                true // Action bar
-            );
+        switch (result) {
+            case SUCCESS -> {
+                // Save data
+                if (player.level() instanceof ServerLevel serverLevel) {
+                    NationSavedData.get(serverLevel).markForSave();
+                }
+                // Notify player
+                player.displayClientMessage(
+                    net.minecraft.network.chat.Component.literal("§aClaimed chunk at " + pos.x + ", " + pos.z),
+                    true // Action bar
+                );
+            }
+            case CITY_CHUNK_LIMIT -> {
+                disableAutoClaim(player.getUUID());
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                    "Auto-claim disabled: City has reached its chunk limit (" + city.getMaxChunks() + ")"), player);
+                syncAutoClaimState(player);
+            }
+            case NATION_CHUNK_LIMIT -> {
+                State state = claimManager.getState(city.getStateId());
+                Nation nation = state != null ? claimManager.getNation(state.getNationId()) : null;
+                int limit = nation != null ? nation.getMaxChunksPerCity() : 50;
+                disableAutoClaim(player.getUUID());
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                    "Auto-claim disabled: Nation law limits cities to " + limit + " chunks"), player);
+                syncAutoClaimState(player);
+            }
+            case STATE_CHUNK_LIMIT -> {
+                disableAutoClaim(player.getUUID());
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                    "Auto-claim disabled: State has reached its chunk limit"), player);
+                syncAutoClaimState(player);
+            }
+            case NOT_CONTIGUOUS -> {
+                // Silently skip - chunk is not adjacent to territory
+            }
+            case ALREADY_CLAIMED, INSUFFICIENT_FUNDS -> {
+                // Silently skip
+            }
         }
     }
 

@@ -1,5 +1,6 @@
 package com.statecraft.core;
 
+import com.statecraft.config.StateCraftConfig;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -72,6 +73,10 @@ public class State {
     }
 
     public int getMaxCities() {
+        // Use config value for max cities - server config takes precedence
+        if (StateCraftConfig.MAX_CITIES_PER_STATE != null) {
+            return StateCraftConfig.MAX_CITIES_PER_STATE.get();
+        }
         return maxCities;
     }
 
@@ -125,7 +130,10 @@ public class State {
 
     // City Management
     public City createCity(String cityName, UUID mayorId) {
-        if (cities.size() >= maxCities) {
+        // Use config value for max cities, fall back to instance value if config not loaded
+        int maxAllowed = StateCraftConfig.MAX_CITIES_PER_STATE != null ?
+            StateCraftConfig.MAX_CITIES_PER_STATE.get() : maxCities;
+        if (cities.size() >= maxAllowed) {
             return null; // Max cities reached
         }
         City city = new City(UUID.randomUUID(), cityName, this.id, mayorId);

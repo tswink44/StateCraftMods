@@ -21,7 +21,8 @@ public class StateCraftCommands {
             .then(GuiCommand.register())
             .then(BordersCommand.register())
             .then(AdminCommand.register())
-            .then(MailCommand.register());
+            .then(MailCommand.register())
+            .then(ElectionCommand.register());
 
         dispatcher.register(statecraftCommand);
 
@@ -33,6 +34,7 @@ public class StateCraftCommands {
         dispatcher.register(Commands.literal("city").redirect(dispatcher.getRoot().getChild("statecraft").getChild("city")));
         dispatcher.register(Commands.literal("chunk").redirect(dispatcher.getRoot().getChild("statecraft").getChild("chunk")));
         dispatcher.register(Commands.literal("mail").redirect(dispatcher.getRoot().getChild("statecraft").getChild("mail")));
+        dispatcher.register(Commands.literal("election").redirect(dispatcher.getRoot().getChild("statecraft").getChild("election")));
     }
 }
 

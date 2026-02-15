@@ -48,5 +48,34 @@ public interface EconomyIntegration {
      * @param cityId The UUID of the disbanded city
      */
     void onCityDisbanded(UUID cityId);
+
+    /**
+     * Get a player's current balance
+     * @param playerId The UUID of the player
+     * @return The player's balance, or 0 if not available
+     */
+    default double getPlayerBalance(UUID playerId) {
+        return 0;
+    }
+
+    /**
+     * Withdraw funds from a player's account
+     * @param playerId The UUID of the player
+     * @param amount The amount to withdraw
+     * @param description Description of the withdrawal
+     * @return true if successful, false if insufficient funds or error
+     */
+    default boolean withdrawFromPlayer(UUID playerId, double amount, String description) {
+        return false;
+    }
+
+    /**
+     * Format a currency amount for display
+     * @param amount The amount to format
+     * @return Formatted string (e.g., "$1,000.00")
+     */
+    default String formatCurrency(double amount) {
+        return String.format("$%.2f", amount);
+    }
 }
 

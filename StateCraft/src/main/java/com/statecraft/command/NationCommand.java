@@ -3,11 +3,13 @@ package com.statecraft.command;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
+import com.statecraft.config.StateCraftConfig;
 import com.statecraft.core.ChunkClaimManager;
 import com.statecraft.core.Invitation;
 import com.statecraft.core.InvitationManager;
 import com.statecraft.core.Nation;
 import com.statecraft.data.NationSavedData;
+import com.statecraft.integration.IntegrationRegistry;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
@@ -84,16 +86,39 @@ public class NationCommand {
                 return 0;
             }
 
+            // Check creation fee
+            double creationFee = StateCraftConfig.NATION_CREATION_FEE.get();
+            if (creationFee > 0 && IntegrationRegistry.hasEconomyIntegration()) {
+                double playerBalance = IntegrationRegistry.getPlayerBalance(player.getUUID());
+                if (playerBalance < creationFee) {
+                    context.getSource().sendFailure(Component.literal(
+                        "§cInsufficient funds! Nation creation costs " + IntegrationRegistry.formatCurrency(creationFee) +
+                        ". You have " + IntegrationRegistry.formatCurrency(playerBalance) + "."));
+                    return 0;
+                }
+            }
+
             Nation nation = ChunkClaimManager.getInstance().createNation(name, player.getUUID());
             if (nation == null) {
                 context.getSource().sendFailure(Component.literal("Could not create nation. Name may be taken or you're already in a nation."));
                 return 0;
             }
 
+            // Charge creation fee after successful creation
+            if (creationFee > 0 && IntegrationRegistry.hasEconomyIntegration()) {
+                boolean charged = IntegrationRegistry.withdrawFromPlayer(player.getUUID(), creationFee, "Nation creation fee: " + name);
+                if (!charged) {
+                    // This shouldn't happen since we checked balance, but handle it gracefully
+                    context.getSource().sendSystemMessage(Component.literal("§eWarning: Could not charge creation fee."));
+                }
+            }
+
             // Mark data dirty
             markDataDirty(context);
 
-            context.getSource().sendSuccess(() -> Component.literal("§aNation §e" + name + "§a created successfully!"), true);
+            String feeMessage = creationFee > 0 && IntegrationRegistry.hasEconomyIntegration()
+                ? " (Cost: " + IntegrationRegistry.formatCurrency(creationFee) + ")" : "";
+            context.getSource().sendSuccess(() -> Component.literal("§aNation §e" + name + "§a created successfully!" + feeMessage), true);
             return 1;
         } catch (Exception e) {
             context.getSource().sendFailure(Component.literal("This command must be run by a player!"));

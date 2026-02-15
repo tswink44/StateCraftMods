@@ -53,6 +53,12 @@ public class ChunkValuationScreen extends StateCraftScreen {
         ));
     }
 
+    @Override
+    protected boolean shouldRenderTitle() {
+        // We render our own custom orange title in renderContent
+        return false;
+    }
+
     private void requestValuationData() {
         try {
             // Use reflection to send packet via Economy mod's NetworkHandler

@@ -80,18 +80,38 @@ public class ChunkCommand {
                 return 0;
             }
 
-            ClaimedChunk chunk = manager.claimChunk(playerCity, chunkPos, player.level().dimension());
-            if (chunk == null) {
-                context.getSource().sendFailure(Component.literal("§cCould not claim chunk. City may have reached its chunk limit."));
-                return 0;
-            }
+            ChunkClaimManager.ClaimResult result = manager.claimChunkWithResult(playerCity, chunkPos, player.level().dimension());
 
-            markDataDirty(context);
-            final City city = playerCity;
-            context.getSource().sendSuccess(() -> Component.literal(
-                "§aChunk (" + chunkPos.x + ", " + chunkPos.z + ") claimed for city §e" + city.getName() + "§a!"
-            ), true);
-            return 1;
+            switch (result) {
+                case SUCCESS -> {
+                    markDataDirty(context);
+                    final City city = playerCity;
+                    context.getSource().sendSuccess(() -> Component.literal(
+                        "§aChunk (" + chunkPos.x + ", " + chunkPos.z + ") claimed for city §e" + city.getName() + "§a!"
+                    ), true);
+                    return 1;
+                }
+                case ALREADY_CLAIMED -> {
+                    context.getSource().sendFailure(Component.literal("§cThis chunk is already claimed!"));
+                }
+                case CITY_CHUNK_LIMIT -> {
+                    context.getSource().sendFailure(Component.literal("§cCity has reached its chunk limit (" + playerCity.getMaxChunks() + ")."));
+                }
+                case NATION_CHUNK_LIMIT -> {
+                    int limit = nation.getMaxChunksPerCity();
+                    context.getSource().sendFailure(Component.literal("§cNation law limits cities to " + limit + " chunks. Enact legislation to increase."));
+                }
+                case STATE_CHUNK_LIMIT -> {
+                    context.getSource().sendFailure(Component.literal("§cState has reached its chunk limit."));
+                }
+                case NOT_CONTIGUOUS -> {
+                    context.getSource().sendFailure(Component.literal("§cChunk must be adjacent to existing city or state territory."));
+                }
+                case INSUFFICIENT_FUNDS -> {
+                    context.getSource().sendFailure(Component.literal("§cCity treasury has insufficient funds."));
+                }
+            }
+            return 0;
         } catch (Exception e) {
             context.getSource().sendFailure(Component.literal("This command must be run by a player!"));
             return 0;
@@ -138,18 +158,38 @@ public class ChunkCommand {
                 return 0;
             }
 
-            ClaimedChunk chunk = ChunkClaimManager.getInstance().claimChunk(targetCity, chunkPos, player.level().dimension());
-            if (chunk == null) {
-                context.getSource().sendFailure(Component.literal("Could not claim chunk. City may have reached its chunk limit."));
-                return 0;
-            }
+            ChunkClaimManager.ClaimResult result = ChunkClaimManager.getInstance().claimChunkWithResult(targetCity, chunkPos, player.level().dimension());
 
-            markDataDirty(context);
-            final City city = targetCity;
-            context.getSource().sendSuccess(() -> Component.literal(
-                "§aChunk (" + chunkPos.x + ", " + chunkPos.z + ") claimed for city §e" + city.getName() + "§a!"
-            ), true);
-            return 1;
+            switch (result) {
+                case SUCCESS -> {
+                    markDataDirty(context);
+                    final City city = targetCity;
+                    context.getSource().sendSuccess(() -> Component.literal(
+                        "§aChunk (" + chunkPos.x + ", " + chunkPos.z + ") claimed for city §e" + city.getName() + "§a!"
+                    ), true);
+                    return 1;
+                }
+                case ALREADY_CLAIMED -> {
+                    context.getSource().sendFailure(Component.literal("§cThis chunk is already claimed!"));
+                }
+                case CITY_CHUNK_LIMIT -> {
+                    context.getSource().sendFailure(Component.literal("§cCity has reached its chunk limit (" + targetCity.getMaxChunks() + ")."));
+                }
+                case NATION_CHUNK_LIMIT -> {
+                    int limit = nation.getMaxChunksPerCity();
+                    context.getSource().sendFailure(Component.literal("§cNation law limits cities to " + limit + " chunks. Enact legislation to increase."));
+                }
+                case STATE_CHUNK_LIMIT -> {
+                    context.getSource().sendFailure(Component.literal("§cState has reached its chunk limit."));
+                }
+                case NOT_CONTIGUOUS -> {
+                    context.getSource().sendFailure(Component.literal("§cChunk must be adjacent to existing city or state territory."));
+                }
+                case INSUFFICIENT_FUNDS -> {
+                    context.getSource().sendFailure(Component.literal("§cCity treasury has insufficient funds."));
+                }
+            }
+            return 0;
         } catch (Exception e) {
             context.getSource().sendFailure(Component.literal("This command must be run by a player!"));
             return 0;

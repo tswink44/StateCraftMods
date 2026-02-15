@@ -53,6 +53,11 @@ public class NationSavedData extends SavedData {
             InvitationManager.getInstance().load(tag.getCompound("invitations"));
         }
 
+        // Load election data
+        if (tag.contains("elections")) {
+            ElectionManager.getInstance().load(tag.getCompound("elections"));
+        }
+
         StateCraft.LOGGER.info("Loaded {} nations with {} total claimed chunks",
             manager.getTotalNationCount(), manager.getTotalClaimedChunks());
 
@@ -108,8 +113,12 @@ public class NationSavedData extends SavedData {
         // Save invitations
         tag.put("invitations", InvitationManager.getInstance().save());
 
+        // Save election data
+        tag.put("elections", ElectionManager.getInstance().save());
+
         manager.clearDirty();
         InvitationManager.getInstance().clearDirty();
+        ElectionManager.getInstance().clearDirty();
 
         StateCraft.LOGGER.debug("Saved {} nations", manager.getTotalNationCount());
 

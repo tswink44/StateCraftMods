@@ -8,6 +8,7 @@ import net.minecraft.network.FriendlyByteBuf;
 public class JoinCitizenshipPacket {
 
     public enum JoinType {
+        NATION,
         STATE,
         CITY
     }
@@ -55,6 +56,10 @@ public class JoinCitizenshipPacket {
     }
 
     // Helper factory methods
+    public static JoinCitizenshipPacket joinNation(String nationName) {
+        return new JoinCitizenshipPacket(JoinType.NATION, nationName, "", "");
+    }
+
     public static JoinCitizenshipPacket joinState(String nationName, String stateName) {
         return new JoinCitizenshipPacket(JoinType.STATE, nationName, stateName, "");
     }

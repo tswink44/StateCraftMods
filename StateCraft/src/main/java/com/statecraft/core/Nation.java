@@ -1,5 +1,6 @@
 package com.statecraft.core;
 
+import com.statecraft.config.StateCraftConfig;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -15,6 +16,7 @@ public class Nation {
     private String name;
     private UUID leaderId; // Nation leader/ruler
     private final Set<UUID> admins; // Co-leaders with administrative powers
+    private final Set<UUID> officers; // Legislature voting members appointed by leader
     private final Set<UUID> members; // Basic nation members (not in a city yet)
     private final Map<UUID, State> states;
     private final Set<UUID> allies; // Allied nation IDs
@@ -28,6 +30,7 @@ public class Nation {
     private boolean open; // Can players join without invite?
     private String flagUrl; // URL to flag image
     private double statePassThroughRate; // Rate states must give to nation (e.g., 0.20 = 20%)
+    private double baseChunkValue; // Base valuation for chunks in the nation (default $100)
 
     // Treasury (for future economy integration)
     private long balance;
@@ -37,6 +40,7 @@ public class Nation {
         this.name = name;
         this.leaderId = leaderId;
         this.admins = new HashSet<>();
+        this.officers = new HashSet<>();
         this.members = new HashSet<>();
         this.states = new HashMap<>();
         this.allies = new HashSet<>();
@@ -48,6 +52,7 @@ public class Nation {
         this.open = false;
         this.flagUrl = "";
         this.statePassThroughRate = 0.20; // Default 20%
+        this.baseChunkValue = 100.0; // Default $100
         this.balance = 0;
     }
 
@@ -87,6 +92,22 @@ public class Nation {
         return admins.contains(playerId) || playerId.equals(leaderId);
     }
 
+    public Set<UUID> getOfficers() {
+        return Collections.unmodifiableSet(officers);
+    }
+
+    public void addOfficer(UUID playerId) {
+        officers.add(playerId);
+    }
+
+    public void removeOfficer(UUID playerId) {
+        officers.remove(playerId);
+    }
+
+    public boolean isOfficer(UUID playerId) {
+        return officers.contains(playerId);
+    }
+
     public Set<UUID> getMembers() {
         return Collections.unmodifiableSet(members);
     }
@@ -98,9 +119,14 @@ public class Nation {
     public void removeMember(UUID playerId) {
         members.remove(playerId);
         admins.remove(playerId);
+        officers.remove(playerId);
     }
 
     public int getMaxStates() {
+        // Use config value for max states - server config takes precedence
+        if (StateCraftConfig.MAX_STATES_PER_NATION != null) {
+            return StateCraftConfig.MAX_STATES_PER_NATION.get();
+        }
         return maxStates;
     }
 
@@ -155,6 +181,15 @@ public class Nation {
     public void setStatePassThroughRate(double statePassThroughRate) {
         // Clamp between 0 and 1 (0% to 100%)
         this.statePassThroughRate = Math.max(0, Math.min(1.0, statePassThroughRate));
+    }
+
+    public double getBaseChunkValue() {
+        return baseChunkValue;
+    }
+
+    public void setBaseChunkValue(double baseChunkValue) {
+        // Clamp to reasonable range ($1 to $100,000)
+        this.baseChunkValue = Math.max(1, Math.min(100000, baseChunkValue));
     }
 
     public long getBalance() {
@@ -214,12 +249,27 @@ public class Nation {
 
     // State Management
     public State createState(String stateName, UUID governorId) {
+        // Use the nation's maxStates which can be modified via legislation
         if (states.size() >= maxStates) {
             return null; // Max states reached
         }
         State state = new State(UUID.randomUUID(), stateName, this.id, governorId);
         states.put(state.getId(), state);
         return state;
+    }
+
+    /**
+     * Check if nation can create another state
+     */
+    public boolean canCreateState() {
+        return states.size() < maxStates;
+    }
+
+    /**
+     * Get remaining state slots
+     */
+    public int getRemainingStateSlots() {
+        return Math.max(0, maxStates - states.size());
     }
 
     public boolean removeState(UUID stateId) {
@@ -313,6 +363,7 @@ public class Nation {
         tag.putString("flagUrl", flagUrl);
         tag.putLong("balance", balance);
         tag.putDouble("statePassThroughRate", statePassThroughRate);
+        tag.putDouble("baseChunkValue", baseChunkValue);
 
         // Save admins
         ListTag adminsList = new ListTag();
@@ -322,6 +373,15 @@ public class Nation {
             adminsList.add(adminTag);
         }
         tag.put("admins", adminsList);
+
+        // Save officers
+        ListTag officersList = new ListTag();
+        for (UUID officer : officers) {
+            CompoundTag officerTag = new CompoundTag();
+            officerTag.putUUID("id", officer);
+            officersList.add(officerTag);
+        }
+        tag.put("officers", officersList);
 
         // Save members
         ListTag membersList = new ListTag();
@@ -374,11 +434,18 @@ public class Nation {
         nation.flagUrl = tag.getString("flagUrl");
         nation.balance = tag.getLong("balance");
         nation.statePassThroughRate = tag.contains("statePassThroughRate") ? tag.getDouble("statePassThroughRate") : 0.20;
+        nation.baseChunkValue = tag.contains("baseChunkValue") ? tag.getDouble("baseChunkValue") : 100.0;
 
         // Load admins
         ListTag adminsList = tag.getList("admins", Tag.TAG_COMPOUND);
         for (int i = 0; i < adminsList.size(); i++) {
             nation.admins.add(adminsList.getCompound(i).getUUID("id"));
+        }
+
+        // Load officers
+        ListTag officersList = tag.getList("officers", Tag.TAG_COMPOUND);
+        for (int i = 0; i < officersList.size(); i++) {
+            nation.officers.add(officersList.getCompound(i).getUUID("id"));
         }
 
         // Load members
