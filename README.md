@@ -1,15 +1,16 @@
 # StateCraft Mods
 
-A comprehensive Minecraft 1.20.1 Forge mod suite for building nations, governments, and economies. StateCraft enables players to create nations with hierarchical governance, claim territory, hold elections, pass legislation, and manage economies.
+A comprehensive Minecraft 1.20.1 Forge mod suite for building nations, governments, and economies. StateCraft enables players to create nations with hierarchical governance, claim territory, hold democratic elections, pass legislation, and manage economies—all through intuitive GUIs.
 
 ![Minecraft 1.20.1](https://img.shields.io/badge/Minecraft-1.20.1-green)
 ![Forge](https://img.shields.io/badge/Loader-Forge-orange)
 
+<!-- TODO: Add hero screenshot showing main GUI -->
+<!-- ![StateCraft Main Menu](screenshots/main_menu.png) -->
+
 ---
 
 ## 📦 Mod Components
-
-This project contains two interconnected mods:
 
 | Mod | Description |
 |-----|-------------|
@@ -20,9 +21,28 @@ Both mods work together but StateCraft Economy can function standalone for basic
 
 ---
 
-## 🏛️ Features Overview
+## 🎮 Quick Start
 
-### Nation Hierarchy
+### Opening the GUI
+
+Press **N** (default keybind) to open the StateCraft main menu at any time.
+
+<!-- TODO: Add screenshot of main menu -->
+<!-- ![Main Menu](screenshots/main_menu_overview.png) -->
+
+### First Steps
+
+1. **Press N** to open the StateCraft GUI
+2. **Browse nations** and click to join one, or create your own
+3. **Press B** to toggle territory border visualization
+4. Use the GUI to explore your nation, view territories, and participate in governance
+
+> **Command equivalent:** `/sc gui` opens the main menu
+
+---
+
+## 🏛️ Nation Hierarchy
+
 ```
 Nation (top level)
 ├── States (subdivisions)
@@ -30,277 +50,326 @@ Nation (top level)
 │       └── Claimed Chunks (16x16 block areas)
 ```
 
-### Core Features
+---
 
-- **🗺️ Territory System** - Claim chunks to protect your builds
-- **🏛️ Democratic Elections** - Vote for nation leadership
-- **📜 Legislature** - Propose and vote on policies and laws
-- **💰 Economy** - Physical currency, banking, trading
-- **🔒 Chunk Protection** - Automatic grief protection
-- **🗺️ Visual Borders** - See claimed territory boundaries
+## 🗺️ Managing Your Nation (GUI)
+
+### Viewing Nation Information
+
+1. Press **N** to open the main menu
+2. Click on **"Your Nation"** or select a nation from the list
+3. View members, territories, treasury balance, and active legislation
+
+<!-- TODO: Add screenshot of nation info screen -->
+<!-- ![Nation Info](screenshots/nation_info.png) -->
+
+> **Command equivalent:** `/sc nation info [name]`
+
+### Creating a Nation
+
+1. Press **N** → Click **"Create Nation"**
+2. Enter your nation name in the text field
+3. Confirm creation (costs $100,000 by default)
+
+> **Command equivalent:** `/sc nation create <name>`
+
+### Managing Members
+
+From the Nation GUI:
+- **Invite Players** - Click the invite button and enter a player name
+- **View Members** - See all members and their roles
+- **Kick Members** - Click on a member → Select "Kick" (Admin+ required)
+- **Toggle Open Joining** - Allow anyone to join without invitation
+
+<!-- TODO: Add screenshot of member management -->
+<!-- ![Member Management](screenshots/member_list.png) -->
 
 ---
 
-## 🚀 Getting Started
+## 🏙️ Territory Management (GUI)
 
-### For Players New to a Server
+### Creating States and Cities
 
-1. **Join or create a nation** - You need to be in a nation to interact with the world
-   ```
-   /sc nation list          # See available nations
-   /sc nation join <name>   # Join an open nation
-   /sc nation create <name> # Create your own nation
-   ```
+1. Press **N** → Navigate to your nation
+2. Click **"Create State"** (costs $50,000) or navigate to a state
+3. Within a state, click **"Create City"** (costs $10,000)
 
-2. **Open the GUI menu** - Press **N** (default) or use `/sc gui`
+<!-- TODO: Add screenshot of territory creation -->
+<!-- ![Create City](screenshots/create_city.png) -->
 
-3. **View borders** - Press **B** (default) to cycle through border display modes
+> **Command equivalents:**
+> - `/sc state create <name>`
+> - `/sc city create <name>`
 
-### Creating Your Own Nation
+### Claiming Chunks
 
-1. **Gather funds** - You'll need $100,000 (default) to create a nation
-2. **Create the nation** - `/sc nation create <name>`
-3. **Create a state** - `/sc state create <name>` ($50,000 default)
-4. **Create a city** - `/sc city create <name>` ($10,000 default)
-5. **Claim territory** - Stand in an unclaimed chunk and use `/sc chunk claim`
+1. Press **N** → Click **"Chunk Info"** (or stand in the chunk)
+2. View current chunk status and ownership
+3. Click **"Claim Chunk"** to claim for your city
 
----
+Alternatively, use the keybind or command while standing in an unclaimed chunk.
 
-## 📋 Command Reference
+<!-- TODO: Add screenshot of chunk claiming interface -->
+<!-- ![Chunk Claim](screenshots/chunk_claim.png) -->
 
-> **Tip:** All commands can use `/statecraft` or the shorthand `/sc`
+> **Command equivalent:** `/sc chunk claim`
 
-### Nation Commands
+### Visualizing Borders
 
-| Command | Description | Permission |
-|---------|-------------|------------|
-| `/sc nation create <name>` | Create a new nation | Anyone (costs $100,000) |
-| `/sc nation info [name]` | View nation information | Anyone |
-| `/sc nation list` | List all nations | Anyone |
-| `/sc nation invite <player>` | Invite a player | Admin+ |
-| `/sc nation join <nation>` | Join an open nation | Anyone |
-| `/sc nation leave` | Leave your nation | Anyone |
-| `/sc nation kick <player>` | Remove a member | Admin+ |
-| `/sc nation disband` | Delete the nation | Leader only |
-| `/sc nation setopen <true/false>` | Toggle open joining | Admin+ |
+Press **B** to cycle through border display modes:
 
-### State Commands
+| Mode | Description |
+|------|-------------|
+| **Off** | No borders shown |
+| **Chunks** | Show all claimed chunk borders |
+| **My Chunks** | Show only your nation's chunks |
+| **My Territory** | Show your nation's territory outline |
+| **All** | Show all nations' territory outlines |
 
-| Command | Description | Permission |
-|---------|-------------|------------|
-| `/sc state create <name>` | Create a state | Nation Admin+ |
-| `/sc state list` | List states in your nation | Anyone |
-| `/sc state info <name>` | View state information | Anyone |
+<!-- TODO: Add screenshot showing border visualization -->
+<!-- ![Border Visualization](screenshots/borders.png) -->
 
-### City Commands
-
-| Command | Description | Permission |
-|---------|-------------|------------|
-| `/sc city create <name>` | Create a city in your state | State Governor+ |
-| `/sc city list` | List cities in your state | Anyone |
-| `/sc city info <name>` | View city information | Anyone |
-
-### Chunk Commands
-
-| Command | Description | Permission |
-|---------|-------------|------------|
-| `/sc chunk claim` | Claim current chunk | City Mayor+ |
-| `/sc chunk unclaim` | Unclaim current chunk | City Mayor+ |
-| `/sc chunk info` | View chunk information | Anyone |
-
-### GUI Commands
-
-| Command | Description |
-|---------|-------------|
-| `/sc gui` | Open main StateCraft menu |
-| `/sc gui nation` | Open nation info screen |
-| `/sc gui state` | Open state info screen |
-| `/sc gui city` | Open city info screen |
-| `/sc gui chunk` | Open chunk info screen |
-
-### Border Commands
-
-| Command | Description |
-|---------|-------------|
-| `/sc borders` | Cycle border display modes |
-| `/sc borders off` | Turn off border rendering |
-| `/sc borders chunks` | Show all chunk borders |
-| `/sc borders mychunks` | Show only your nation's chunks |
-| `/sc borders myterritory` | Show your nation's territory outline |
-| `/sc borders all` | Show all nations' territories |
-
-### Admin Commands (OP Required)
-
-| Command | Description |
-|---------|-------------|
-| `/sc admin bypass` | Toggle chunk protection bypass |
-| `/sc admin unclaim` | Force unclaim any chunk |
-| `/sc admin delete <nation>` | Force delete a nation |
+> **Command equivalent:** `/sc borders [mode]`
 
 ---
 
-## 🗳️ Elections System
+## 🗳️ Elections System (GUI)
 
-Nations hold automatic elections for leadership. Configure timing in the server config.
+Nations hold automatic democratic elections for leadership positions.
 
-### Election Flow
+### Election Timeline
 
-1. **Waiting Period** - Time between elections (default: 7 days)
-2. **Registration** - Candidates register and pay fee ($5,000 default)
-3. **Voting Period** - Nation members vote (default: 24 hours)
-4. **Results** - Winner becomes the new nation leader
+1. **Waiting Period** → Time between elections (default: 7 days)
+2. **Registration** → Candidates register with fee ($5,000)
+3. **Voting** → All members vote (default: 24 hours)
+4. **Results** → Winner becomes nation leader
 
-### Participating in Elections
+### Participating via GUI
 
-**As a Voter:**
-- Open the nation GUI (press **N** → click "Vote")
-- Click on a candidate to cast your vote
-- View election history through the GUI
+#### Viewing Elections
+1. Press **N** → Select your nation
+2. Click **"Elections"** button
+3. View current election status, candidates, and timeline
 
-**As a Candidate:**
-- Have sufficient funds (registration fee)
-- Click "Register as Candidate" in the election GUI
-- Campaign to your fellow nation members!
+<!-- TODO: Add screenshot of election overview -->
+<!-- ![Election Overview](screenshots/election_overview.png) -->
+
+#### Registering as a Candidate
+1. Open the Elections GUI
+2. Click **"Register as Candidate"**
+3. Confirm the registration fee payment
+
+<!-- TODO: Add screenshot of candidate registration -->
+<!-- ![Register Candidate](screenshots/register_candidate.png) -->
+
+#### Casting Your Vote
+1. Open the Elections GUI during voting period
+2. View candidate list with their platforms
+3. Click on a candidate to select them
+4. Click **"Vote"** to confirm
+
+<!-- TODO: Add screenshot of voting interface -->
+<!-- ![Voting Interface](screenshots/vote_screen.png) -->
+
+#### Viewing Election History
+1. Open the Elections GUI
+2. Click **"View History"** button
+3. Browse past election results
 
 ---
 
-## 📜 Legislature System
+## 📜 Legislature System (GUI)
 
-The legislature allows nation members to propose and vote on policies that change how the nation operates.
+The legislature allows members to propose and vote on policies that shape your nation.
 
 ### Bill Lifecycle
 
-1. **Draft** - A governor or officer proposes a bill
-2. **Debate** - Discussion period (default: 24 hours)
-3. **Voting** - Governors and officers vote (default: 24 hours)
-4. **Passed/Failed** - Requires majority and quorum
-5. **Leader Action** - Leader signs or vetoes
-6. **Enacted/Vetoed** - Bill becomes law or is rejected
+```
+Draft → Debate → Voting → Passed/Failed → Leader Signs/Vetoes → Enacted
+```
 
-### Opening the Legislature GUI
+### Accessing the Legislature
 
-1. Press **N** to open the StateCraft menu
-2. Click on your nation
-3. Click "Laws" button
-4. View active bills, vote, or propose new legislation
+1. Press **N** → Select your nation
+2. Click **"Laws"** button
+3. Browse active bills, passed laws, and the national codex
+
+<!-- TODO: Add screenshot of legislature main screen -->
+<!-- ![Legislature Overview](screenshots/legislature_overview.png) -->
+
+### Proposing a Bill
+
+1. Open the Legislature GUI
+2. Click **"Propose Bill"**
+3. Enter bill title and description
+4. Select policy type and value (if applicable)
+5. Submit for debate
+
+<!-- TODO: Add screenshot of bill proposal form -->
+<!-- ![Propose Bill](screenshots/propose_bill.png) -->
 
 ### Voting on Bills
 
-- Voting members (governors and officers) can vote YES, NO, or ABSTAIN
-- Click on an active bill to see details
-- Use the voting buttons to cast your vote
+1. Open the Legislature GUI
+2. Click on an active bill in the **"Voting"** phase
+3. Read the bill details and discussion
+4. Click **YES**, **NO**, or **ABSTAIN**
+
+<!-- TODO: Add screenshot of bill voting interface -->
+<!-- ![Vote on Bill](screenshots/bill_voting.png) -->
+
+> **Note:** Only Governors and Officers can vote on bills
+
+### Leader Actions (Sign/Veto)
+
+When a bill passes, the nation leader can:
+
+1. Open the Legislature GUI
+2. Find bills in **"Awaiting Signature"** status
+3. Click to view details
+4. Choose **"Sign into Law"** or **"Veto"**
+
+<!-- TODO: Add screenshot of leader signature screen -->
+<!-- ![Leader Signature](screenshots/leader_sign.png) -->
+
+> **Note:** A vetoed bill can be overridden by a 67% supermajority vote
 
 ### Policy Types
 
-Bills can modify various nation policies:
-
-| Category | Policies |
-|----------|----------|
-| **Taxation** | Nation Tax Rate, State Pass-Through Rate, Import Tariff, Base Chunk Value |
-| **Territory** | Max States, Max Cities per State, Max Chunks per City, Open Borders |
-| **Membership** | Open Nation, Citizenship Requirements |
+| Category | Available Policies |
+|----------|-------------------|
+| **Taxation** | Nation Tax Rate, State Pass-Through, Import Tariff, Base Chunk Value |
+| **Territory** | Max States, Max Cities per State, Max Chunks per City |
+| **Membership** | Open Nation, Open Borders |
 | **Diplomacy** | Declare War, Declare Peace, Form/Break Alliance |
 | **Economy** | Minimum Wage, Chunk Claim Fee |
-| **Custom** | Custom roleplay laws |
-
-### Leader Powers
-
-The nation leader can:
-- **Sign** - Approve a passed bill, making it law
-- **Veto** - Reject a passed bill (can be overridden by 67% vote)
+| **Custom** | Roleplay laws with custom text |
 
 ---
 
-## 💰 Economy System
+## 💰 Economy System (GUI)
 
-StateCraft Economy provides a physical currency system with banking.
+### Currency Items
 
-### Currency
-
-The mod includes paper currency bills:
+Physical currency bills in various denominations:
 - $1, $10, $100, $1,000, $10,000, $100,000, $1,000,000
 
-Currency items can be configured in the config file to include any Minecraft items.
+### Using the ATM
 
-### ATM Block
+The ATM block provides a GUI for all banking operations.
 
-The ATM block allows players to:
-- **Check Balance** - View personal or treasury balances
-- **Deposit** - Insert currency items to add to your balance
-- **Withdraw** - Convert balance to physical currency items
-- **Transfer** - Send money to other players
+<!-- TODO: Add screenshot of ATM GUI -->
+<!-- ![ATM Interface](screenshots/atm_gui.png) -->
 
-**Obtaining an ATM:**
-```
-/give @p statecraft_economy:atm
-```
+#### Placing and Opening
+1. Place an ATM block in the world
+2. Right-click to open the banking GUI
 
-**Using the ATM:**
-1. Place the ATM block
-2. Right-click to open the GUI
-3. Select account type (Personal, Nation, State, or City treasury)
-4. Enter amount and click the appropriate action
+#### Account Types
+Select which account to manage:
+- **Personal** - Your player balance
+- **Nation Treasury** - Nation funds (Leader only)
+- **State Treasury** - State funds (Governor only)
+- **City Treasury** - City funds (Mayor only)
+
+#### Operations
+
+| Action | How to Use |
+|--------|------------|
+| **Check Balance** | View displays automatically when opened |
+| **Deposit** | Hold currency items, enter amount, click "Deposit" |
+| **Withdraw** | Enter amount, click "Withdraw" to receive currency items |
+| **Transfer** | Enter player name and amount, click "Transfer" |
+
+<!-- TODO: Add screenshot of ATM deposit flow -->
+<!-- ![ATM Deposit](screenshots/atm_deposit.png) -->
 
 ### Trading Hub
 
-The Trading Hub allows players to sell items for currency based on configured values.
+Sell items for currency based on configured values.
 
-**Obtaining a Trading Hub:**
-```
-/give @p statecraft_economy:trading_hub
-```
+1. Place a Trading Hub block
+2. Right-click to open the interface
+3. Insert items into the input slots
+4. Click "Sell" to convert to currency
 
-### Treasuries
-
-Each level of government can have its own treasury:
-- **Nation Treasury** - Accessible by nation leader
-- **State Treasury** - Accessible by state governors
-- **City Treasury** - Accessible by city mayors
-
-Access treasury accounts through the ATM by selecting the appropriate account type.
+<!-- TODO: Add screenshot of Trading Hub -->
+<!-- ![Trading Hub](screenshots/trading_hub.png) -->
 
 ---
 
 ## 🔒 Protection System
 
-StateCraft automatically protects claimed territory:
+StateCraft automatically protects claimed territory.
 
-### Protection Rules
+| Your Role | Can Build | Can Use Containers | Can Interact |
+|-----------|-----------|-------------------|--------------|
+| Member+ of owning nation | ✅ | ✅ | ✅ |
+| Outsider | ❌ | ❌ | ❌ |
+| No nation | ❌ (anywhere) | ❌ | ❌ |
 
-| Action | Wilderness | Your Claims | Other Claims |
-|--------|------------|-------------|--------------|
-| Build/Break | ❌ (need nation) | ✅ Based on role | ❌ No access |
-| Interact | ❌ (need nation) | ✅ Based on role | ❌ No access |
-| Containers | ❌ (need nation) | ✅ Based on role | ❌ No access |
-
-### Permission Levels
-
-| Level | Description |
-|-------|-------------|
-| **Leader** | Nation founder - full access |
-| **Admin** | Nation administrators |
-| **Governor** | State leaders |
-| **Mayor** | City leaders |
-| **Officer** | Appointed officials |
-| **Member** | Regular nation members |
-| **Outsider** | Non-members |
+> **Tip:** Server admins can use `/sc admin bypass` to toggle protection bypass
 
 ---
 
-## ⌨️ Default Keybindings
+## ⌨️ Keybindings
 
 | Key | Action |
 |-----|--------|
 | **N** | Open StateCraft Menu |
 | **B** | Cycle Border Display Modes |
 
-Keybindings can be customized in Minecraft's Controls menu.
+*Customize in Options → Controls → StateCraft*
+
+---
+
+## 📋 Command Reference
+
+While the GUI handles most tasks, commands are available for quick access:
+
+### Essential Commands
+
+| Command | Description |
+|---------|-------------|
+| `/sc gui` | Open main StateCraft menu |
+| `/sc borders` | Cycle border display |
+| `/sc nation info` | View your nation info |
+| `/sc chunk info` | View current chunk info |
+
+### Nation Management
+
+| Command | Description |
+|---------|-------------|
+| `/sc nation create <name>` | Create a nation |
+| `/sc nation list` | List all nations |
+| `/sc nation join <name>` | Join a nation |
+| `/sc nation leave` | Leave your nation |
+| `/sc nation invite <player>` | Invite a player |
+
+### Territory Commands
+
+| Command | Description |
+|---------|-------------|
+| `/sc state create <name>` | Create a state |
+| `/sc city create <name>` | Create a city |
+| `/sc chunk claim` | Claim current chunk |
+| `/sc chunk unclaim` | Unclaim current chunk |
+
+### Admin Commands (OP Only)
+
+| Command | Description |
+|---------|-------------|
+| `/sc admin bypass` | Toggle protection bypass |
+| `/sc admin bill enddebate <id>` | End bill debate early |
+| `/sc admin bill pass <id>` | Force pass a bill |
+| `/sc admin bill fail <id>` | Force fail a bill |
+| `/sc admin bill enact <id>` | Force enact a bill |
 
 ---
 
 ## ⚙️ Configuration
 
-### StateCraft Config (`statecraft.toml`)
+### StateCraft (`config/statecraft.toml`)
 
 ```toml
 [territory]
@@ -309,9 +378,7 @@ maxCitiesPerState = 10
 maxChunksPerCity = 100
 
 [economy]
-enableNationTreasury = true
 nationTaxRate = 0.0
-chunkClaimFeeEnabled = true
 chunkClaimFee = 100.0
 
 [creationFees]
@@ -320,75 +387,58 @@ stateCreationFee = 50000.0
 cityCreationFee = 10000.0
 
 [elections]
-enableNationElections = true
 electionIntervalDays = 7
 electionDurationHours = 24
 electionCandidateFee = 5000.0
 
 [legislature]
-enableLegislature = true
 debatePeriodHours = 24
 votingPeriodHours = 24
 quorumPercent = 50
 vetoOverridePercent = 67
 ```
 
-### Economy Config (`statecraft-economy.toml`)
+### Economy (`config/statecraft-economy.toml`)
 
 ```toml
 [economy]
-# Custom currency items (format: "modid:item=value")
 currencyItems = [
     "statecraft_economy:bill_1=1",
     "statecraft_economy:bill_10=10",
-    "statecraft_economy:bill_100=100",
-    "statecraft_economy:bill_1000=1000",
-    "statecraft_economy:bill_10000=10000",
-    "statecraft_economy:bill_100000=100000",
-    "statecraft_economy:bill_1000000=1000000"
+    # ... additional denominations
 ]
 startingBalance = 100.0
-
-[atm]
-requiresPower = false
-range = 5
 ```
 
 ---
 
-## 💡 Tips for Server Admins
+## 💡 Server Admin Tips
 
-1. **Adjust creation fees** to match your server's economy
-2. **Set election intervals** appropriate for your player activity
-3. **Configure max territories** to prevent excessive land claiming
-4. **Add custom currency items** like gold ingots for familiarity
-5. **Use bypass mode** (`/sc admin bypass`) for building spawn areas
+1. **Adjust creation fees** to balance your economy
+2. **Configure election timing** based on server activity
+3. **Set territory limits** to prevent excessive claiming
+4. **Use admin bill commands** to resolve stuck legislation
+5. **Enable bypass mode** for building spawn/public areas
 
 ---
 
 ## 🐛 Troubleshooting
 
 **"You cannot interact here"**
-- Join a nation using `/sc nation list` and `/sc nation join <name>`
-- Or create your own nation with `/sc nation create <name>`
+- Press **N** and join or create a nation
 
 **"Not enough funds"**
-- Use an ATM to check your balance
-- Obtain currency through trading or from other players
-- Admins can give currency: `/give @p statecraft_economy:bill_1000 10`
+- Find an ATM to check your balance
+- Earn currency through trading or other players
 
 **"Cannot claim this chunk"**
-- Make sure you're in a city (create one if needed)
-- Check chunk limits haven't been reached
-- Ensure the chunk isn't already claimed
+- Ensure you're in a city and have Mayor+ permissions
+- Check if territory limits have been reached
 
----
-
-## 📄 License
-
-This project is provided for educational and entertainment purposes.
+**GUI not opening?**
+- Check keybindings in Options → Controls
+- Try `/sc gui` as an alternative
 
 ---
 
 *StateCraft Mods v1.0.0 for Minecraft 1.20.1 with Forge*
-
