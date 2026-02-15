@@ -9,18 +9,6 @@ IMPORT_TARIFF  - Need marketplace to implement
 Taxation
 0-100%
 Not implemented - no field on Nation, no handler in applyPolicyChanges.
-MAX_CITIES_PER_STATE - Applied, pending validation
-Territory
-1-100
-Not implemented - no handler in applyPolicyChanges.
-OPEN_BORDERS - implemented pending validation
-Territory
-true/false
-Not implemented - no field on Nation, no handler. Would allow foreign players to interact.
-CHUNK_CLAIM_TAX
-Economy
-$0-1M
-Not implemented - would levy a tax on cities for each chunk claimed
 MINIMUM_WAGE
 Economy
 $0-10K
@@ -54,18 +42,5 @@ Free text for roleplay laws
 Diplomacy between nations
 Peace treaties
 
-Change my mind, sales taxes can be independently implemented on each level. For now, city/state set in settings screen. Nation set via legislature.
-
 Government contracting mechanics
 
-Seems bill was not passed automatically despite >2/3rds votes
-
-Remove State pass through setting from nation settings
-
-Bill history does not persist through server restarts. 
-
-New category of bills: Constitutional Amendments. Require 2/3rds vote to pass, can not be veto'd
-
-Term duration for Leader: default 7 days
-Election Duration: default 1 day
-Max officers (can not exceed 3, but can be 0-2)

@@ -132,8 +132,8 @@ public class ClientPacketHandler {
                 packet.getBiomeMultiplier(), packet.getBiomeName(),
                 packet.getDemandMultiplier(), packet.getNearbyClaims(),
                 packet.getGovernmentMultiplier(),
-                packet.getImprovementValue(), packet.getImprovementScore(),
-                packet.getTotalValue()
+                packet.getImprovementMultiplier(), packet.getImprovementScore(),
+                packet.getTotalValue(), packet.getCityTaxRate()
             );
         });
         ctx.get().setPacketHandled(true);
@@ -161,17 +161,18 @@ public class ClientPacketHandler {
         public final double demandMultiplier;
         public final int nearbyClaims;
         public final double governmentMultiplier;
-        public final double improvementValue;
+        public final double improvementMultiplier;
         public final int improvementScore;
         public final double totalValue;
+        public final double cityTaxRate;
 
         public ChunkValuationData(int chunkX, int chunkZ, String dimension,
                                   double baseValue, double locationMultiplier, double distanceFromSpawn,
                                   double biomeMultiplier, String biomeName,
                                   double demandMultiplier, int nearbyClaims,
                                   double governmentMultiplier,
-                                  double improvementValue, int improvementScore,
-                                  double totalValue) {
+                                  double improvementMultiplier, int improvementScore,
+                                  double totalValue, double cityTaxRate) {
             this.chunkX = chunkX;
             this.chunkZ = chunkZ;
             this.dimension = dimension;
@@ -183,9 +184,10 @@ public class ClientPacketHandler {
             this.demandMultiplier = demandMultiplier;
             this.nearbyClaims = nearbyClaims;
             this.governmentMultiplier = governmentMultiplier;
-            this.improvementValue = improvementValue;
+            this.improvementMultiplier = improvementMultiplier;
             this.improvementScore = improvementScore;
             this.totalValue = totalValue;
+            this.cityTaxRate = cityTaxRate;
         }
     }
 

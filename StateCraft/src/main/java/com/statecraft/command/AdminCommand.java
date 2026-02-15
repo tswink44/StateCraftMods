@@ -44,6 +44,29 @@ public class AdminCommand {
                     .executes(AdminCommand::setChunkOwner)))
             .then(Commands.literal("reload")
                 .executes(AdminCommand::reloadConfig))
+            .then(Commands.literal("valuation")
+                .then(Commands.literal("recalculate")
+                    .executes(AdminCommand::recalculateAllValuations)
+                    .then(Commands.argument("nation", com.mojang.brigadier.arguments.StringArgumentType.string())
+                        .executes(AdminCommand::recalculateNationValuations)))
+                .then(Commands.literal("clear")
+                    .executes(AdminCommand::clearValuationCache))
+                .then(Commands.literal("scanimprovements")
+                    .executes(AdminCommand::scanChunkImprovements))
+                .then(Commands.literal("status")
+                    .executes(AdminCommand::valuationStatus)))
+            .then(Commands.literal("tax")
+                .then(Commands.literal("collect")
+                    .executes(AdminCommand::forceCollectTax))
+                .then(Commands.literal("status")
+                    .executes(AdminCommand::showTaxStatus))
+                .then(Commands.literal("enable")
+                    .executes(ctx -> setTaxEnabled(ctx, true)))
+                .then(Commands.literal("disable")
+                    .executes(ctx -> setTaxEnabled(ctx, false)))
+                .then(Commands.literal("period")
+                    .then(Commands.argument("ticks", com.mojang.brigadier.arguments.LongArgumentType.longArg(1200))
+                        .executes(AdminCommand::setTaxPeriod))))
             .then(ElectionCommand.registerAdmin())
             .then(LegislatureCommand.registerAdmin());
     }
@@ -263,6 +286,279 @@ public class AdminCommand {
             "§aConfiguration reloaded! §7(No config file yet - coming soon)"
         ), true);
         return 1;
+    }
+
+    // ==================== Valuation Admin Commands ====================
+
+    /**
+     * Recalculate all chunk valuations
+     */
+    private static int recalculateAllValuations(CommandContext<CommandSourceStack> context) {
+        try {
+            Class<?> valuationManagerClass = Class.forName("com.statecraft.economy.valuation.ChunkValuationManager");
+            Object manager = valuationManagerClass.getMethod("getInstance").invoke(null);
+
+            // Mark all dirty and force recalculate
+            valuationManagerClass.getMethod("markAllDirty").invoke(manager);
+            valuationManagerClass.getMethod("forceRecalculateAllDirty").invoke(manager);
+
+            // Get cache size
+            int cacheSize = (Integer) valuationManagerClass.getMethod("getCacheSize").invoke(manager);
+
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§aRecalculated all " + cacheSize + " cached chunk valuations."
+            ), true);
+            return 1;
+        } catch (ClassNotFoundException e) {
+            context.getSource().sendFailure(Component.literal("§cStateCraft Economy mod is not loaded!"));
+            return 0;
+        } catch (Exception e) {
+            context.getSource().sendFailure(Component.literal("§cError recalculating valuations: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    /**
+     * Recalculate chunk valuations for a specific nation
+     */
+    private static int recalculateNationValuations(CommandContext<CommandSourceStack> context) {
+        String nationName = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "nation");
+
+        ChunkClaimManager manager = ChunkClaimManager.getInstance();
+        Nation nation = manager.getNationByName(nationName);
+
+        if (nation == null) {
+            context.getSource().sendFailure(Component.literal("§cNation '" + nationName + "' not found!"));
+            return 0;
+        }
+
+        try {
+            Class<?> valuationManagerClass = Class.forName("com.statecraft.economy.valuation.ChunkValuationManager");
+            Object valuationManager = valuationManagerClass.getMethod("getInstance").invoke(null);
+
+            valuationManagerClass.getMethod("recalculateNationChunks", java.util.UUID.class)
+                .invoke(valuationManager, nation.getId());
+
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§aRecalculated chunk valuations for nation '§e" + nationName + "§a'."
+            ), true);
+            return 1;
+        } catch (ClassNotFoundException e) {
+            context.getSource().sendFailure(Component.literal("§cStateCraft Economy mod is not loaded!"));
+            return 0;
+        } catch (Exception e) {
+            context.getSource().sendFailure(Component.literal("§cError recalculating valuations: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    /**
+     * Clear the entire valuation cache
+     */
+    private static int clearValuationCache(CommandContext<CommandSourceStack> context) {
+        try {
+            Class<?> valuationManagerClass = Class.forName("com.statecraft.economy.valuation.ChunkValuationManager");
+            Object manager = valuationManagerClass.getMethod("getInstance").invoke(null);
+
+            int sizeBefore = (Integer) valuationManagerClass.getMethod("getCacheSize").invoke(manager);
+            valuationManagerClass.getMethod("clearCache").invoke(manager);
+
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§aCleared valuation cache. §7(" + sizeBefore + " entries removed)"
+            ), true);
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§7Valuations will be recalculated on demand."
+            ), false);
+            return 1;
+        } catch (ClassNotFoundException e) {
+            context.getSource().sendFailure(Component.literal("§cStateCraft Economy mod is not loaded!"));
+            return 0;
+        } catch (Exception e) {
+            context.getSource().sendFailure(Component.literal("§cError clearing cache: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    /**
+     * Show valuation cache status
+     */
+    private static int valuationStatus(CommandContext<CommandSourceStack> context) {
+        try {
+            Class<?> valuationManagerClass = Class.forName("com.statecraft.economy.valuation.ChunkValuationManager");
+            Object manager = valuationManagerClass.getMethod("getInstance").invoke(null);
+
+            int cacheSize = (Integer) valuationManagerClass.getMethod("getCacheSize").invoke(manager);
+
+            context.getSource().sendSuccess(() -> Component.literal("§6=== Valuation Cache Status ==="), false);
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§7Cached Chunks: §f" + cacheSize
+            ), false);
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§7Status: §aOperational"
+            ), false);
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§7Commands:"
+            ), false);
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§8  /sc admin valuation recalculate §7- Recalculate all"
+            ), false);
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§8  /sc admin valuation recalculate <nation> §7- Recalculate nation"
+            ), false);
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§8  /sc admin valuation scanimprovements §7- Rescan current chunk"
+            ), false);
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§8  /sc admin valuation clear §7- Clear cache"
+            ), false);
+            return 1;
+        } catch (ClassNotFoundException e) {
+            context.getSource().sendSuccess(() -> Component.literal("§6=== Valuation Cache Status ==="), false);
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§7Status: §cStateCraft Economy mod not loaded"
+            ), false);
+            return 1;
+        } catch (Exception e) {
+            context.getSource().sendFailure(Component.literal("§cError getting status: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    /**
+     * Scan the current chunk for improvements (recalculate improvement score)
+     */
+    private static int scanChunkImprovements(CommandContext<CommandSourceStack> context) {
+        try {
+            ServerPlayer player = context.getSource().getPlayerOrException();
+            ChunkPos chunkPos = new ChunkPos(player.blockPosition());
+            String dimension = player.level().dimension().location().toString();
+
+            Class<?> trackerClass = Class.forName("com.statecraft.economy.valuation.ImprovementTracker");
+            Object tracker = trackerClass.getMethod("getInstance").invoke(null);
+
+            // Call scanChunk method
+            int score = (Integer) trackerClass.getMethod("scanChunk",
+                    net.minecraft.server.MinecraftServer.class, int.class, int.class, String.class)
+                .invoke(tracker, player.getServer(), chunkPos.x, chunkPos.z, dimension);
+
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§aScanned chunk (§e" + chunkPos.x + ", " + chunkPos.z + "§a): Improvement score = §f" + score
+            ), true);
+
+            // Also recalculate the valuation
+            Class<?> valuationManagerClass = Class.forName("com.statecraft.economy.valuation.ChunkValuationManager");
+            Object valuationManager = valuationManagerClass.getMethod("getInstance").invoke(null);
+            valuationManagerClass.getMethod("markDirty", int.class, int.class, String.class)
+                .invoke(valuationManager, chunkPos.x, chunkPos.z, dimension);
+
+            return 1;
+        } catch (ClassNotFoundException e) {
+            context.getSource().sendFailure(Component.literal("§cStateCraft Economy mod is not loaded!"));
+            return 0;
+        } catch (Exception e) {
+            context.getSource().sendFailure(Component.literal("§cError scanning chunk: " + e.getMessage()));
+            e.printStackTrace();
+            return 0;
+        }
+    }
+
+    // ==================== Tax Admin Commands ====================
+
+    private static int forceCollectTax(CommandContext<CommandSourceStack> context) {
+        try {
+            Class<?> taxManagerClass = Class.forName("com.statecraft.economy.core.TaxationManager");
+            Object taxManager = taxManagerClass.getMethod("getInstance").invoke(null);
+
+            context.getSource().sendSuccess(() -> Component.literal("§eForcing tax collection..."), true);
+            taxManagerClass.getMethod("forceCollectNow", net.minecraft.server.MinecraftServer.class)
+                .invoke(taxManager, context.getSource().getServer());
+            context.getSource().sendSuccess(() -> Component.literal("§aTax collection complete!"), true);
+            return 1;
+        } catch (ClassNotFoundException e) {
+            context.getSource().sendFailure(Component.literal("§cStateCraft Economy mod is not loaded!"));
+            return 0;
+        } catch (Exception e) {
+            context.getSource().sendFailure(Component.literal("§cError collecting taxes: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    private static int showTaxStatus(CommandContext<CommandSourceStack> context) {
+        try {
+            Class<?> taxManagerClass = Class.forName("com.statecraft.economy.core.TaxationManager");
+            Object taxManager = taxManagerClass.getMethod("getInstance").invoke(null);
+
+            boolean enabled = (Boolean) taxManagerClass.getMethod("isEnabled").invoke(taxManager);
+            long periodTicks = (Long) taxManagerClass.getMethod("getTaxPeriodTicks").invoke(taxManager);
+            long ticksUntilNext = (Long) taxManagerClass.getMethod("getTicksUntilNextCollection",
+                net.minecraft.server.MinecraftServer.class).invoke(taxManager, context.getSource().getServer());
+
+            // Convert ticks to readable time
+            long periodSeconds = periodTicks / 20;
+            long periodMinutes = periodSeconds / 60;
+            long periodHours = periodMinutes / 60;
+
+            long nextSeconds = ticksUntilNext / 20;
+            long nextMinutes = nextSeconds / 60;
+
+            context.getSource().sendSuccess(() -> Component.literal("§6=== Tax System Status ==="), false);
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§7Status: " + (enabled ? "§aEnabled" : "§cDisabled")), false);
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§7Tax Period: §f" + periodHours + "h " + (periodMinutes % 60) + "m (" + periodTicks + " ticks)"), false);
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§7Next Collection: §f" + nextMinutes + "m " + (nextSeconds % 60) + "s"), false);
+
+            return 1;
+        } catch (ClassNotFoundException e) {
+            context.getSource().sendFailure(Component.literal("§cStateCraft Economy mod is not loaded!"));
+            return 0;
+        } catch (Exception e) {
+            context.getSource().sendFailure(Component.literal("§cError getting tax status: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    private static int setTaxEnabled(CommandContext<CommandSourceStack> context, boolean enabled) {
+        try {
+            Class<?> taxManagerClass = Class.forName("com.statecraft.economy.core.TaxationManager");
+            Object taxManager = taxManagerClass.getMethod("getInstance").invoke(null);
+            taxManagerClass.getMethod("setEnabled", boolean.class).invoke(taxManager, enabled);
+
+            String status = enabled ? "§aenabled" : "§cdisabled";
+            context.getSource().sendSuccess(() -> Component.literal("§7Tax collection " + status), true);
+            return 1;
+        } catch (ClassNotFoundException e) {
+            context.getSource().sendFailure(Component.literal("§cStateCraft Economy mod is not loaded!"));
+            return 0;
+        } catch (Exception e) {
+            context.getSource().sendFailure(Component.literal("§cError setting tax status: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    private static int setTaxPeriod(CommandContext<CommandSourceStack> context) {
+        try {
+            long ticks = com.mojang.brigadier.arguments.LongArgumentType.getLong(context, "ticks");
+
+            Class<?> taxManagerClass = Class.forName("com.statecraft.economy.core.TaxationManager");
+            Object taxManager = taxManagerClass.getMethod("getInstance").invoke(null);
+            taxManagerClass.getMethod("setTaxPeriodTicks", long.class).invoke(taxManager, ticks);
+
+            long seconds = ticks / 20;
+            long minutes = seconds / 60;
+            long hours = minutes / 60;
+
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§aTax period set to " + hours + "h " + (minutes % 60) + "m (" + ticks + " ticks)"), true);
+            return 1;
+        } catch (ClassNotFoundException e) {
+            context.getSource().sendFailure(Component.literal("§cStateCraft Economy mod is not loaded!"));
+            return 0;
+        } catch (Exception e) {
+            context.getSource().sendFailure(Component.literal("§cError setting tax period: " + e.getMessage()));
+            return 0;
+        }
     }
 }
 

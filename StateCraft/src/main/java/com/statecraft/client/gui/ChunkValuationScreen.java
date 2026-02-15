@@ -24,9 +24,10 @@ public class ChunkValuationScreen extends StateCraftScreen {
     private double demandMultiplier = 1.0;
     private int nearbyClaims = 0;
     private double governmentMultiplier = 1.0;
-    private double improvementValue = 0;
+    private double improvementMultiplier = 1.0;
     private int improvementScore = 0;
     private double totalValue = 100.0;
+    private double cityTaxRate = 0.0; // Actual city tax rate from server
 
     public ChunkValuationScreen(int chunkX, int chunkZ) {
         super(Component.literal("Chunk Valuation"));
@@ -107,9 +108,10 @@ public class ChunkValuationScreen extends StateCraftScreen {
                         this.demandMultiplier = dataClass.getField("demandMultiplier").getDouble(data);
                         this.nearbyClaims = dataClass.getField("nearbyClaims").getInt(data);
                         this.governmentMultiplier = dataClass.getField("governmentMultiplier").getDouble(data);
-                        this.improvementValue = dataClass.getField("improvementValue").getDouble(data);
+                        this.improvementMultiplier = dataClass.getField("improvementMultiplier").getDouble(data);
                         this.improvementScore = dataClass.getField("improvementScore").getInt(data);
                         this.totalValue = dataClass.getField("totalValue").getDouble(data);
+                        this.cityTaxRate = dataClass.getField("cityTaxRate").getDouble(data);
                         this.dataLoaded = true;
                     }
                 }
@@ -164,22 +166,17 @@ public class ChunkValuationScreen extends StateCraftScreen {
         drawValueRow(graphics, x, y, "Demand:", demandInfo, getMultiplierColor(demandMultiplier));
         y += 12;
 
-        // Government Multiplier
-        String govInfo = String.format("%.2fx §8(city tax rate)", governmentMultiplier);
-        drawValueRow(graphics, x, y, "Government:", govInfo, getMultiplierColor(governmentMultiplier));
+        // Improvements (multiplicative)
+        String impInfo = String.format("%.2fx §8(%d improvement score)", improvementMultiplier, improvementScore);
+        drawValueRow(graphics, x, y, "Improvements:", impInfo, getMultiplierColor(improvementMultiplier));
         y += 14;
 
         renderDivider(graphics, guiLeft + 10, y, guiWidth - 20);
         y += 8;
 
-        // Subtotal (base * multipliers)
-        double subtotal = baseValue * locationMultiplier * biomeMultiplier * demandMultiplier * governmentMultiplier;
+        // Subtotal (base * all multipliers)
+        double subtotal = baseValue * locationMultiplier * biomeMultiplier * demandMultiplier * improvementMultiplier;
         drawValueRow(graphics, x, y, "Subtotal:", String.format("$%.2f", subtotal), "§e");
-        y += 12;
-
-        // Improvements
-        String impInfo = String.format("+$%.2f §8(%d improvement score)", improvementValue, improvementScore);
-        drawValueRow(graphics, x, y, "Improvements:", impInfo, "§a");
         y += 14;
 
         renderDivider(graphics, guiLeft + 10, y, guiWidth - 20);
@@ -192,12 +189,18 @@ public class ChunkValuationScreen extends StateCraftScreen {
         graphics.drawString(this.font, totalStr, rightX - totalWidth, y, COLOR_TEXT);
         y += 14;
 
-        // Tax info
-        double taxRate = 0.05; // 5% default
-        double estimatedTax = totalValue * taxRate;
-        graphics.drawCenteredString(this.font,
-            String.format("§7Estimated Tax (5%%): §c$%.2f §7per period", estimatedTax),
-            this.width / 2, y, COLOR_SECONDARY);
+        // Tax info - use actual city tax rate
+        double estimatedTax = totalValue * cityTaxRate;
+        double taxPercent = cityTaxRate * 100;
+        if (cityTaxRate > 0) {
+            graphics.drawCenteredString(this.font,
+                String.format("§7Estimated Tax (%.1f%%): §c$%.2f §7per period", taxPercent, estimatedTax),
+                this.width / 2, y, COLOR_SECONDARY);
+        } else {
+            graphics.drawCenteredString(this.font,
+                "§7No property tax in this area",
+                this.width / 2, y, COLOR_SECONDARY);
+        }
     }
 
     private void drawValueRow(GuiGraphics graphics, int x, int y, String label, String value, String valueColor) {

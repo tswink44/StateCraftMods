@@ -402,6 +402,10 @@ public class ServerPacketHandler {
                 com.statecraft.economy.valuation.ChunkValuationManager.getInstance()
                     .getValuation(chunkX, chunkZ, dimension);
 
+            // Get city tax rate for this chunk
+            double cityTaxRate = StateCraftIntegration.getChunkCityTaxRate(
+                player.getServer(), chunkX, chunkZ, dimension);
+
             // Send to client
             NetworkHandler.sendToPlayer(new SyncChunkValuationPacket(
                 chunkX, chunkZ, dimension,
@@ -413,9 +417,10 @@ public class ServerPacketHandler {
                 valuation.getDemandMultiplier(),
                 valuation.getNearbyClaims(),
                 valuation.getGovernmentMultiplier(),
-                valuation.getImprovementValue(),
+                valuation.getImprovementMultiplier(),
                 valuation.getImprovementScore(),
-                valuation.getTotalValue()
+                valuation.getTotalValue(),
+                cityTaxRate
             ), player);
         });
         ctx.get().setPacketHandled(true);

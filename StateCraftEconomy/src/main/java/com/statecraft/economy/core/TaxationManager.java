@@ -111,6 +111,8 @@ public class TaxationManager {
                 List<ChunkTaxInfo> chunks = entry.getValue();
 
                 double cityTaxRate = getTaxRateForCity(cityId);
+                StateCraftEconomy.LOGGER.info("Processing city {} with tax rate: {} ({}%)",
+                    cityId, cityTaxRate, cityTaxRate * 100);
                 double cityRevenue = 0;
                 int cityChunksProcessed = 0;
 
@@ -295,12 +297,24 @@ public class TaxationManager {
      */
     private double calculateChunkTax(ChunkTaxInfo chunk, double taxRate) {
         // Use the valuation system to get the chunk's actual value
+        com.statecraft.economy.valuation.ChunkValuationManager valuationManager =
+            com.statecraft.economy.valuation.ChunkValuationManager.getInstance();
+
         com.statecraft.economy.valuation.ChunkValuation valuation =
-            com.statecraft.economy.valuation.ChunkValuationManager.getInstance()
-                .getValuation(chunk.getChunkX(), chunk.getChunkZ(), chunk.getDimension());
+            valuationManager.getValuation(chunk.getChunkX(), chunk.getChunkZ(), chunk.getDimension());
 
         double chunkValue = valuation.getTotalValue();
-        return chunkValue * taxRate;
+        double taxAmount = chunkValue * taxRate;
+
+        StateCraftEconomy.LOGGER.info("Tax calculation for chunk ({}, {}) dim='{}': " +
+            "base={}, loc={}, biome={}, demand={}, gov={}, imp={}x (score={}), total={}, rate={}, tax={}",
+            chunk.getChunkX(), chunk.getChunkZ(), chunk.getDimension(),
+            valuation.getBaseValue(), valuation.getLocationMultiplier(), valuation.getBiomeMultiplier(),
+            valuation.getDemandMultiplier(), valuation.getGovernmentMultiplier(),
+            valuation.getImprovementMultiplier(), valuation.getImprovementScore(),
+            chunkValue, taxRate, taxAmount);
+
+        return taxAmount;
     }
 
     /**
@@ -425,20 +439,35 @@ public class TaxationManager {
         StateCraftEconomy.LOGGER.debug("Deposited {} to nation treasury {}", amount, nationId);
     }
 
-    // Tax rate getters (can be customized per entity later)
+    // Tax rate getters
     private double getTaxRateForCity(UUID cityId) {
-        // TODO: Allow per-city customization
-        return DEFAULT_CITY_TAX_RATE;
+        // Get the city's configured tax rate via StateCraft integration
+        double rate = StateCraftIntegration.getCityTaxRate(cityId);
+        if (rate < 0) {
+            // Fallback to default if not configured
+            return DEFAULT_CITY_TAX_RATE;
+        }
+        return rate;
     }
 
     private double getStatePassthroughRate(UUID stateId) {
-        // TODO: Allow per-state customization
-        return DEFAULT_STATE_PASSTHROUGH;
+        // Get the state's configured passthrough rate via StateCraft integration
+        double rate = StateCraftIntegration.getStatePassthroughRate(stateId);
+        if (rate < 0) {
+            // Fallback to default if not configured
+            return DEFAULT_STATE_PASSTHROUGH;
+        }
+        return rate;
     }
 
     private double getNationPassthroughRate(UUID nationId) {
-        // TODO: Allow per-nation customization
-        return DEFAULT_NATION_PASSTHROUGH;
+        // Get the nation's configured passthrough rate via StateCraft integration
+        double rate = StateCraftIntegration.getNationPassthroughRate(nationId);
+        if (rate < 0) {
+            // Fallback to default if not configured
+            return DEFAULT_NATION_PASSTHROUGH;
+        }
+        return rate;
     }
 
     private void logTaxCollectionResult(TaxCollectionResult result) {

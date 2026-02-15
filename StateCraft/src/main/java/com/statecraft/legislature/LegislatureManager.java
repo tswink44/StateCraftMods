@@ -298,6 +298,10 @@ public class LegislatureManager {
             switch (policy) {
                 case STATE_PASS_THROUGH_RATE:
                     nation.setStatePassThroughRate(Double.parseDouble(value));
+                    StateCraft.LOGGER.info("Policy change: State pass-through rate set to {}% for nation {}",
+                        Double.parseDouble(value) * 100, nation.getName());
+                    // Recalculate all chunk valuations for this nation immediately
+                    recalculateNationChunkValuations(nation.getId());
                     break;
                 case MAX_STATES_PER_NATION:
                     nation.setMaxStates(Integer.parseInt(value));;
@@ -384,8 +388,8 @@ public class LegislatureManager {
                     nation.setBaseChunkValue(Double.parseDouble(value));
                     StateCraft.LOGGER.info("Policy change: Base chunk value set to ${} for nation {}",
                         value, nation.getName());
-                    // Invalidate chunk valuation cache so valuations are recalculated
-                    invalidateChunkValuationCache();
+                    // Recalculate all chunk valuations for this nation immediately
+                    recalculateNationChunkValuations(nation.getId());
                     break;
                 case CHUNK_CLAIM_FEE:
                     nation.setChunkClaimFee(Double.parseDouble(value));
@@ -477,20 +481,22 @@ public class LegislatureManager {
     }
 
     /**
-     * Invalidate chunk valuation cache when legislation changes values that affect chunk pricing
-     * Uses reflection to call StateCraftEconomy without hard dependency
+     * Recalculate all chunk valuations for a specific nation when taxation parameters change.
+     * Uses reflection to call StateCraftEconomy without hard dependency.
+     *
+     * @param nationId The UUID of the nation whose chunks need recalculation
      */
-    private void invalidateChunkValuationCache() {
+    private void recalculateNationChunkValuations(UUID nationId) {
         try {
             Class<?> valuationManagerClass = Class.forName("com.statecraft.economy.valuation.ChunkValuationManager");
             Object manager = valuationManagerClass.getMethod("getInstance").invoke(null);
-            valuationManagerClass.getMethod("markAllDirty").invoke(manager);
-            StateCraft.LOGGER.info("Invalidated chunk valuation cache due to policy change");
+            valuationManagerClass.getMethod("recalculateNationChunks", UUID.class).invoke(manager, nationId);
+            StateCraft.LOGGER.info("Recalculated chunk valuations for nation {} due to policy change", nationId);
         } catch (ClassNotFoundException e) {
             // StateCraftEconomy mod not loaded, ignore
-            StateCraft.LOGGER.debug("StateCraftEconomy not loaded, skipping valuation cache invalidation");
+            StateCraft.LOGGER.debug("StateCraftEconomy not loaded, skipping valuation recalculation");
         } catch (Exception e) {
-            StateCraft.LOGGER.warn("Failed to invalidate chunk valuation cache: {}", e.getMessage());
+            StateCraft.LOGGER.warn("Failed to recalculate chunk valuations: {}", e.getMessage());
         }
     }
 

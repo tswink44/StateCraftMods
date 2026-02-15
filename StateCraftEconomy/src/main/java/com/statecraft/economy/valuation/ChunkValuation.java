@@ -20,7 +20,7 @@ public class ChunkValuation {
     private double demandMultiplier;
     private int nearbyClaims;
     private double governmentMultiplier;
-    private double improvementValue;
+    private double improvementMultiplier;
     private int improvementScore;
 
     // Final computed value
@@ -41,7 +41,7 @@ public class ChunkValuation {
         this.demandMultiplier = 1.0;
         this.nearbyClaims = 0;
         this.governmentMultiplier = 1.0;
-        this.improvementValue = 0.0;
+        this.improvementMultiplier = 1.0;
         this.improvementScore = 0;
         this.totalValue = 100.0;
         this.lastCalculated = 0;
@@ -60,7 +60,7 @@ public class ChunkValuation {
     public double getDemandMultiplier() { return demandMultiplier; }
     public int getNearbyClaims() { return nearbyClaims; }
     public double getGovernmentMultiplier() { return governmentMultiplier; }
-    public double getImprovementValue() { return improvementValue; }
+    public double getImprovementMultiplier() { return improvementMultiplier; }
     public int getImprovementScore() { return improvementScore; }
     public double getTotalValue() { return totalValue; }
 
@@ -75,18 +75,17 @@ public class ChunkValuation {
     public void setDemandMultiplier(double multiplier) { this.demandMultiplier = multiplier; }
     public void setNearbyClaims(int claims) { this.nearbyClaims = claims; }
     public void setGovernmentMultiplier(double multiplier) { this.governmentMultiplier = multiplier; }
-    public void setImprovementValue(double value) { this.improvementValue = value; }
+    public void setImprovementMultiplier(double multiplier) { this.improvementMultiplier = multiplier; }
     public void setImprovementScore(int score) { this.improvementScore = score; }
 
     public void setDirty(boolean dirty) { this.dirty = dirty; }
 
     /**
      * Recalculate the total value from components
+     * Formula: Base × Location × Biome × Demand × Government × Improvements
      */
     public void recalculateTotal() {
-        // Formula: (Base × Location × Biome × Demand × Government) + Improvements
-        this.totalValue = (baseValue * locationMultiplier * biomeMultiplier * demandMultiplier * governmentMultiplier)
-                          + improvementValue;
+        this.totalValue = baseValue * locationMultiplier * biomeMultiplier * demandMultiplier * governmentMultiplier * improvementMultiplier;
         this.lastCalculated = System.currentTimeMillis();
         this.dirty = false;
     }
@@ -103,9 +102,9 @@ public class ChunkValuation {
      */
     public String getBreakdown() {
         return String.format(
-            "Base: $%.2f × Loc: %.2f × Biome: %.2f × Demand: %.2f × Gov: %.2f + Improvements: $%.2f = $%.2f",
+            "Base: $%.2f × Loc: %.2f × Biome: %.2f × Demand: %.2f × Gov: %.2f × Imp: %.2f = $%.2f",
             baseValue, locationMultiplier, biomeMultiplier, demandMultiplier, governmentMultiplier,
-            improvementValue, totalValue
+            improvementMultiplier, totalValue
         );
     }
 
@@ -135,7 +134,7 @@ public class ChunkValuation {
         json.addProperty("demandMultiplier", demandMultiplier);
         json.addProperty("nearbyClaims", nearbyClaims);
         json.addProperty("governmentMultiplier", governmentMultiplier);
-        json.addProperty("improvementValue", improvementValue);
+        json.addProperty("improvementMultiplier", improvementMultiplier);
         json.addProperty("improvementScore", improvementScore);
         json.addProperty("totalValue", totalValue);
         json.addProperty("lastCalculated", lastCalculated);
@@ -158,7 +157,16 @@ public class ChunkValuation {
         valuation.demandMultiplier = json.has("demandMultiplier") ? json.get("demandMultiplier").getAsDouble() : 1.0;
         valuation.nearbyClaims = json.has("nearbyClaims") ? json.get("nearbyClaims").getAsInt() : 0;
         valuation.governmentMultiplier = json.has("governmentMultiplier") ? json.get("governmentMultiplier").getAsDouble() : 1.0;
-        valuation.improvementValue = json.has("improvementValue") ? json.get("improvementValue").getAsDouble() : 0.0;
+        // Support both old (improvementValue) and new (improvementMultiplier) formats
+        if (json.has("improvementMultiplier")) {
+            valuation.improvementMultiplier = json.get("improvementMultiplier").getAsDouble();
+        } else if (json.has("improvementValue")) {
+            // Convert old additive value to multiplier (approximate)
+            valuation.improvementMultiplier = 1.0;
+            valuation.dirty = true; // Force recalculation for old format
+        } else {
+            valuation.improvementMultiplier = 1.0;
+        }
         valuation.improvementScore = json.has("improvementScore") ? json.get("improvementScore").getAsInt() : 0;
         valuation.totalValue = json.has("totalValue") ? json.get("totalValue").getAsDouble() : 100.0;
         valuation.lastCalculated = json.has("lastCalculated") ? json.get("lastCalculated").getAsLong() : 0;

@@ -114,11 +114,76 @@ public class ChunkValuationManager {
      * Mark all cached valuations as dirty (e.g., when legislation changes base values)
      */
     public void markAllDirty() {
+        int count = 0;
         for (ChunkValuation valuation : valuationCache.values()) {
             valuation.setDirty(true);
             dirtyChunks.add(ChunkValuation.makeKey(valuation.getChunkX(), valuation.getChunkZ(), valuation.getDimension()));
+            count++;
         }
-        StateCraftEconomy.LOGGER.info("Marked {} chunk valuations as dirty for recalculation", valuationCache.size());
+        StateCraftEconomy.LOGGER.info("markAllDirty() called - Marked {} chunk valuations as dirty for recalculation", count);
+    }
+
+    /**
+     * Recalculate all chunk valuations for chunks belonging to a specific nation.
+     * Called when nation taxation parameters change (base chunk value, pass-through rates, etc.)
+     *
+     * @param nationId The UUID of the nation whose chunks need recalculation
+     */
+    public void recalculateNationChunks(java.util.UUID nationId) {
+        if (server == null) {
+            StateCraftEconomy.LOGGER.warn("Cannot recalculate nation chunks - server not initialized");
+            return;
+        }
+
+        int recalculated = 0;
+
+        // Iterate through all cached valuations and recalculate those in this nation
+        for (Map.Entry<String, ChunkValuation> entry : valuationCache.entrySet()) {
+            ChunkValuation valuation = entry.getValue();
+
+            // Check if this chunk belongs to the nation
+            java.util.UUID chunkNationId = StateCraftIntegration.getChunkNationId(
+                server, valuation.getChunkX(), valuation.getChunkZ(), valuation.getDimension());
+
+            if (nationId.equals(chunkNationId)) {
+                // Recalculate this valuation immediately
+                ChunkValuation newValuation = calculateValuation(
+                    valuation.getChunkX(), valuation.getChunkZ(), valuation.getDimension());
+                valuationCache.put(entry.getKey(), newValuation);
+                dirtyChunks.remove(entry.getKey());
+                recalculated++;
+            }
+        }
+
+        StateCraftEconomy.LOGGER.info("Recalculated {} chunk valuations for nation {}", recalculated, nationId);
+    }
+
+    /**
+     * Force immediate recalculation of all dirty chunks.
+     * Called when taxation parameters change to ensure values are updated immediately.
+     */
+    public void forceRecalculateAllDirty() {
+        int count = dirtyChunks.size();
+        recalculateDirtyChunks();
+        StateCraftEconomy.LOGGER.info("Force recalculated {} dirty chunk valuations", count);
+    }
+
+    /**
+     * Get the number of cached valuations
+     */
+    public int getCacheSize() {
+        return valuationCache.size();
+    }
+
+    /**
+     * Clear the entire valuation cache
+     * Valuations will be recalculated on demand
+     */
+    public void clearCache() {
+        int count = valuationCache.size();
+        valuationCache.clear();
+        dirtyChunks.clear();
+        StateCraftEconomy.LOGGER.info("Cleared valuation cache ({} entries)", count);
     }
 
     /**
@@ -131,8 +196,11 @@ public class ChunkValuationManager {
         double baseValue = ValuationConfig.getBaseChunkValue(); // Default from config
         if (server != null) {
             double nationBaseValue = StateCraftIntegration.getNationBaseChunkValue(server, chunkX, chunkZ, dimension);
+            StateCraftEconomy.LOGGER.debug("Chunk ({}, {}) in {}: nation base value = {}, config default = {}",
+                chunkX, chunkZ, dimension, nationBaseValue, baseValue);
             if (nationBaseValue > 0) {
                 baseValue = nationBaseValue; // Use nation's legislated base value
+                StateCraftEconomy.LOGGER.debug("Using nation's base chunk value: ${}", baseValue);
             }
         }
         valuation.setBaseValue(baseValue);
@@ -157,12 +225,14 @@ public class ChunkValuationManager {
         double govMult = calculateGovernmentMultiplier(chunkX, chunkZ, dimension);
         valuation.setGovernmentMultiplier(govMult);
 
-        // 6. Improvement value
+        // 6. Improvement multiplier (multiplicative, not additive)
         if (ValuationConfig.isImprovementsEnabled()) {
             int score = ImprovementTracker.getInstance().getScore(chunkX, chunkZ, dimension);
-            double improvementValue = score * ValuationConfig.getImprovementValuePerScore();
+            // Convert score to a multiplier: 1.0 + (score * valuePerScore)
+            // e.g., score of 100 with 0.01 per score = 1.0 + 1.0 = 2.0x multiplier
+            double improvementMultiplier = 1.0 + (score * ValuationConfig.getImprovementValuePerScore());
             valuation.setImprovementScore(score);
-            valuation.setImprovementValue(improvementValue);
+            valuation.setImprovementMultiplier(improvementMultiplier);
         }
 
         // Calculate total
@@ -334,32 +404,22 @@ public class ChunkValuationManager {
 
                 for (JsonElement elem : valuations) {
                     ChunkValuation valuation = ChunkValuation.fromJson(elem.getAsJsonObject());
+                    // Mark all loaded valuations as dirty so they get recalculated
+                    // with current nation parameters on first access
+                    valuation.setDirty(true);
+                    dirtyChunks.add(valuation.getKey());
                     valuationCache.put(valuation.getKey(), valuation);
                 }
             }
 
             cacheLoaded = true;
-            StateCraftEconomy.LOGGER.info("Loaded {} chunk valuations from cache", valuationCache.size());
+            StateCraftEconomy.LOGGER.info("Loaded {} chunk valuations from cache (marked for recalculation)", valuationCache.size());
         } catch (Exception e) {
             StateCraftEconomy.LOGGER.error("Failed to load valuation cache", e);
             cacheLoaded = true;
         }
     }
 
-    /**
-     * Clear all cached valuations (forces full recalculation)
-     */
-    public void clearCache() {
-        valuationCache.clear();
-        dirtyChunks.clear();
-    }
-
-    /**
-     * Get the number of cached valuations
-     */
-    public int getCacheSize() {
-        return valuationCache.size();
-    }
 
     // Helper classes
     private static class BiomeResult {

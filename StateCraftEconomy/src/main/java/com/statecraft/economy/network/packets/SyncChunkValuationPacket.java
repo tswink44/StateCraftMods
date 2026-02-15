@@ -20,17 +20,18 @@ public class SyncChunkValuationPacket {
     private final double demandMultiplier;
     private final int nearbyClaims;
     private final double governmentMultiplier;
-    private final double improvementValue;
+    private final double improvementMultiplier;
     private final int improvementScore;
     private final double totalValue;
+    private final double cityTaxRate; // Property tax rate from city settings
 
     public SyncChunkValuationPacket(int chunkX, int chunkZ, String dimension,
                                     double baseValue, double locationMultiplier, double distanceFromSpawn,
                                     double biomeMultiplier, String biomeName,
                                     double demandMultiplier, int nearbyClaims,
                                     double governmentMultiplier,
-                                    double improvementValue, int improvementScore,
-                                    double totalValue) {
+                                    double improvementMultiplier, int improvementScore,
+                                    double totalValue, double cityTaxRate) {
         this.chunkX = chunkX;
         this.chunkZ = chunkZ;
         this.dimension = dimension;
@@ -42,9 +43,10 @@ public class SyncChunkValuationPacket {
         this.demandMultiplier = demandMultiplier;
         this.nearbyClaims = nearbyClaims;
         this.governmentMultiplier = governmentMultiplier;
-        this.improvementValue = improvementValue;
+        this.improvementMultiplier = improvementMultiplier;
         this.improvementScore = improvementScore;
         this.totalValue = totalValue;
+        this.cityTaxRate = cityTaxRate;
     }
 
     public SyncChunkValuationPacket(FriendlyByteBuf buf) {
@@ -59,9 +61,10 @@ public class SyncChunkValuationPacket {
         this.demandMultiplier = buf.readDouble();
         this.nearbyClaims = buf.readInt();
         this.governmentMultiplier = buf.readDouble();
-        this.improvementValue = buf.readDouble();
+        this.improvementMultiplier = buf.readDouble();
         this.improvementScore = buf.readInt();
         this.totalValue = buf.readDouble();
+        this.cityTaxRate = buf.readDouble();
     }
 
     public void encode(FriendlyByteBuf buf) {
@@ -76,9 +79,10 @@ public class SyncChunkValuationPacket {
         buf.writeDouble(demandMultiplier);
         buf.writeInt(nearbyClaims);
         buf.writeDouble(governmentMultiplier);
-        buf.writeDouble(improvementValue);
+        buf.writeDouble(improvementMultiplier);
         buf.writeInt(improvementScore);
         buf.writeDouble(totalValue);
+        buf.writeDouble(cityTaxRate);
     }
 
     // Getters
@@ -93,8 +97,9 @@ public class SyncChunkValuationPacket {
     public double getDemandMultiplier() { return demandMultiplier; }
     public int getNearbyClaims() { return nearbyClaims; }
     public double getGovernmentMultiplier() { return governmentMultiplier; }
-    public double getImprovementValue() { return improvementValue; }
+    public double getImprovementMultiplier() { return improvementMultiplier; }
     public int getImprovementScore() { return improvementScore; }
     public double getTotalValue() { return totalValue; }
+    public double getCityTaxRate() { return cityTaxRate; }
 }
 

@@ -68,8 +68,8 @@ public class ValuationConfig {
         BUILDER.comment("Enable improvement-based value additions");
         IMPROVEMENTS_ENABLED = BUILDER.define("enabled", true);
 
-        BUILDER.comment("Value added per improvement score point");
-        IMPROVEMENT_VALUE_PER_SCORE = BUILDER.defineInRange("valuePerScore", 0.10, 0.01, 10.0);
+        BUILDER.comment("Value added per improvement score point (multiplier = 1.0 + score * this value)");
+        IMPROVEMENT_VALUE_PER_SCORE = BUILDER.defineInRange("valuePerScore", 0.01, 0.001, 10.0);
         BUILDER.pop();
 
         BUILDER.push("cache");
