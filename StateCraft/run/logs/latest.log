@@ -1,151 +1,61 @@
-[15Feb2026 18:29:24.602] [main/INFO] [cpw.mods.modlauncher.Launcher/MODLAUNCHER]: ModLauncher running: args [--launchTarget, forgeserveruserdev, --gameDir, ., --fml.forgeVersion, 47.2.0, --fml.mcVersion, 1.20.1, --fml.forgeGroup, net.minecraftforge, --fml.mcpVersion, 20230612.114412, --nogui]
-[15Feb2026 18:29:24.609] [main/INFO] [cpw.mods.modlauncher.Launcher/MODLAUNCHER]: ModLauncher 10.0.9+10.0.9+main.dcd20f30 starting: java version 17.0.12 by Oracle Corporation; OS Windows 11 arch amd64 version 10.0
-[15Feb2026 18:29:24.798] [main/INFO] [net.minecraftforge.fml.loading.ImmediateWindowHandler/]: ImmediateWindowProvider not loading because launch target is forgeserveruserdev
-[15Feb2026 18:29:24.866] [main/INFO] [mixin/]: SpongePowered MIXIN Subsystem Version=0.8.5 Source=union:/C:/Users/tswin/.gradle/caches/modules-2/files-2.1/org.spongepowered/mixin/0.8.5/9d1c0c3a304ae6697ecd477218fa61b850bf57fc/mixin-0.8.5.jar%23128!/ Service=ModLauncher Env=SERVER
-[15Feb2026 18:29:25.293] [main/WARN] [net.minecraftforge.fml.loading.moddiscovery.ModFileParser/LOADING]: Mod file C:\Users\tswin\.gradle\caches\modules-2\files-2.1\net.minecraftforge\javafmllanguage\1.20.1-47.2.0\7f9181f85acc66547685a72020713fc8cbde98\javafmllanguage-1.20.1-47.2.0.jar is missing mods.toml file
-[15Feb2026 18:29:25.296] [main/WARN] [net.minecraftforge.fml.loading.moddiscovery.ModFileParser/LOADING]: Mod file C:\Users\tswin\.gradle\caches\modules-2\files-2.1\net.minecraftforge\lowcodelanguage\1.20.1-47.2.0\7872f5205685fdd26fae39b1be79b0e60ca5b7bd\lowcodelanguage-1.20.1-47.2.0.jar is missing mods.toml file
-[15Feb2026 18:29:25.301] [main/WARN] [net.minecraftforge.fml.loading.moddiscovery.ModFileParser/LOADING]: Mod file C:\Users\tswin\.gradle\caches\modules-2\files-2.1\net.minecraftforge\mclanguage\1.20.1-47.2.0\d501d161cabed08b3c139a2c6217b02a39f3c3e9\mclanguage-1.20.1-47.2.0.jar is missing mods.toml file
-[15Feb2026 18:29:25.305] [main/WARN] [net.minecraftforge.fml.loading.moddiscovery.ModFileParser/LOADING]: Mod file C:\Users\tswin\.gradle\caches\modules-2\files-2.1\net.minecraftforge\fmlcore\1.20.1-47.2.0\ffd3c6debac0a388c9e33ac43c9f5eafb91cb466\fmlcore-1.20.1-47.2.0.jar is missing mods.toml file
-[15Feb2026 18:29:25.367] [main/INFO] [net.minecraftforge.fml.loading.moddiscovery.JarInJarDependencyLocator/]: No dependencies to load found. Skipping!
-[15Feb2026 18:29:27.525] [main/INFO] [cpw.mods.modlauncher.LaunchServiceHandler/MODLAUNCHER]: Launching target 'forgeserveruserdev' with arguments [--gameDir, ., --nogui]
-[15Feb2026 18:29:36.569] [modloading-worker-0/INFO] [net.minecraftforge.common.ForgeMod/FORGEMOD]: Forge mod loading, version 47.2.0, for MC 1.20.1 with MCP 20230612.114412
-[15Feb2026 18:29:36.571] [modloading-worker-0/INFO] [net.minecraftforge.common.MinecraftForge/FORGE]: MinecraftForge v47.2.0 Initialized
-[15Feb2026 18:29:36.621] [modloading-worker-0/INFO] [statecraft/]: StateCraft initializing...
-[15Feb2026 18:29:36.666] [modloading-worker-0/INFO] [statecraft_economy/]: StateCraft Economy initializing...
-[15Feb2026 18:29:37.266] [main/INFO] [statecraft_economy/]: StateCraft Economy network packets registered
-[15Feb2026 18:29:37.266] [main/INFO] [statecraft_economy/]: StateCraft detected! Enabling nation treasury integration.
-[15Feb2026 18:29:37.284] [main/INFO] [statecraft/]: Economy integration registered: jdk.proxy3.$Proxy27
-[15Feb2026 18:29:37.284] [main/INFO] [statecraft_economy/]: Economy integration handler registered with StateCraft
-[15Feb2026 18:29:37.284] [main/INFO] [statecraft_economy/]: StateCraft integration initialized successfully
-[15Feb2026 18:29:37.450] [Forge Version Check/INFO] [net.minecraftforge.fml.VersionChecker/]: [forge] Starting version check at https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json
-[15Feb2026 18:29:37.542] [main/INFO] [statecraft/]: StateCraft network packets registered
-[15Feb2026 18:29:37.542] [main/INFO] [statecraft/]: StateCraft network handler registered
-[15Feb2026 18:29:38.260] [Forge Version Check/INFO] [net.minecraftforge.fml.VersionChecker/]: [forge] Found status: OUTDATED Current: 47.2.0 Target: 47.4.10
-[15Feb2026 18:29:39.106] [main/INFO] [com.mojang.authlib.yggdrasil.YggdrasilAuthenticationService/]: Environment: authHost='https://authserver.mojang.com', accountsHost='https://api.mojang.com', sessionHost='https://sessionserver.mojang.com', servicesHost='https://api.minecraftservices.com', name='PROD'
-[15Feb2026 18:29:39.204] [main/INFO] [net.minecraftforge.registries.GameData/REGISTRIES]: Injecting existing registry data into this CLIENT instance
-[15Feb2026 18:29:40.067] [main/WARN] [net.minecraft.server.packs.VanillaPackResourcesBuilder/]: Assets URL 'union:/C:/Users/tswin/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.2.0_mapped_official_1.20.1/forge-1.20.1-47.2.0_mapped_official_1.20.1.jar%23191!/assets/.mcassetsroot' uses unexpected schema
-[15Feb2026 18:29:40.068] [main/WARN] [net.minecraft.server.packs.VanillaPackResourcesBuilder/]: Assets URL 'union:/C:/Users/tswin/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.2.0_mapped_official_1.20.1/forge-1.20.1-47.2.0_mapped_official_1.20.1.jar%23191!/data/.mcassetsroot' uses unexpected schema
-[15Feb2026 18:29:41.066] [main/INFO] [statecraft/]: StateCraft commands registered
-[15Feb2026 18:29:41.069] [main/INFO] [statecraft_economy/]: StateCraft Economy commands registered
-[15Feb2026 18:29:41.644] [main/INFO] [net.minecraft.world.item.crafting.RecipeManager/]: Loaded 7 recipes
-[15Feb2026 18:29:41.712] [main/INFO] [net.minecraft.advancements.AdvancementList/]: Loaded 1271 advancements
-[15Feb2026 18:29:42.170] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer/]: Starting minecraft server version 1.20.1
-[15Feb2026 18:29:42.170] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer/]: Loading properties
-[15Feb2026 18:29:42.170] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer/]: Default game type: CREATIVE
-[15Feb2026 18:29:42.171] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: Generating keypair
-[15Feb2026 18:29:42.233] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer/]: Starting Minecraft server on *:25565
-[15Feb2026 18:29:42.244] [Server thread/INFO] [net.minecraft.server.network.ServerConnectionListener/]: Using default channel type
-[15Feb2026 18:29:42.474] [Server thread/WARN] [net.minecraft.server.dedicated.DedicatedServer/]: **** SERVER IS RUNNING IN OFFLINE/INSECURE MODE!
-[15Feb2026 18:29:42.474] [Server thread/WARN] [net.minecraft.server.dedicated.DedicatedServer/]: The server will make no attempt to authenticate usernames. Beware.
-[15Feb2026 18:29:42.474] [Server thread/WARN] [net.minecraft.server.dedicated.DedicatedServer/]: While this makes the game possible to play without internet access, it also opens up the ability for hackers to connect with any username they choose.
-[15Feb2026 18:29:42.474] [Server thread/WARN] [net.minecraft.server.dedicated.DedicatedServer/]: To change this, set "online-mode" to "true" in the server.properties file.
-[15Feb2026 18:29:42.520] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer/]: Preparing level "world"
-[15Feb2026 18:29:42.769] [Server thread/INFO] [statecraft/]: Loading StateCraft nation data...
-[15Feb2026 18:29:42.795] [Server thread/INFO] [statecraft/]: Loaded legislature data
-[15Feb2026 18:29:42.796] [Server thread/INFO] [statecraft/]: Loaded 1 nations with 21 total claimed chunks
-[15Feb2026 18:29:42.800] [Server thread/INFO] [statecraft/]: Loaded mail data: 2 player, 1 city, 1 state, 1 nation mailboxes
-[15Feb2026 18:29:42.804] [Server thread/INFO] [statecraft_economy/]: Loaded 7 currency types
-[15Feb2026 18:29:42.805] [Server thread/INFO] [statecraft_economy/]: Loaded economy data: 2 player accounts, 1 nation treasuries, 1 state treasuries, 1 city treasuries
-[15Feb2026 18:29:42.805] [Server thread/INFO] [statecraft_economy/]: Loaded 2 player accounts, 1 nation treasuries, 1 state treasuries, 1 city treasuries
-[15Feb2026 18:29:42.806] [Server thread/INFO] [statecraft_economy/]: Economy data loaded
-[15Feb2026 18:29:42.807] [Server thread/INFO] [statecraft_economy/]: Ensured treasury accounts for 1 nations, 1 states, 1 cities
-[15Feb2026 18:29:43.269] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: Preparing start region for dimension minecraft:overworld
-[15Feb2026 18:29:45.296] [Worker-Main-5/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Preparing spawn area: 0%
-[15Feb2026 18:29:45.297] [Worker-Main-5/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Preparing spawn area: 0%
-[15Feb2026 18:29:45.299] [Worker-Main-5/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Preparing spawn area: 0%
-[15Feb2026 18:29:45.299] [Worker-Main-5/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Preparing spawn area: 0%
-[15Feb2026 18:29:45.300] [Worker-Main-5/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Preparing spawn area: 0%
-[15Feb2026 18:29:45.771] [Worker-Main-15/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Preparing spawn area: 30%
-[15Feb2026 18:29:46.046] [Server thread/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Time elapsed: 2777 ms
-[15Feb2026 18:29:46.047] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer/]: Done (3.558s)! For help, type "help"
-[15Feb2026 18:29:46.061] [Server thread/INFO] [net.minecraftforge.gametest.ForgeGameTestHooks/]: Enabled Gametest Namespaces: [statecraft]
-[15Feb2026 18:29:46.068] [Server thread/INFO] [net.minecraftforge.server.permission.PermissionAPI/]: Successfully initialized permission handler forge:default_handler
-[15Feb2026 18:29:46.074] [Server thread/INFO] [statecraft_economy/]: Loaded 16 chunk valuations from cache (marked for recalculation)
-[15Feb2026 18:29:46.075] [Server thread/INFO] [statecraft_economy/]: ChunkValuationManager initialized
-[15Feb2026 18:29:46.075] [Server thread/INFO] [statecraft_economy/]: No improvement data found, starting fresh
-[15Feb2026 18:29:46.075] [Server thread/INFO] [statecraft_economy/]: Chunk valuation system initialized
-[15Feb2026 18:29:46.154] [Server thread/INFO] [statecraft_economy/]: Beginning tax collection cycle...
-[15Feb2026 18:29:46.177] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (0, -2) in minecraft:overworld: improvement score = 504
-[15Feb2026 18:29:46.178] [Server thread/INFO] [statecraft_economy/]: Tax calculation for chunk (0, -2) in dimension 'minecraft:overworld': base=10000.0, loc=1.4968, biome=1.2, demand=1.5, gov=1.0, imp=51.400000000000006, total=1384839.36, rate=0.1, tax=138483.93600000002
-[15Feb2026 18:29:46.184] [Server thread/INFO] [statecraft_economy/]: Processing 1 cities for tax revenue mail
-[15Feb2026 18:29:46.184] [Server thread/INFO] [statecraft_economy/]: City e60e5243-4f1a-4d4e-a2f2-a38d581090f4 has revenue: $138483.93600000002
-[15Feb2026 18:29:46.184] [Server thread/INFO] [statecraft_economy/]: City keeps: $110787.14880000001, passes to state: $27696.787200000006
-[15Feb2026 18:29:46.184] [Server thread/INFO] [statecraft_economy/]: Sending tax revenue mail to city: City1 (ID: e60e5243-4f1a-4d4e-a2f2-a38d581090f4)
-[15Feb2026 18:29:46.186] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to city City1 - collected: $138483.93600000002, kept: $110787.14880000001
-[15Feb2026 18:29:46.187] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to state State1 - received: $27696.787200000006, kept: $22157.429760000006
-[15Feb2026 18:29:46.187] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to nation Nation1 - received: $5539.357440000002
-[15Feb2026 18:29:46.188] [Server thread/INFO] [statecraft_economy/]: Tax collection complete: 1 chunks processed, $138483.94 collected, 0 negative balances, 0 repossessed
-[15Feb2026 18:29:46.205] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (-1, -4) in minecraft:overworld: improvement score = 418
-[15Feb2026 18:29:46.209] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (-3, -1) in minecraft:overworld: improvement score = 461
-[15Feb2026 18:29:46.226] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (1, -2) in minecraft:overworld: improvement score = 415
-[15Feb2026 18:29:46.229] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (-2, -4) in minecraft:overworld: improveme[15Feb2026 18:29:58.949] [Render thread/INFO] [net.minecraft.client.gui.screens.ConnectScreen/]: Connecting to localhost, 25565
-[15Feb2026 18:29:59.986] [Render thread/INFO] [net.minecraftforge.registries.GameData/REGISTRIES]: Injecting existing registry data into this CLIENT instance
-[15Feb2026 18:30:00.283] [Netty Client IO #1/INFO] [net.minecraftforge.network.NetworkHooks/]: Connected to a modded server.
-[15Feb2026 18:30:02.792] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Welcome back to Nation1!
-[15Feb2026 18:30:02.799] [Render thread/INFO] [net.minecraft.advancements.AdvancementList/]: Loaded 102 advancements
-[15Feb2026 18:30:02.816] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Dev2 joined the game
-[15Feb2026 18:31:24.465] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Forcing tax collection...
-[15Feb2026 18:31:24.465] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Tax collection complete!
-[15Feb2026 18:38:00.264] [Render thread/INFO] [statecraft_economy/]: Loaded 7 currency types
-[15Feb2026 18:44:24.408] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Deposited $600.00K (Change: $400.00K)
-[15Feb2026 18:44:30.859] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Withdrew $800.00K
-[15Feb2026 18:44:41.587] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Transferred $50.00K
-[15Feb2026 18:44:57.579] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Mail] New mail: Trading Hub Sale Confirmation
-[15Feb2026 18:44:57.579] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Sold 64 items for $1488.00!
-[15Feb2026 18:45:44.562] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Election] Voting has begun for Nation1 leadership! Use /sc election to participate.
-[15Feb2026 18:45:44.563] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Started election for nation Nation1
-[15Feb2026 18:45:58.410] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Election] Dev2 has registered as a candidate!
-[15Feb2026 18:47:17.884] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Legislature] Dev2 proposed: Change passthrough rate
-[15Feb2026 18:47:31.350] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Debate ended for bill BILL-2026-004. Voting has begun.
-[15Feb2026 18:47:39.665] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Legislature] Bill 'Change passthrough rate' awaits your action (sign or veto)
-[15Feb2026 18:47:39.665] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Bill BILL-2026-004 has been passed. Awaiting leader action.
-[15Feb2026 18:49:07.703] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Dev2: Forcing tax collection...]
-[15Feb2026 18:49:07.703] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Dev2: Tax collection complete!]
-[15Feb2026 18:50:23.025] [Render thread/INFO] [net.minecraft.client.gui.screens.ConnectScreen/]: Connecting to localhost, 25565
-[15Feb2026 18:50:24.032] [Render thread/INFO] [net.minecraftforge.registries.GameData/REGISTRIES]: Injecting existing registry data into this CLIENT instance
-[15Feb2026 18:50:24.306] [Netty Client IO #3/WARN] [net.minecraftforge.common.ForgeConfigSpec/CORE]: Configuration file SimpleCommentedConfig:{valuation=SimpleCommentedConfig:{cache=SimpleCommentedConfig:{recalculationInterval=12000, saveInterval=6000}, baseChunkValue=100.0, location=SimpleCommentedConfig:{minLocationMultiplier=0.5, maxDistanceThreshold=10000.0, maxLocationMultiplier=1.5}, demand=SimpleCommentedConfig:{maxBonus=0.5, threshold=20, radius=5, enabled=true}, improvements=SimpleCommentedConfig:{valuePerScore=0.01, enabled=true}}} is not correct. Correcting
-[15Feb2026 18:50:24.384] [Netty Client IO #3/INFO] [net.minecraftforge.network.NetworkHooks/]: Connected to a modded server.
-[15Feb2026 18:50:25.012] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Welcome back to Nation1!
-[15Feb2026 18:50:25.012] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Election] An election is in progress for Nation1! 23h 55m remaining. Use /sc election to vote.
-[15Feb2026 18:50:25.013] [Render thread/INFO] [net.minecraft.advancements.AdvancementList/]: Loaded 102 advancements
-[15Feb2026 18:50:25.251] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Dev2 joined the game
-[15Feb2026 18:50:57.169] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Chunk listed for sale at $100.00K
-[15Feb2026 18:51:31.105] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Chunk listed for sale at $101.00K
-[15Feb2026 18:52:50.538] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Dev2 left the game
-[15Feb2026 18:52:51.491] [Render thread/INFO] [net.minecraft.client.Minecraft/]: Stopping!
-omy/]: Tax calculation for chunk (0, -2) in dimension 'minecraft:overworld': base=10000.0, loc=1.4968, biome=1.2, demand=1.5, gov=1.0, imp=51.400000000000006, total=1384839.36, rate=0.1, tax=138483.93600000002
-[15Feb2026 18:49:07.696] [Server thread/INFO] [statecraft_economy/]: Processing 1 cities for tax revenue mail
-[15Feb2026 18:49:07.696] [Server thread/INFO] [statecraft_economy/]: City e60e5243-4f1a-4d4e-a2f2-a38d581090f4 has revenue: $138483.93600000002
-[15Feb2026 18:49:07.697] [Server thread/INFO] [statecraft_economy/]: City keeps: $110787.14880000001, passes to state: $27696.787200000006
-[15Feb2026 18:49:07.697] [Server thread/INFO] [statecraft_economy/]: Sending tax revenue mail to city: City1 (ID: e60e5243-4f1a-4d4e-a2f2-a38d581090f4)
-[15Feb2026 18:49:07.697] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to city City1 - collected: $138483.93600000002, kept: $110787.14880000001
-[15Feb2026 18:49:07.697] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to state State1 - received: $27696.787200000006, kept: $22157.429760000006
-[15Feb2026 18:49:07.697] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to nation Nation1 - received: $5539.357440000002
-[15Feb2026 18:49:07.697] [Server thread/INFO] [statecraft_economy/]: Tax collection complete: 1 chunks processed, $138483.94 collected, 0 negative balances, 0 repossessed
-[15Feb2026 18:49:07.697] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: [Dev2: Tax collection complete!]
-[15Feb2026 18:50:21.044] [Server thread/INFO] [net.minecraft.server.network.ServerGamePacketListenerImpl/]: Dev lost connection: Disconnected
-[15Feb2026 18:50:21.045] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: Dev left the game
-[15Feb2026 18:50:21.385] [Server thread/INFO] [net.minecraft.server.network.ServerGamePacketListenerImpl/]: Dev2 lost connection: Disconnected
-[15Feb2026 18:50:21.386] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: Dev2 left the game
-[15Feb2026 18:50:24.391] [Server thread/INFO] [net.minecraft.server.players.PlayerList/]: Dev[/[::1]:58011] logged in with entity id 1125 at (8.915503519810823, 64.0, -33.92519221035039)
-[15Feb2026 18:50:24.407] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: Dev joined the game
-[15Feb2026 18:50:25.159] [Server thread/INFO] [net.minecraft.server.players.PlayerList/]: Dev2[/[::1]:58012] logged in with entity id 1171 at (-14.308063565217196, 65.0, -27.6166774652193)
-[15Feb2026 18:50:25.217] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: Dev2 joined the game
-[15Feb2026 18:51:12.542] [Server thread/INFO] [statecraft_economy/]: Attempting ownership transfer for chunk (1, -1) to player 21cc3e25-481e-3cfa-8770-c5693a3e93a4
-[15Feb2026 18:51:12.542] [Server thread/INFO] [statecraft_economy/]: Attempting to transfer chunk (1, -1) to player 21cc3e25-481e-3cfa-8770-c5693a3e93a4
-[15Feb2026 18:51:12.542] [Server thread/INFO] [statecraft_economy/]: Set player owner to 21cc3e25-481e-3cfa-8770-c5693a3e93a4
-[15Feb2026 18:51:12.542] [Server thread/INFO] [statecraft_economy/]: Removed chunk from sale
-[15Feb2026 18:51:12.542] [Server thread/INFO] [statecraft_economy/]: Marked data dirty
-[15Feb2026 18:51:12.542] [Server thread/INFO] [statecraft_economy/]: Verification - ownershipType: PLAYER, playerOwner: 21cc3e25-481e-3cfa-8770-c5693a3e93a4
-[15Feb2026 18:51:12.542] [Server thread/INFO] [statecraft_economy/]: Transfer result: true
-[15Feb2026 18:51:41.851] [Server thread/INFO] [statecraft_economy/]: Attempting ownership transfer for chunk (2, -2) to player 21cc3e25-481e-3cfa-8770-c5693a3e93a4
-[15Feb2026 18:51:41.851] [Server thread/INFO] [statecraft_economy/]: Attempting to transfer chunk (2, -2) to player 21cc3e25-481e-3cfa-8770-c5693a3e93a4
-[15Feb2026 18:51:41.851] [Server thread/INFO] [statecraft_economy/]: Set player owner to 21cc3e25-481e-3cfa-8770-c5693a3e93a4
-[15Feb2026 18:51:41.851] [Server thread/INFO] [statecraft_economy/]: Removed chunk from sale
-[15Feb2026 18:51:41.851] [Server thread/INFO] [statecraft_economy/]: Marked data dirty
-[15Feb2026 18:51:41.851] [Server thread/INFO] [statecraft_economy/]: Verification - ownershipType: PLAYER, playerOwner: 21cc3e25-481e-3cfa-8770-c5693a3e93a4
-[15Feb2026 18:51:41.851] [Server thread/INFO] [statecraft_economy/]: Transfer result: true
-[15Feb2026 18:52:50.530] [Server thread/INFO] [net.minecraft.server.network.ServerGamePacketListenerImpl/]: Dev2 lost connection: Disconnected
-[15Feb2026 18:52:50.530] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: Dev2 left the game
-[15Feb2026 18:52:51.533] [Server thread/INFO] [net.minecraft.server.network.ServerGamePacketListenerImpl/]: Dev lost connection: Disconnected
-[15Feb2026 18:52:51.533] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: Dev left the game
+[16Feb2026 00:49:07.676] [Server thread/INFO] [statecraft_economy/]: Beginning tax collection cycle...
+[16Feb2026 00:49:07.691] [Server thread/INFO] [statecraft_economy/]: Tax calculation for chunk (0, -2) in dimension 'minecraft:overworld': base=10000.0, loc=1.4968, biome=1.2, demand=1.5, gov=1.0, imp=51.400000000000006, total=1384839.36, rate=0.1, tax=138483.93600000002
+[16Feb2026 00:49:07.691] [Server thread/INFO] [statecraft_economy/]: Tax calculation for chunk (2, -2) in dimension 'minecraft:overworld': base=10000.0, loc=1.4954745166004062, biome=1.2, demand=1.5, gov=1.0, imp=50.6, total=1362078.18971965, rate=0.1, tax=136207.818971965
+[16Feb2026 00:49:07.691] [Server thread/INFO] [statecraft_economy/]: Tax calculation for chunk (1, -1) in dimension 'minecraft:overworld': base=10000.0, loc=1.497737258300203, biome=1.2, demand=1.5, gov=1.0, imp=47.5, total=1280565.3558466735, rate=0.1, tax=128056.53558466735
+[16Feb2026 00:49:07.691] [Server thread/INFO] [statecraft_economy/]: Processing 1 cities for tax revenue mail
+[16Feb2026 00:49:07.691] [Server thread/INFO] [statecraft_economy/]: City e60e5243-4f1a-4d4e-a2f2-a38d581090f4 has revenue: $402748.29055663233
+[16Feb2026 00:49:07.692] [Server thread/INFO] [statecraft_economy/]: City keeps: $322198.6324453059, passes to state: $80549.65811132647
+[16Feb2026 00:49:07.692] [Server thread/INFO] [statecraft_economy/]: Sending tax revenue mail to city: City1 (ID: e60e5243-4f1a-4d4e-a2f2-a38d581090f4)
+[16Feb2026 00:49:07.692] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to city City1 - collected: $402748.29055663233, kept: $322198.6324453059
+[16Feb2026 00:49:07.692] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to state State1 - received: $80549.65811132647, kept: $64439.72648906118
+[16Feb2026 00:49:07.692] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to nation Nation1 - received: $16109.931622265294
+[16Feb2026 00:49:07.692] [Server thread/INFO] [statecraft_economy/]: Tax collection complete: 3 chunks processed, $402748.29 collected, 0 negative balances, 0 repossessed
+[16Feb2026 01:49:07.675] [Server thread/INFO] [statecraft_economy/]: Beginning tax collection cycle...
+[16Feb2026 01:49:07.677] [Server thread/INFO] [statecraft_economy/]: Tax calculation for chunk (0, -2) in dimension 'minecraft:overworld': base=10000.0, loc=1.4968, biome=1.2, demand=1.5, gov=1.0, imp=51.400000000000006, total=1384839.36, rate=0.1, tax=138483.93600000002
+[16Feb2026 01:49:07.678] [Server thread/INFO] [statecraft_economy/]: Tax calculation for chunk (2, -2) in dimension 'minecraft:overworld': base=10000.0, loc=1.4954745166004062, biome=1.2, demand=1.5, gov=1.0, imp=50.6, total=1362078.18971965, rate=0.1, tax=136207.818971965
+[16Feb2026 01:49:07.678] [Server thread/INFO] [statecraft_economy/]: Tax calculation for chunk (1, -1) in dimension 'minecraft:overworld': base=10000.0, loc=1.497737258300203, biome=1.2, demand=1.5, gov=1.0, imp=47.5, total=1280565.3558466735, rate=0.1, tax=128056.53558466735
+[16Feb2026 01:49:07.678] [Server thread/INFO] [statecraft_economy/]: Processing 1 cities for tax revenue mail
+[16Feb2026 01:49:07.678] [Server thread/INFO] [statecraft_economy/]: City e60e5243-4f1a-4d4e-a2f2-a38d581090f4 has revenue: $402748.29055663233
+[16Feb2026 01:49:07.678] [Server thread/INFO] [statecraft_economy/]: City keeps: $322198.6324453059, passes to state: $80549.65811132647
+[16Feb2026 01:49:07.678] [Server thread/INFO] [statecraft_economy/]: Sending tax revenue mail to city: City1 (ID: e60e5243-4f1a-4d4e-a2f2-a38d581090f4)
+[16Feb2026 01:49:07.678] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to city City1 - collected: $402748.29055663233, kept: $322198.6324453059
+[16Feb2026 01:49:07.678] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to state State1 - received: $80549.65811132647, kept: $64439.72648906118
+[16Feb2026 01:49:07.678] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to nation Nation1 - received: $16109.931622265294
+[16Feb2026 01:49:07.678] [Server thread/INFO] [statecraft_economy/]: Tax collection complete: 3 chunks processed, $402748.29 collected, 0 negative balances, 0 repossessed
+[16Feb2026 02:49:07.676] [Server thread/INFO] [statecraft_economy/]: Beginning tax collection cycle...
+[16Feb2026 02:49:07.677] [Server thread/INFO] [statecraft_economy/]: Tax calculation for chunk (0, -2) in dimension 'minecraft:overworld': base=10000.0, loc=1.4968, biome=1.2, demand=1.5, gov=1.0, imp=51.400000000000006, total=1384839.36, rate=0.1, tax=138483.93600000002
+[16Feb2026 02:49:07.677] [Server thread/INFO] [statecraft_economy/]: Tax calculation for chunk (2, -2) in dimension 'minecraft:overworld': base=10000.0, loc=1.4954745166004062, biome=1.2, demand=1.5, gov=1.0, imp=50.6, total=1362078.18971965, rate=0.1, tax=136207.818971965
+[16Feb2026 02:49:07.677] [Server thread/INFO] [statecraft_economy/]: Tax calculation for chunk (1, -1) in dimension 'minecraft:overworld': base=10000.0, loc=1.497737258300203, biome=1.2, demand=1.5, gov=1.0, imp=47.5, total=1280565.3558466735, rate=0.1, tax=128056.53558466735
+[16Feb2026 02:49:07.677] [Server thread/INFO] [statecraft_economy/]: Processing 1 cities for tax revenue mail
+[16Feb2026 02:49:07.677] [Server thread/INFO] [statecraft_economy/]: City e60e5243-4f1a-4d4e-a2f2-a38d581090f4 has revenue: $402748.29055663233
+[16Feb2026 02:49:07.677] [Server thread/INFO] [statecraft_economy/]: City keeps: $322198.6324453059, passes to state: $80549.65811132647
+[16Feb2026 02:49:07.678] [Server thread/INFO] [statecraft_economy/]: Sending tax revenue mail to city: City1 (ID: e60e5243-4f1a-4d4e-a2f2-a38d581090f4)
+[16Feb2026 02:49:07.678] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to city City1 - collected: $402748.29055663233, kept: $322198.6324453059
+[16Feb2026 02:49:07.678] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to state State1 - received: $80549.65811132647, kept: $64439.72648906118
+[16Feb2026 02:49:07.678] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to nation Nation1 - received: $16109.931622265294
+[16Feb2026 02:49:07.678] [Server thread/INFO] [statecraft_economy/]: Tax collection complete: 3 chunks processed, $402748.29 collected, 0 negative balances, 0 repossessed
+[16Feb2026 03:49:07.676] [Server thread/INFO] [statecraft_economy/]: Beginning tax collection cycle...
+[16Feb2026 03:49:07.677] [Server thread/INFO] [statecraft_economy/]: Tax calculation for chunk (0, -2) in dimension 'minecraft:overworld': base=10000.0, loc=1.4968, biome=1.2, demand=1.5, gov=1.0, imp=51.400000000000006, total=1384839.36, rate=0.1, tax=138483.93600000002
+[16Feb2026 03:49:07.678] [Server thread/INFO] [statecraft_economy/]: Tax calculation for chunk (2, -2) in dimension 'minecraft:overworld': base=10000.0, loc=1.4954745166004062, biome=1.2, demand=1.5, gov=1.0, imp=50.6, total=1362078.18971965, rate=0.1, tax=136207.818971965
+[16Feb2026 03:49:07.678] [Server thread/INFO] [statecraft_economy/]: Tax calculation for chunk (1, -1) in dimension 'minecraft:overworld': base=10000.0, loc=1.497737258300203, biome=1.2, demand=1.5, gov=1.0, imp=47.5, total=1280565.3558466735, rate=0.1, tax=128056.53558466735
+[16Feb2026 03:49:07.678] [Server thread/INFO] [statecraft_economy/]: Processing 1 cities for tax revenue mail
+[16Feb2026 03:49:07.678] [Server thread/INFO] [statecraft_economy/]: City e60e5243-4f1a-4d4e-a2f2-a38d581090f4 has revenue: $402748.29055663233
+[16Feb2026 03:49:07.678] [Server thread/INFO] [statecraft_economy/]: City keeps: $322198.6324453059, passes to state: $80549.65811132647
+[16Feb2026 03:49:07.678] [Server thread/INFO] [statecraft_economy/]: Sending tax revenue mail to city: City1 (ID: e60e5243-4f1a-4d4e-a2f2-a38d581090f4)
+[16Feb2026 03:49:07.679] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to city City1 - collected: $402748.29055663233, kept: $322198.6324453059
+[16Feb2026 03:49:07.679] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to state State1 - received: $80549.65811132647, kept: $64439.72648906118
+[16Feb2026 03:49:07.679] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to nation Nation1 - received: $16109.931622265294
+[16Feb2026 03:49:07.679] [Server thread/INFO] [statecraft_economy/]: Tax collection complete: 3 chunks processed, $402748.29 collected, 0 negative balances, 0 repossessed
+[16Feb2026 04:49:07.676] [Server thread/INFO] [statecraft_economy/]: Beginning tax collection cycle...
+[16Feb2026 04:49:07.677] [Server thread/INFO] [statecraft_economy/]: Tax calculation for chunk (0, -2) in dimension 'minecraft:overworld': base=10000.0, loc=1.4968, biome=1.2, demand=1.5, gov=1.0, imp=51.400000000000006, total=1384839.36, rate=0.1, tax=138483.93600000002
+[16Feb2026 04:49:07.677] [Server thread/INFO] [statecraft_economy/]: Tax calculation for chunk (2, -2) in dimension 'minecraft:overworld': base=10000.0, loc=1.4954745166004062, biome=1.2, demand=1.5, gov=1.0, imp=50.6, total=1362078.18971965, rate=0.1, tax=136207.818971965
+[16Feb2026 04:49:07.677] [Server thread/INFO] [statecraft_economy/]: Tax calculation for chunk (1, -1) in dimension 'minecraft:overworld': base=10000.0, loc=1.497737258300203, biome=1.2, demand=1.5, gov=1.0, imp=47.5, total=1280565.3558466735, rate=0.1, tax=128056.53558466735
+[16Feb2026 04:49:07.677] [Server thread/INFO] [statecraft_economy/]: Processing 1 cities for tax revenue mail
+[16Feb2026 04:49:07.677] [Server thread/INFO] [statecraft_economy/]: City e60e5243-4f1a-4d4e-a2f2-a38d581090f4 has revenue: $402748.29055663233
+[16Feb2026 04:49:07.677] [Server thread/INFO] [statecraft_economy/]: City keeps: $322198.6324453059, passes to state: $80549.65811132647
+[16Feb2026 04:49:07.677] [Server thread/INFO] [statecraft_economy/]: Sending tax revenue mail to city: City1 (ID: e60e5243-4f1a-4d4e-a2f2-a38d581090f4)
+[16Feb2026 04:49:07.677] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to city City1 - collected: $402748.29055663233, kept: $322198.6324453059
+[16Feb2026 04:49:07.677] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to state State1 - received: $80549.65811132647, kept: $64439.72648906118
+[16Feb2026 04:49:07.678] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to nation Nation1 - received: $16109.931622265294
+[16Feb2026 04:49:07.678] [Server thread/INFO] [statecraft_economy/]: Tax collection complete: 3 chunks processed, $402748.29 collected, 0 negative balances, 0 repossessed
+[16Feb2026 14:26:32.504] [Server thread/WARN] [net.minecraft.server.MinecraftServer/]: Can't keep up! Is the server overloaded? Running 34046355ms or 680927 ticks behind
