@@ -460,6 +460,38 @@ public class NetworkHandler {
             .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncOfficerManagementData(pkt, ctx), ctx))
             .add();
 
+        // Contract packets (Client -> Server)
+        CHANNEL.messageBuilder(RequestContractsPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestContractsPacket::encode)
+            .decoder(RequestContractsPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestContracts)
+            .add();
+
+        CHANNEL.messageBuilder(CreateContractPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(CreateContractPacket::encode)
+            .decoder(CreateContractPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleCreateContract)
+            .add();
+
+        CHANNEL.messageBuilder(SubmitContractBidPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(SubmitContractBidPacket::encode)
+            .decoder(SubmitContractBidPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleSubmitContractBid)
+            .add();
+
+        CHANNEL.messageBuilder(ContractActionPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(ContractActionPacket::encode)
+            .decoder(ContractActionPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleContractAction)
+            .add();
+
+        // Contract packets (Server -> Client)
+        CHANNEL.messageBuilder(SyncContractsPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncContractsPacket::encode)
+            .decoder(SyncContractsPacket::new)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncContracts(pkt, ctx), ctx))
+            .add();
+
         StateCraft.LOGGER.info("StateCraft network packets registered");
     }
 

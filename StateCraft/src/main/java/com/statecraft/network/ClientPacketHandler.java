@@ -85,20 +85,23 @@ public class ClientPacketHandler {
     public static void handleSyncChunkMap(SyncChunkMapPacket packet, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
             Minecraft mc = Minecraft.getInstance();
+            // Convert to screen's data format
+            java.util.Map<Long, ChunkMapScreen.ChunkData> chunkData = new java.util.HashMap<>();
+            for (Map.Entry<Long, SyncChunkMapPacket.ChunkInfo> entry : packet.getChunks().entrySet()) {
+                SyncChunkMapPacket.ChunkInfo info = entry.getValue();
+                chunkData.put(entry.getKey(), new ChunkMapScreen.ChunkData(
+                    info.nationName,
+                    info.cityName,
+                    info.isPlayerNation,
+                    info.isAlly,
+                    info.isEnemy,
+                    info.canManage
+                ));
+            }
+
             if (mc.screen instanceof ChunkMapScreen screen) {
-                // Convert to screen's data format
-                java.util.Map<Long, ChunkMapScreen.ChunkData> chunkData = new java.util.HashMap<>();
-                for (Map.Entry<Long, SyncChunkMapPacket.ChunkInfo> entry : packet.getChunks().entrySet()) {
-                    SyncChunkMapPacket.ChunkInfo info = entry.getValue();
-                    chunkData.put(entry.getKey(), new ChunkMapScreen.ChunkData(
-                        info.nationName,
-                        info.cityName,
-                        info.isPlayerNation,
-                        info.isAlly,
-                        info.isEnemy,
-                        info.canManage
-                    ));
-                }
+                screen.updateMapData(packet.getPlayerX(), packet.getPlayerZ(), packet.getPlayerNation(), chunkData);
+            } else if (mc.screen instanceof ContractChunkSelectScreen screen) {
                 screen.updateMapData(packet.getPlayerX(), packet.getPlayerZ(), packet.getPlayerNation(), chunkData);
             }
         });
@@ -568,6 +571,16 @@ public class ClientPacketHandler {
                     packet.getCitizens(),
                     packet.getOfficers()
                 );
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncContracts(SyncContractsPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof com.statecraft.client.gui.ContractsMainScreen screen) {
+                screen.updateData(packet);
             }
         });
         ctx.get().setPacketHandled(true);
