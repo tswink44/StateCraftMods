@@ -135,6 +135,86 @@ public class IntegrationRegistry {
     }
 
     /**
+     * Deposit funds to a player's account
+     * @return true if successful
+     */
+    public static boolean depositToPlayer(UUID playerId, double amount, String description) {
+        if (economyIntegration != null) {
+            try {
+                return economyIntegration.depositToPlayer(playerId, amount, description);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error depositing to player: {}", e.getMessage());
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Convenience overload for depositToPlayer without description
+     */
+    public static boolean depositToPlayer(UUID playerId, double amount) {
+        return depositToPlayer(playerId, amount, "Deposit");
+    }
+
+    /**
+     * Get a nation's treasury balance
+     */
+    public static double getNationBalance(String nationName) {
+        if (economyIntegration != null) {
+            try {
+                return economyIntegration.getNationBalance(nationName);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error getting nation balance: {}", e.getMessage());
+            }
+        }
+        return 0;
+    }
+
+    /**
+     * Withdraw funds from a nation's treasury
+     * @return true if successful
+     */
+    public static boolean withdrawFromNation(String nationName, double amount, String description) {
+        if (economyIntegration != null) {
+            try {
+                return economyIntegration.withdrawFromNation(nationName, amount, description);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error withdrawing from nation: {}", e.getMessage());
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Convenience overload for withdrawFromNation without description
+     */
+    public static boolean withdrawFromNation(String nationName, double amount) {
+        return withdrawFromNation(nationName, amount, "Withdrawal");
+    }
+
+    /**
+     * Deposit funds to a nation's treasury
+     * @return true if successful
+     */
+    public static boolean depositToNation(String nationName, double amount, String description) {
+        if (economyIntegration != null) {
+            try {
+                return economyIntegration.depositToNation(nationName, amount, description);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error depositing to nation: {}", e.getMessage());
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Convenience overload for depositToNation without description
+     */
+    public static boolean depositToNation(String nationName, double amount) {
+        return depositToNation(nationName, amount, "Deposit");
+    }
+
+    /**
      * Format a currency amount for display
      */
     public static String formatCurrency(double amount) {

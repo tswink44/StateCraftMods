@@ -2,6 +2,9 @@ package com.statecraft.network;
 
 import com.statecraft.StateCraft;
 import com.statecraft.config.StateCraftConfig;
+import com.statecraft.contract.Contract;
+import com.statecraft.contract.ContractBid;
+import com.statecraft.contract.ContractManager;
 import com.statecraft.core.*;
 import com.statecraft.data.NationSavedData;
 import com.statecraft.integration.IntegrationRegistry;
@@ -2467,6 +2470,713 @@ public class ServerPacketHandler {
         } catch (Exception e) {
             StateCraft.LOGGER.error("Could not deposit to nation treasury: {}", e.getMessage());
         }
+    }
+
+    // ==================== Contract Packet Handlers ====================
+
+    /**
+     * Handle request for contract data
+     */
+    public static void handleRequestContracts(RequestContractsPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            Nation nation = manager.getPlayerNation(player.getUUID());
+
+            if (nation == null) {
+                // Send empty contract data
+                NetworkHandler.sendToPlayer(new SyncContractsPacket(
+                    "",
+                    false,
+                    false,
+                    new ArrayList<>(),
+                    new ArrayList<>(),
+                    new ArrayList<>(),
+                    new ArrayList<>(),
+                    new ArrayList<>(),
+                    0
+                ), player);
+                return;
+            }
+
+            syncContractsToPlayer(player, nation);
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    /**
+     * Handle creating a new government contract
+     */
+    public static void handleCreateContract(CreateContractPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            Nation nation = manager.getNationByName(packet.getNationName());
+
+            if (nation == null) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Nation not found!"), player);
+                return;
+            }
+
+            // Check if player is a legislator (officer) or leader (only they can create contracts)
+            boolean isLeader = player.getUUID().equals(nation.getLeaderId());
+            boolean isLegislator = nation.isOfficer(player.getUUID());
+
+            if (!isLeader && !isLegislator) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                    "Only legislature members or the leader can create contracts!"), player);
+                return;
+            }
+
+            // Validate input
+            if (packet.getTitle() == null || packet.getTitle().trim().isEmpty()) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Contract title is required!"), player);
+                return;
+            }
+
+            if (packet.getBudget() <= 0) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Contract budget must be greater than 0!"), player);
+                return;
+            }
+
+            if (packet.getChunks() == null || packet.getChunks().isEmpty()) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "At least one chunk must be designated!"), player);
+                return;
+            }
+
+            // Verify chunks belong to the nation - use dimension resource key
+            net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimKey =
+                net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,
+                    net.minecraft.resources.ResourceLocation.tryParse(packet.getDimension()));
+
+            for (CreateContractPacket.ChunkData chunkData : packet.getChunks()) {
+                ChunkPos chunkPos = new ChunkPos(chunkData.x, chunkData.z);
+                ClaimedChunk claimed = manager.getClaimedChunk(chunkPos, dimKey);
+                if (claimed == null) {
+                    NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                        "Chunk (" + chunkData.x + ", " + chunkData.z + ") is not claimed!"), player);
+                    return;
+                }
+                // Verify the chunk belongs to this nation by checking its city
+                City chunkCity = manager.getCity(claimed.getCityId());
+                if (chunkCity == null) {
+                    NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                        "Chunk (" + chunkData.x + ", " + chunkData.z + ") has no associated city!"), player);
+                    return;
+                }
+                State chunkState = manager.getState(chunkCity.getStateId());
+                if (chunkState == null || !chunkState.getNationId().equals(nation.getId())) {
+                    NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                        "Chunk (" + chunkData.x + ", " + chunkData.z + ") does not belong to " + nation.getName() + "!"), player);
+                    return;
+                }
+            }
+
+            // Check if nation treasury can afford to put budget in escrow
+            double nationBalance = 0;
+            if (IntegrationRegistry.hasEconomyIntegration()) {
+                nationBalance = IntegrationRegistry.getNationBalance(nation.getName());
+            }
+
+            if (nationBalance < packet.getBudget()) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                    "Nation treasury has insufficient funds! Need " + IntegrationRegistry.formatCurrency(packet.getBudget()) +
+                    " but only has " + IntegrationRegistry.formatCurrency(nationBalance)), player);
+                return;
+            }
+
+            // Create the contract
+            ContractManager contractManager = ContractManager.getInstance();
+            Contract contract = contractManager.createContract(
+                nation.getId(),
+                packet.getTitle(),
+                player.getUUID(),
+                player.getName().getString()
+            );
+
+            // Set contract details
+            contract.setDescription(packet.getDescription());
+            contract.setRequirements(packet.getRequirements());
+            contract.setTotalBudget(packet.getBudget());
+            contract.setBondAmount(packet.getBondAmount());
+            contract.setDimension(packet.getDimension());
+
+            // Set compensation type
+            try {
+                Contract.CompensationType compType = Contract.CompensationType.valueOf(packet.getCompensationType());
+                contract.setCompensationType(compType);
+            } catch (IllegalArgumentException e) {
+                contract.setCompensationType(Contract.CompensationType.MILESTONE);
+            }
+
+            // Add designated chunks
+            for (CreateContractPacket.ChunkData chunkData : packet.getChunks()) {
+                contract.addDesignatedChunk(new ChunkPos(chunkData.x, chunkData.z));
+            }
+
+            // Move budget to escrow (withdraw from nation treasury)
+            if (IntegrationRegistry.hasEconomyIntegration()) {
+                IntegrationRegistry.withdrawFromNation(nation.getName(), packet.getBudget());
+            }
+            contract.depositToEscrow(packet.getBudget());
+
+            // Mark for save
+            if (player.level() instanceof ServerLevel level) {
+                NationSavedData.get(level).markForSave();
+            }
+
+            NetworkHandler.sendToPlayer(new ActionResultPacket(true,
+                "Contract " + contract.getContractNumber() + " created! Budget of " +
+                IntegrationRegistry.formatCurrency(packet.getBudget()) + " held in escrow."), player);
+
+            // Sync contracts to the player
+            syncContractsToPlayer(player, nation);
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    /**
+     * Handle submitting a bid on a contract
+     */
+    public static void handleSubmitContractBid(SubmitContractBidPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            Nation nation = manager.getNationByName(packet.getNationName());
+
+            if (nation == null) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Nation not found!"), player);
+                return;
+            }
+
+            // Parse contract ID
+            UUID contractId;
+            try {
+                contractId = UUID.fromString(packet.getContractId());
+            } catch (IllegalArgumentException e) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Invalid contract ID!"), player);
+                return;
+            }
+
+            ContractManager contractManager = ContractManager.getInstance();
+            Contract contract = contractManager.getContract(contractId);
+
+            if (contract == null) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Contract not found!"), player);
+                return;
+            }
+
+            // Verify contract belongs to the nation
+            if (!contract.getNationId().equals(nation.getId())) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Contract does not belong to this nation!"), player);
+                return;
+            }
+
+            // Check contract is in bidding status
+            if (contract.getStatus() != Contract.Status.BIDDING) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "This contract is not open for bidding!"), player);
+                return;
+            }
+
+            // Validate bid amount
+            if (packet.getBidAmount() <= 0) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Bid amount must be greater than 0!"), player);
+                return;
+            }
+
+            // Check if player has already bid (only one bid per player per contract)
+            for (ContractBid existingBid : contract.getBids()) {
+                if (existingBid.getBidderId().equals(player.getUUID())) {
+                    NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                        "You have already submitted a bid on this contract!"), player);
+                    return;
+                }
+            }
+
+            // If bond is required, check if player can afford it
+            if (contract.getBondAmount() > 0) {
+                double playerBalance = IntegrationRegistry.hasEconomyIntegration()
+                    ? IntegrationRegistry.getPlayerBalance(player.getUUID())
+                    : 0;
+
+                if (playerBalance < contract.getBondAmount()) {
+                    NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                        "Insufficient funds for required bond! Need " +
+                        IntegrationRegistry.formatCurrency(contract.getBondAmount())), player);
+                    return;
+                }
+
+                // Withdraw bond from player (will be held in escrow)
+                IntegrationRegistry.withdrawFromPlayer(player.getUUID(), contract.getBondAmount(), "Contract bid bond for " + contract.getContractNumber());
+            }
+
+            // Create and submit the bid
+            ContractBid bid = new ContractBid(
+                contractId,
+                player.getUUID(),
+                player.getName().getString(),
+                packet.getBidAmount()
+            );
+            bid.setProposal(packet.getProposal());
+            bid.setProposedDurationDays(packet.getProposedDays());
+            bid.setBondPaid(contract.getBondAmount() > 0);
+
+            boolean success = contractManager.submitBid(contractId, bid);
+
+            if (!success) {
+                // Refund bond if bid submission failed
+                if (contract.getBondAmount() > 0) {
+                    IntegrationRegistry.depositToPlayer(player.getUUID(), contract.getBondAmount());
+                }
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Failed to submit bid!"), player);
+                return;
+            }
+
+            // Mark for save
+            if (player.level() instanceof ServerLevel level) {
+                NationSavedData.get(level).markForSave();
+            }
+
+            NetworkHandler.sendToPlayer(new ActionResultPacket(true,
+                "Bid submitted for " + IntegrationRegistry.formatCurrency(packet.getBidAmount()) +
+                " on contract " + contract.getContractNumber() +
+                (contract.getBondAmount() > 0 ? " (Bond of " + IntegrationRegistry.formatCurrency(contract.getBondAmount()) + " held)" : "")), player);
+
+            // Sync contracts to the player
+            syncContractsToPlayer(player, nation);
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    /**
+     * Handle contract actions (open bidding, approve bid, complete milestone, etc.)
+     */
+    public static void handleContractAction(ContractActionPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            Nation nation = manager.getNationByName(packet.getNationName());
+
+            if (nation == null) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Nation not found!"), player);
+                return;
+            }
+
+            // Parse contract ID
+            UUID contractId;
+            try {
+                contractId = UUID.fromString(packet.getContractId());
+            } catch (IllegalArgumentException e) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Invalid contract ID!"), player);
+                return;
+            }
+
+            ContractManager contractManager = ContractManager.getInstance();
+            Contract contract = contractManager.getContract(contractId);
+
+            if (contract == null) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Contract not found!"), player);
+                return;
+            }
+
+            // Verify contract belongs to the nation
+            if (!contract.getNationId().equals(nation.getId())) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Contract does not belong to this nation!"), player);
+                return;
+            }
+
+            // Check permissions based on action type
+            boolean isLeader = player.getUUID().equals(nation.getLeaderId());
+            boolean isLegislator = nation.isOfficer(player.getUUID());
+            boolean isContractor = player.getUUID().equals(contract.getContractorId());
+
+            String resultMessage;
+            boolean success;
+
+            switch (packet.getAction()) {
+                case OPEN_BIDDING:
+                    // Only legislature members/leader can open bidding
+                    if (!isLeader && !isLegislator) {
+                        NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                            "Only legislature members or the leader can open contracts for bidding!"), player);
+                        return;
+                    }
+                    long biddingDuration = packet.getDuration() > 0 ? packet.getDuration() : 7L * 24 * 60 * 60 * 1000; // Default 7 days
+                    success = contractManager.openForBidding(contractId, biddingDuration);
+                    resultMessage = success ? "Contract " + contract.getContractNumber() + " is now open for bidding!" :
+                        "Failed to open contract for bidding!";
+                    break;
+
+                case CLOSE_BIDDING:
+                    // Only legislature members/leader can close bidding
+                    if (!isLeader && !isLegislator) {
+                        NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                            "Only legislature members or the leader can close bidding!"), player);
+                        return;
+                    }
+                    success = contractManager.closeBidding(contractId);
+                    resultMessage = success ? "Bidding closed on contract " + contract.getContractNumber() :
+                        "Failed to close bidding!";
+                    break;
+
+                case APPROVE_BID:
+                    // Only legislature can approve bids
+                    if (!isLeader && !isLegislator) {
+                        NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                            "Only legislature members or the leader can approve bids!"), player);
+                        return;
+                    }
+
+                    UUID bidId;
+                    try {
+                        bidId = UUID.fromString(packet.getTargetId());
+                    } catch (IllegalArgumentException e) {
+                        NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Invalid bid ID!"), player);
+                        return;
+                    }
+
+                    // Get the bid to find proposed duration
+                    ContractBid selectedBid = null;
+                    for (ContractBid bid : contract.getBids()) {
+                        if (bid.getBidId().equals(bidId)) {
+                            selectedBid = bid;
+                            break;
+                        }
+                    }
+
+                    if (selectedBid == null) {
+                        NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Bid not found!"), player);
+                        return;
+                    }
+
+                    // Calculate deadline based on proposed duration (default 7 days if not specified)
+                    long deadlineDuration = packet.getDuration() > 0 ? packet.getDuration() :
+                        (long) selectedBid.getProposedDurationDays() * 24 * 60 * 60 * 1000;
+
+                    success = contractManager.approveBid(contractId, bidId, deadlineDuration);
+
+                    if (success) {
+                        resultMessage = "Bid from " + selectedBid.getBidderName() + " approved for contract " +
+                            contract.getContractNumber() + "!";
+
+                        // Notify the contractor
+                        ServerPlayer contractor = player.getServer().getPlayerList().getPlayer(selectedBid.getBidderId());
+                        if (contractor != null) {
+                            contractor.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                "§a[Contracts] §fYour bid for contract " + contract.getContractNumber() +
+                                " (" + contract.getTitle() + ") has been approved! You have " +
+                                selectedBid.getProposedDurationDays() + " days to complete the project."));
+                        }
+
+                        // Refund bonds for non-selected bidders
+                        for (ContractBid bid : contract.getBids()) {
+                            if (!bid.getBidId().equals(bidId) && bid.isBondPaid() && contract.getBondAmount() > 0) {
+                                IntegrationRegistry.depositToPlayer(bid.getBidderId(), contract.getBondAmount());
+                                ServerPlayer bidderPlayer = player.getServer().getPlayerList().getPlayer(bid.getBidderId());
+                                if (bidderPlayer != null) {
+                                    bidderPlayer.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                        "§e[Contracts] §fYour bond of " + IntegrationRegistry.formatCurrency(contract.getBondAmount()) +
+                                        " has been refunded. Another bid was selected for " + contract.getContractNumber() + "."));
+                                }
+                            }
+                        }
+                    } else {
+                        resultMessage = "Failed to approve bid!";
+                    }
+                    break;
+
+                case UPDATE_PROGRESS:
+                    // Only contractor can update progress
+                    if (!isContractor) {
+                        NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                            "Only the contractor can update progress!"), player);
+                        return;
+                    }
+                    contractManager.updateProgress(contractId, packet.getValue());
+                    resultMessage = "Progress updated to " + packet.getValue() + "%";
+                    success = true;
+                    break;
+
+                case COMPLETE_MILESTONE:
+                    // Contractor reports milestone, but payment requires verification
+                    if (!isContractor && !isLeader && !isLegislator) {
+                        NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                            "Only the contractor or government officials can complete milestones!"), player);
+                        return;
+                    }
+                    success = contractManager.completeMilestone(contractId, packet.getValue());
+                    if (success) {
+                        // Calculate milestone payment
+                        double milestonePayment = contract.getTotalBudget() * 0.25; // 25% per milestone
+                        // Transfer from escrow to contractor
+                        if (contract.getEscrowBalance() >= milestonePayment && IntegrationRegistry.hasEconomyIntegration()) {
+                            contract.withdrawFromEscrow(milestonePayment);
+                            IntegrationRegistry.depositToPlayer(contract.getContractorId(), milestonePayment);
+                            contract.recordPayment(milestonePayment);
+                        }
+                        resultMessage = "Milestone " + packet.getValue() + "% completed! Payment of " +
+                            IntegrationRegistry.formatCurrency(milestonePayment) + " released.";
+
+                        // Notify contractor
+                        if (!isContractor) {
+                            ServerPlayer contractor = player.getServer().getPlayerList().getPlayer(contract.getContractorId());
+                            if (contractor != null) {
+                                contractor.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                    "§a[Contracts] §fMilestone " + packet.getValue() + "% verified for " +
+                                    contract.getContractNumber() + "! Payment released."));
+                            }
+                        }
+                    } else {
+                        resultMessage = "Failed to complete milestone!";
+                    }
+                    break;
+
+                case COMPLETE_CONTRACT:
+                    // Only government can mark complete (after final inspection)
+                    if (!isLeader && !isLegislator) {
+                        NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                            "Only legislature members or the leader can complete contracts!"), player);
+                        return;
+                    }
+                    success = contractManager.completeContract(contractId);
+                    if (success) {
+                        // Release any remaining escrow to contractor
+                        double remainingEscrow = contract.getEscrowBalance();
+                        if (remainingEscrow > 0 && IntegrationRegistry.hasEconomyIntegration()) {
+                            contract.withdrawFromEscrow(remainingEscrow);
+                            IntegrationRegistry.depositToPlayer(contract.getContractorId(), remainingEscrow);
+                            contract.recordPayment(remainingEscrow);
+                        }
+
+                        // Return contractor's bond
+                        if (contract.getBondAmount() > 0 && IntegrationRegistry.hasEconomyIntegration()) {
+                            IntegrationRegistry.depositToPlayer(contract.getContractorId(), contract.getBondAmount());
+                        }
+
+                        resultMessage = "Contract " + contract.getContractNumber() + " completed successfully! " +
+                            "Final payment and bond released to " + contract.getContractorName() + ".";
+
+                        // Notify contractor
+                        ServerPlayer contractor = player.getServer().getPlayerList().getPlayer(contract.getContractorId());
+                        if (contractor != null) {
+                            contractor.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                "§a[Contracts] §fCongratulations! Contract " + contract.getContractNumber() +
+                                " has been marked complete. Final payment and bond released!"));
+                        }
+                    } else {
+                        resultMessage = "Failed to complete contract!";
+                    }
+                    break;
+
+                case CANCEL_CONTRACT:
+                    // Only government can cancel
+                    if (!isLeader && !isLegislator) {
+                        NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                            "Only legislature members or the leader can cancel contracts!"), player);
+                        return;
+                    }
+                    success = contractManager.cancelContract(contractId);
+                    if (success) {
+                        // Return escrow to nation treasury
+                        double escrowRefund = contract.getEscrowBalance();
+                        if (escrowRefund > 0 && IntegrationRegistry.hasEconomyIntegration()) {
+                            contract.withdrawFromEscrow(escrowRefund);
+                            IntegrationRegistry.depositToNation(nation.getName(), escrowRefund);
+                        }
+
+                        // Refund bonds to all bidders
+                        for (ContractBid bid : contract.getBids()) {
+                            if (bid.isBondPaid() && contract.getBondAmount() > 0) {
+                                IntegrationRegistry.depositToPlayer(bid.getBidderId(), contract.getBondAmount());
+                            }
+                        }
+
+                        resultMessage = "Contract " + contract.getContractNumber() + " cancelled. Escrow returned to treasury.";
+
+                        // Notify contractor if any
+                        if (contract.getContractorId() != null) {
+                            ServerPlayer contractor = player.getServer().getPlayerList().getPlayer(contract.getContractorId());
+                            if (contractor != null) {
+                                contractor.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                    "§c[Contracts] §fContract " + contract.getContractNumber() + " has been cancelled."));
+                            }
+                        }
+                    } else {
+                        resultMessage = "Failed to cancel contract!";
+                    }
+                    break;
+
+                case FAIL_CONTRACT:
+                    // Only government can mark as failed
+                    if (!isLeader && !isLegislator) {
+                        NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                            "Only legislature members or the leader can mark contracts as failed!"), player);
+                        return;
+                    }
+                    success = contractManager.failContract(contractId);
+                    if (success) {
+                        // Return remaining escrow to nation treasury
+                        double escrowRefund = contract.getEscrowBalance();
+                        if (escrowRefund > 0 && IntegrationRegistry.hasEconomyIntegration()) {
+                            contract.withdrawFromEscrow(escrowRefund);
+                            IntegrationRegistry.depositToNation(nation.getName(), escrowRefund);
+                        }
+
+                        // Forfeit contractor's bond to nation treasury
+                        if (contract.getBondAmount() > 0 && IntegrationRegistry.hasEconomyIntegration()) {
+                            IntegrationRegistry.depositToNation(nation.getName(), contract.getBondAmount());
+                        }
+
+                        resultMessage = "Contract " + contract.getContractNumber() + " marked as failed. " +
+                            "Bond forfeited, remaining escrow returned to treasury.";
+
+                        // Notify contractor
+                        if (contract.getContractorId() != null) {
+                            ServerPlayer contractor = player.getServer().getPlayerList().getPlayer(contract.getContractorId());
+                            if (contractor != null) {
+                                contractor.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                    "§c[Contracts] §fContract " + contract.getContractNumber() +
+                                    " has been marked as failed. Your bond has been forfeited."));
+                            }
+                        }
+                    } else {
+                        resultMessage = "Failed to mark contract as failed!";
+                    }
+                    break;
+
+                default:
+                    NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Unknown action!"), player);
+                    return;
+            }
+
+            // Mark for save
+            if (player.level() instanceof ServerLevel level) {
+                NationSavedData.get(level).markForSave();
+            }
+
+            NetworkHandler.sendToPlayer(new ActionResultPacket(success, resultMessage), player);
+
+            // Sync contracts to the player
+            syncContractsToPlayer(player, nation);
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    /**
+     * Helper method to sync contracts to a player
+     */
+    private static void syncContractsToPlayer(ServerPlayer player, Nation nation) {
+        ContractManager contractManager = ContractManager.getInstance();
+        List<Contract> contracts = contractManager.getNationContracts(nation.getId());
+
+        // Check player permissions
+        boolean isLeader = player.getUUID().equals(nation.getLeaderId());
+        boolean isLegislator = nation.isOfficer(player.getUUID());
+
+        // Get nation treasury balance
+        double treasuryBalance = IntegrationRegistry.hasEconomyIntegration() ?
+            IntegrationRegistry.getNationBalance(nation.getName()) : 0;
+
+        // Categorize contracts
+        List<SyncContractsPacket.ContractSummary> openBidding = new ArrayList<>();
+        List<SyncContractsPacket.ContractSummary> pendingApproval = new ArrayList<>();
+        List<SyncContractsPacket.ContractSummary> activeContracts = new ArrayList<>();
+        List<SyncContractsPacket.ContractSummary> history = new ArrayList<>();
+        List<SyncContractsPacket.ContractSummary> myContracts = new ArrayList<>();
+
+        for (Contract contract : contracts) {
+            // Build bid summaries
+            List<SyncContractsPacket.BidSummary> bidSummaries = new ArrayList<>();
+            boolean playerHasBid = false;
+            for (ContractBid bid : contract.getBids()) {
+                if (bid.getBidderId().equals(player.getUUID())) {
+                    playerHasBid = true;
+                }
+                bidSummaries.add(new SyncContractsPacket.BidSummary(
+                    bid.getBidId().toString(),
+                    bid.getBidderName(),
+                    bid.getBidAmount(),
+                    bid.getProposedDurationDays(),
+                    bid.getProposal(),
+                    bid.isBondPaid()
+                ));
+            }
+
+            // Calculate time remaining
+            long timeRemaining = 0;
+            if (contract.getStatus() == Contract.Status.BIDDING) {
+                timeRemaining = contract.getBiddingEndTime() - System.currentTimeMillis();
+            } else if (contract.getStatus() == Contract.Status.ACTIVE) {
+                timeRemaining = contract.getDeadline() - System.currentTimeMillis();
+            }
+
+            SyncContractsPacket.ContractSummary summary = new SyncContractsPacket.ContractSummary(
+                contract.getContractId().toString(),
+                contract.getContractNumber(),
+                contract.getTitle(),
+                contract.getDescription() != null ? contract.getDescription() : "",
+                contract.getCreatorName(),
+                contract.getStatus().name(),
+                contract.getTotalBudget(),
+                contract.getBondAmount(),
+                contract.getDesignatedChunks().size(),
+                contract.getBids().size(),
+                timeRemaining,
+                contract.getContractorName() != null ? contract.getContractorName() : "",
+                contract.getProgressPercent(),
+                playerHasBid,
+                bidSummaries
+            );
+
+            // Categorize by status
+            switch (contract.getStatus()) {
+                case BIDDING:
+                    openBidding.add(summary);
+                    break;
+                case PENDING_APPROVAL:
+                    pendingApproval.add(summary);
+                    break;
+                case ACTIVE:
+                    activeContracts.add(summary);
+                    break;
+                case COMPLETED:
+                case CANCELLED:
+                case FAILED:
+                    history.add(summary);
+                    break;
+                case DRAFT:
+                    // Only show drafts to legislators
+                    if (isLeader || isLegislator) {
+                        pendingApproval.add(summary);
+                    }
+                    break;
+            }
+
+            // Add to my contracts if player is the contractor
+            if (player.getUUID().equals(contract.getContractorId())) {
+                myContracts.add(summary);
+            }
+        }
+
+        NetworkHandler.sendToPlayer(new SyncContractsPacket(
+            nation.getName(),
+            isLegislator,
+            isLeader,
+            openBidding,
+            pendingApproval,
+            activeContracts,
+            history,
+            myContracts,
+            treasuryBalance
+        ), player);
     }
 
     // ==================== Election Handlers ====================

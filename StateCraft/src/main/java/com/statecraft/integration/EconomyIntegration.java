@@ -70,6 +70,48 @@ public interface EconomyIntegration {
     }
 
     /**
+     * Deposit funds to a player's account
+     * @param playerId The UUID of the player
+     * @param amount The amount to deposit
+     * @param description Description of the deposit
+     * @return true if successful, false on error
+     */
+    default boolean depositToPlayer(UUID playerId, double amount, String description) {
+        return false;
+    }
+
+    /**
+     * Get a nation's treasury balance
+     * @param nationName The name of the nation
+     * @return The nation's balance, or 0 if not available
+     */
+    default double getNationBalance(String nationName) {
+        return 0;
+    }
+
+    /**
+     * Withdraw funds from a nation's treasury
+     * @param nationName The name of the nation
+     * @param amount The amount to withdraw
+     * @param description Description of the withdrawal
+     * @return true if successful, false if insufficient funds or error
+     */
+    default boolean withdrawFromNation(String nationName, double amount, String description) {
+        return false;
+    }
+
+    /**
+     * Deposit funds to a nation's treasury
+     * @param nationName The name of the nation
+     * @param amount The amount to deposit
+     * @param description Description of the deposit
+     * @return true if successful, false on error
+     */
+    default boolean depositToNation(String nationName, double amount, String description) {
+        return false;
+    }
+
+    /**
      * Format a currency amount for display
      * @param amount The amount to format
      * @return Formatted string (e.g., "$1,000.00")

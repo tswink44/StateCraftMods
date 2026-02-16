@@ -53,6 +53,7 @@ public class NationInfoScreen extends StateCraftScreen {
     private Button joinButton;
     private Button legislatureButton;
     private Button viewLawsButton;
+    private Button contractsButton;
 
     @Override
     protected void init() {
@@ -106,6 +107,14 @@ public class NationInfoScreen extends StateCraftScreen {
             btn -> openLegislatureScreen()
         ));
         legislatureButton.visible = false;
+
+        // Contracts button (visible to all members)
+        contractsButton = this.addRenderableWidget(createButton(
+            startX + buttonSpacing * 3, row2Y, buttonWidth, 20,
+            Component.literal("§eContracts"),
+            btn -> openContractsScreen()
+        ));
+        contractsButton.visible = false; // Hidden until we know if member
 
         // === Row 2: Admin/action buttons ===
 
@@ -269,6 +278,10 @@ public class NationInfoScreen extends StateCraftScreen {
         this.minecraft.setScreen(new NationLawsScreen(nationName));
     }
 
+    private void openContractsScreen() {
+        this.minecraft.setScreen(new ContractsMainScreen(nationName));
+    }
+
     private void openSettingsScreen() {
         this.minecraft.setScreen(new NationSettingsScreen(nationName));
     }
@@ -364,6 +377,10 @@ public class NationInfoScreen extends StateCraftScreen {
         // Show view laws button for all members
         if (viewLawsButton != null) {
             viewLawsButton.visible = isMember;
+        }
+        // Show contracts button for all members
+        if (contractsButton != null) {
+            contractsButton.visible = isMember;
         }
         // Show leave button only for members who are not the leader
         if (leaveButton != null) {
