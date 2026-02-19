@@ -68,7 +68,13 @@ public class StateCraftIntegration {
                         case "onCityDisbanded" -> economyIntegrationImpl.onCityDisbanded((UUID) args[0]);
                         case "getPlayerBalance" -> { return economyIntegrationImpl.getPlayerBalance((UUID) args[0]); }
                         case "withdrawFromPlayer" -> { return economyIntegrationImpl.withdrawFromPlayer((UUID) args[0], (Double) args[1], (String) args[2]); }
+                        case "depositToPlayer" -> { return economyIntegrationImpl.depositToPlayer((UUID) args[0], (Double) args[1], (String) args[2]); }
+                        case "getNationBalance" -> { return economyIntegrationImpl.getNationBalance((String) args[0]); }
+                        case "withdrawFromNation" -> { return economyIntegrationImpl.withdrawFromNation((String) args[0], (Double) args[1], (String) args[2]); }
+                        case "depositToNation" -> { return economyIntegrationImpl.depositToNation((String) args[0], (Double) args[1], (String) args[2]); }
                         case "formatCurrency" -> { return economyIntegrationImpl.formatCurrency((Double) args[0]); }
+                        case "getChunkImprovementScore" -> { return economyIntegrationImpl.getChunkImprovementScore((Integer) args[0], (Integer) args[1], (String) args[2]); }
+                        case "getChunkTotalValue" -> { return economyIntegrationImpl.getChunkTotalValue((Integer) args[0], (Integer) args[1], (String) args[2]); }
                     }
                     return null;
                 }
@@ -154,12 +160,104 @@ public class StateCraftIntegration {
             return result.isSuccess();
         }
 
+        public boolean depositToPlayer(UUID playerId, double amount, String description) {
+            EconomyManager manager = EconomyManager.getInstance();
+            var result = manager.deposit(playerId, amount, description);
+            return result.isSuccess();
+        }
+
+        public double getNationBalance(String nationName) {
+            // Look up nation by name and get its treasury balance
+            try {
+                var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
+                var getInstance = managerClass.getMethod("getInstance");
+                var claimManager = getInstance.invoke(null);
+
+                var getNationByName = managerClass.getMethod("getNationByName", String.class);
+                var nation = getNationByName.invoke(claimManager, nationName);
+
+                if (nation != null) {
+                    var nationClass = Class.forName("com.statecraft.core.Nation");
+                    var getId = nationClass.getMethod("getId");
+                    UUID nationId = (UUID) getId.invoke(nation);
+
+                    EconomyManager manager = EconomyManager.getInstance();
+                    return manager.getNationTreasuryBalance(nationId);
+                }
+            } catch (Exception e) {
+                StateCraftEconomy.LOGGER.warn("Error getting nation balance for '{}': {}", nationName, e.getMessage());
+            }
+            return 0.0;
+        }
+
+        public boolean withdrawFromNation(String nationName, double amount, String description) {
+            try {
+                var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
+                var getInstance = managerClass.getMethod("getInstance");
+                var claimManager = getInstance.invoke(null);
+
+                var getNationByName = managerClass.getMethod("getNationByName", String.class);
+                var nation = getNationByName.invoke(claimManager, nationName);
+
+                if (nation != null) {
+                    var nationClass = Class.forName("com.statecraft.core.Nation");
+                    var getId = nationClass.getMethod("getId");
+                    UUID nationId = (UUID) getId.invoke(nation);
+
+                    EconomyManager manager = EconomyManager.getInstance();
+                    var result = manager.withdrawFromNationTreasury(nationId, amount, description);
+                    return result.isSuccess();
+                }
+            } catch (Exception e) {
+                StateCraftEconomy.LOGGER.warn("Error withdrawing from nation '{}': {}", nationName, e.getMessage());
+            }
+            return false;
+        }
+
+        public boolean depositToNation(String nationName, double amount, String description) {
+            try {
+                var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
+                var getInstance = managerClass.getMethod("getInstance");
+                var claimManager = getInstance.invoke(null);
+
+                var getNationByName = managerClass.getMethod("getNationByName", String.class);
+                var nation = getNationByName.invoke(claimManager, nationName);
+
+                if (nation != null) {
+                    var nationClass = Class.forName("com.statecraft.core.Nation");
+                    var getId = nationClass.getMethod("getId");
+                    UUID nationId = (UUID) getId.invoke(nation);
+
+                    EconomyManager manager = EconomyManager.getInstance();
+                    var result = manager.depositToNationTreasury(nationId, amount, description);
+                    return result.isSuccess();
+                }
+            } catch (Exception e) {
+                StateCraftEconomy.LOGGER.warn("Error depositing to nation '{}': {}", nationName, e.getMessage());
+            }
+            return false;
+        }
+
         public String formatCurrency(double amount) {
             EconomyManager manager = EconomyManager.getInstance();
             if (manager != null) {
                 return manager.formatCurrency(amount);
             }
             return String.format("$%.2f", amount);
+        }
+
+        public int getChunkImprovementScore(int chunkX, int chunkZ, String dimension) {
+            com.statecraft.economy.valuation.ImprovementTracker tracker =
+                com.statecraft.economy.valuation.ImprovementTracker.getInstance();
+            return tracker.getScoreNoScan(chunkX, chunkZ, dimension);
+        }
+
+        public double getChunkTotalValue(int chunkX, int chunkZ, String dimension) {
+            com.statecraft.economy.valuation.ChunkValuationManager valuationManager =
+                com.statecraft.economy.valuation.ChunkValuationManager.getInstance();
+            com.statecraft.economy.valuation.ChunkValuation valuation =
+                valuationManager.getValuation(chunkX, chunkZ, dimension);
+            return valuation != null ? valuation.getTotalValue() : 0;
         }
     }
 

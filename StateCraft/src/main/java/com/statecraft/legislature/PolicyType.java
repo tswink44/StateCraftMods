@@ -53,6 +53,10 @@ public enum PolicyType {
         "Duration of election voting period in days (default: 1 day). Requires constitutional amendment."),
     MAX_OFFICERS("Max Officers", Category.CONSTITUTIONAL, 0, 3, ValueType.INTEGER,
         "Maximum number of officers the leader can appoint (0-3). Requires constitutional amendment."),
+    NATION_NAME("Nation Name", Category.CONSTITUTIONAL, 0, 0, ValueType.TEXT,
+        "Official name of the nation. Requires constitutional amendment."),
+    NATION_FLAG("Nation Flag", Category.CONSTITUTIONAL, 0, 0, ValueType.TEXT,
+        "URL to the nation's flag image. Requires constitutional amendment."),
 
     // Custom laws (roleplay)
     CUSTOM_LAW("Custom Law", Category.CUSTOM, 0, 0, ValueType.TEXT,

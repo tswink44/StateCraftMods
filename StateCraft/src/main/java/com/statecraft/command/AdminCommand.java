@@ -68,7 +68,8 @@ public class AdminCommand {
                     .then(Commands.argument("ticks", com.mojang.brigadier.arguments.LongArgumentType.longArg(1200))
                         .executes(AdminCommand::setTaxPeriod))))
             .then(ElectionCommand.registerAdmin())
-            .then(LegislatureCommand.registerAdmin());
+            .then(LegislatureCommand.registerAdmin())
+            .then(ContractCommand.registerAdmin());
     }
 
     /**

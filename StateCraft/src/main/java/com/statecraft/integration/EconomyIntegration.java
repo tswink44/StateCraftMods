@@ -119,5 +119,27 @@ public interface EconomyIntegration {
     default String formatCurrency(double amount) {
         return String.format("$%.2f", amount);
     }
+
+    /**
+     * Get the improvement score for a chunk
+     * @param chunkX The chunk X coordinate
+     * @param chunkZ The chunk Z coordinate
+     * @param dimension The dimension (e.g., "minecraft:overworld")
+     * @return The improvement score, or 0 if not available
+     */
+    default int getChunkImprovementScore(int chunkX, int chunkZ, String dimension) {
+        return 0;
+    }
+
+    /**
+     * Get the total valuation for a chunk (including all multipliers)
+     * @param chunkX The chunk X coordinate
+     * @param chunkZ The chunk Z coordinate
+     * @param dimension The dimension (e.g., "minecraft:overworld")
+     * @return The total chunk value, or 0 if not available
+     */
+    default double getChunkTotalValue(int chunkX, int chunkZ, String dimension) {
+        return 0;
+    }
 }
 

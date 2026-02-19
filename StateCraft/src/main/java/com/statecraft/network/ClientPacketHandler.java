@@ -428,7 +428,7 @@ public class ClientPacketHandler {
                     listings.add(new ChunkMarketplaceScreen.ChunkListing(
                         info.chunkX, info.chunkZ,
                         info.ownerName, info.isGovernment,
-                        info.price, info.cityName
+                        info.price, info.cityName, info.valuation
                     ));
                 }
                 screen.updateMarketplaceData(listings);

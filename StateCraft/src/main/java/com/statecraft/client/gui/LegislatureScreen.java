@@ -261,7 +261,7 @@ public class LegislatureScreen extends StateCraftScreen {
         int y = startY;
 
         // Header
-        graphics.drawString(this.font, "§6Recent History §7(" + recentHistory.size() + ")", x, y, COLOR_PRIMARY);
+        graphics.drawString(this.font, "§6Recent History §7(" + recentHistory.size() + ") §8- click to view", x, y, COLOR_PRIMARY);
         y += 14;
 
         if (recentHistory.isEmpty()) {
@@ -269,10 +269,23 @@ public class LegislatureScreen extends StateCraftScreen {
             return;
         }
 
-        // History list
+        // History list - render with hover detection
         int endIndex = Math.min(scrollOffset + MAX_VISIBLE_BILLS, recentHistory.size());
         for (int i = scrollOffset; i < endIndex; i++) {
             SyncLegislatureDataPacket.BillSummary bill = recentHistory.get(i);
+
+            // Check if this entry is hovered
+            int entryHeight = 37; // approximate height per entry
+            int entryTop = y;
+            int entryBottom = y + entryHeight;
+            boolean isHovered = mouseX >= x && mouseX < guiLeft + guiWidth - 30 &&
+                                mouseY >= entryTop && mouseY < entryBottom;
+
+            // Draw highlight if hovered
+            if (isHovered) {
+                graphics.fill(x - 3, entryTop - 1, guiLeft + guiWidth - 25, entryBottom - 5, 0x33FFFFFF);
+            }
+
             y = renderBillEntry(graphics, bill, x, y, mouseX, mouseY, false);
         }
 
@@ -404,6 +417,64 @@ public class LegislatureScreen extends StateCraftScreen {
         }
 
         return true;
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // Handle clicking on history entries to open detail view
+        if (button == 0 && currentTab == Tab.HISTORY && !recentHistory.isEmpty()) {
+            int startY = guiTop + 48 + 14; // After tab content header
+            int x = guiLeft + 15;
+            int entryHeight = 37;
+
+            int endIndex = Math.min(scrollOffset + MAX_VISIBLE_BILLS, recentHistory.size());
+            int y = startY;
+
+            for (int i = scrollOffset; i < endIndex; i++) {
+                int entryTop = y;
+                int entryBottom = y + entryHeight;
+
+                if (mouseX >= x && mouseX < guiLeft + guiWidth - 30 &&
+                    mouseY >= entryTop && mouseY < entryBottom) {
+
+                    SyncLegislatureDataPacket.BillSummary bill = recentHistory.get(i);
+                    openLawDetail(bill);
+                    return true;
+                }
+
+                y += entryHeight;
+            }
+        }
+
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    private void openLawDetail(SyncLegislatureDataPacket.BillSummary bill) {
+        // Create LawInfo from BillSummary
+        java.util.Map<String, String> policyChanges = new java.util.HashMap<>();
+        // Policy changes would need to be sent from server - for now we show what we have
+        if (bill.getPolicyChanges() != null) {
+            policyChanges = bill.getPolicyChanges();
+        }
+
+        LawDetailScreen.LawInfo lawInfo = new LawDetailScreen.LawInfo(
+            bill.getBillNumber(),
+            bill.getTitle(),
+            bill.getDescription(),
+            bill.getAuthorName(),
+            bill.getEnactedTime(),
+            bill.getYesVotes(),
+            bill.getNoVotes(),
+            bill.getAbstainVotes(),
+            bill.isVetoProof(),
+            bill.isConstitutionalAmendment(),
+            policyChanges,
+            bill.getFullText()
+        );
+
+        this.minecraft.setScreen(new LawDetailScreen(nationName, lawInfo, () -> {
+            this.minecraft.setScreen(this);
+        }));
     }
 
     private void openProposeBillScreen() {

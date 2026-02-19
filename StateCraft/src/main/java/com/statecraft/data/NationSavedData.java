@@ -1,6 +1,7 @@
 package com.statecraft.data;
 
 import com.statecraft.StateCraft;
+import com.statecraft.contract.ContractManager;
 import com.statecraft.core.*;
 import com.statecraft.legislature.LegislatureManager;
 import net.minecraft.core.registries.Registries;
@@ -65,6 +66,12 @@ public class NationSavedData extends SavedData {
             StateCraft.LOGGER.info("Loaded legislature data");
         }
 
+        // Load contract data
+        if (tag.contains("contracts")) {
+            ContractManager.getInstance().load(tag.getCompound("contracts"));
+            StateCraft.LOGGER.info("Loaded contract data");
+        }
+
         StateCraft.LOGGER.info("Loaded {} nations with {} total claimed chunks",
             manager.getTotalNationCount(), manager.getTotalClaimedChunks());
 
@@ -126,10 +133,14 @@ public class NationSavedData extends SavedData {
         // Save legislature data
         tag.put("legislature", LegislatureManager.getInstance().save());
 
+        // Save contract data
+        tag.put("contracts", ContractManager.getInstance().save());
+
         manager.clearDirty();
         InvitationManager.getInstance().clearDirty();
         ElectionManager.getInstance().clearDirty();
         LegislatureManager.getInstance().clearDirty();
+        ContractManager.getInstance().clearDirty();
 
         StateCraft.LOGGER.debug("Saved {} nations", manager.getTotalNationCount());
 

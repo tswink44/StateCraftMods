@@ -28,6 +28,13 @@ public class CreateContractScreen extends StateCraftScreen {
     private EditBox requirementsField;
     private EditBox budgetField;
     private EditBox bondField;
+    private EditBox paymentPerPointField;  // For VALUATION_BASED compensation
+
+    // Milestone description fields (for MILESTONE compensation type)
+    private EditBox milestone25Field;
+    private EditBox milestone50Field;
+    private EditBox milestone75Field;
+    private EditBox milestone100Field;
 
     // Contract settings
     private String compensationType = "MILESTONE";
@@ -40,74 +47,89 @@ public class CreateContractScreen extends StateCraftScreen {
 
     // Step tracking
     private int currentStep = 1;
-    private static final int TOTAL_STEPS = 2;
+    private int totalSteps = 2;  // Dynamic: 2 for non-milestone, 3 for milestone
 
     public CreateContractScreen(String nationName) {
         super(Component.literal("Create Contract"));
         this.nationName = nationName;
-        this.guiWidth = 320;
-        this.guiHeight = 260;
+        this.guiWidth = 340;
+        this.guiHeight = 300;
     }
 
     @Override
     protected void init() {
         super.init();
 
+        // Update total steps based on compensation type
+        totalSteps = compensationType.equals("MILESTONE") ? 3 : 2;
+
         if (currentStep == 1) {
             initStep1();
-        } else {
+        } else if (currentStep == 2) {
             initStep2();
+        } else {
+            initStep3();  // Milestone customization
         }
     }
 
     private void initStep1() {
         int fieldWidth = guiWidth - 40;
         int x = guiLeft + 20;
-        int y = guiTop + 35;
+        int y = guiTop + 40;
 
         // Title field
         titleField = new EditBox(this.font, x, y, fieldWidth, 18, Component.literal("Title"));
         titleField.setMaxLength(100);
         titleField.setHint(Component.literal("Contract title..."));
         this.addRenderableWidget(titleField);
-        y += 28;
+        y += 32;
 
         // Description field
         descriptionField = new EditBox(this.font, x, y, fieldWidth, 18, Component.literal("Description"));
         descriptionField.setMaxLength(256);
         descriptionField.setHint(Component.literal("Brief description..."));
         this.addRenderableWidget(descriptionField);
-        y += 28;
+        y += 32;
 
         // Requirements field
         requirementsField = new EditBox(this.font, x, y, fieldWidth, 18, Component.literal("Requirements"));
         requirementsField.setMaxLength(512);
         requirementsField.setHint(Component.literal("Build requirements..."));
         this.addRenderableWidget(requirementsField);
-        y += 34;
+        y += 38;
 
-        // Budget field
-        budgetField = new EditBox(this.font, x, y, 100, 18, Component.literal("Budget"));
+        // Budget and Bond fields side by side
+        int halfWidth = (fieldWidth - 20) / 2;
+
+        budgetField = new EditBox(this.font, x, y, halfWidth, 18, Component.literal("Budget"));
         budgetField.setMaxLength(12);
         budgetField.setHint(Component.literal("0.00"));
         budgetField.setFilter(this::isValidNumberInput);
         this.addRenderableWidget(budgetField);
 
         // Bond field (optional)
-        bondField = new EditBox(this.font, x + 160, y, 100, 18, Component.literal("Bond"));
+        bondField = new EditBox(this.font, x + halfWidth + 20, y, halfWidth, 18, Component.literal("Bond"));
         bondField.setMaxLength(12);
         bondField.setHint(Component.literal("0 (optional)"));
         bondField.setFilter(this::isValidNumberInput);
         this.addRenderableWidget(bondField);
-        y += 30;
+        y += 38;
 
         // Compensation type selector
         compTypeButton = this.addRenderableWidget(createButton(
-            x, y, 140, 18,
+            x, y, 160, 20,
             Component.literal("Type: " + getCompTypeDisplayName()),
             btn -> cycleCompensationType()
         ));
-        y += 28;
+
+        // Payment per improvement point (only for VALUATION_BASED)
+        paymentPerPointField = new EditBox(this.font, x + 170, y, 100, 18, Component.literal("$/Point"));
+        paymentPerPointField.setMaxLength(8);
+        paymentPerPointField.setHint(Component.literal("1.00"));
+        paymentPerPointField.setValue("1.00");
+        paymentPerPointField.setFilter(this::isValidNumberInput);
+        paymentPerPointField.visible = compensationType.equals("VALUATION_BASED");
+        this.addRenderableWidget(paymentPerPointField);
 
         // Bottom buttons
         int buttonY = guiTop + guiHeight - 28;
@@ -144,7 +166,7 @@ public class CreateContractScreen extends StateCraftScreen {
             btn -> openChunkMap()
         ));
 
-        // Quick action buttons
+        // Quick action buttons - moved down to avoid overlap with chunk list
         this.addRenderableWidget(createButton(
             x, y + 70, 130, 18,
             Component.literal("§a+ Add Current Chunk"),
@@ -178,12 +200,72 @@ public class CreateContractScreen extends StateCraftScreen {
             btn -> goToStep1()
         ));
 
+        // Next button - goes to milestones for MILESTONE type, otherwise creates contract
+        String nextLabel = compensationType.equals("MILESTONE") ? "Next §7→" : "§aCreate";
+        this.addRenderableWidget(createButton(
+            guiLeft + guiWidth - 100, buttonY, 85, 20,
+            Component.literal(nextLabel),
+            btn -> {
+                if (compensationType.equals("MILESTONE")) {
+                    goToStep3();
+                } else {
+                    createContract();
+                }
+            }
+        ));
+    }
+
+    private void initStep3() {
+        int x = guiLeft + 20;
+        int y = guiTop + 35;
+
+        // Milestone description fields
+        int fieldWidth = guiWidth - 80;
+
+        milestone25Field = new EditBox(this.font, x + 45, y, fieldWidth, 16, Component.literal("25%"));
+        milestone25Field.setMaxLength(100);
+        milestone25Field.setValue("Foundation/Base structure complete");
+        this.addRenderableWidget(milestone25Field);
+        y += 38;
+
+        milestone50Field = new EditBox(this.font, x + 45, y, fieldWidth, 16, Component.literal("50%"));
+        milestone50Field.setMaxLength(100);
+        milestone50Field.setValue("Main structure complete");
+        this.addRenderableWidget(milestone50Field);
+        y += 38;
+
+        milestone75Field = new EditBox(this.font, x + 45, y, fieldWidth, 16, Component.literal("75%"));
+        milestone75Field.setMaxLength(100);
+        milestone75Field.setValue("Interior/Details complete");
+        this.addRenderableWidget(milestone75Field);
+        y += 38;
+
+        milestone100Field = new EditBox(this.font, x + 45, y, fieldWidth, 16, Component.literal("100%"));
+        milestone100Field.setMaxLength(100);
+        milestone100Field.setValue("Final inspection passed");
+        this.addRenderableWidget(milestone100Field);
+
+        // Bottom buttons
+        int buttonY = guiTop + guiHeight - 28;
+
+        this.addRenderableWidget(createButton(
+            guiLeft + 15, buttonY, 60, 20,
+            Component.literal("§7← Back"),
+            btn -> goToStep2()
+        ));
+
         this.addRenderableWidget(createButton(
             guiLeft + guiWidth - 100, buttonY, 85, 20,
             Component.literal("§aCreate"),
             btn -> createContract()
         ));
     }
+
+    private void goToStep3() {
+        currentStep = 3;
+        rebuildWidgets();
+    }
+
 
     private void openChunkMap() {
         // Open the chunk selection map screen
@@ -226,6 +308,11 @@ public class CreateContractScreen extends StateCraftScreen {
             case "VALUATION_BASED" -> compensationType = "FIXED";
         }
         compTypeButton.setMessage(Component.literal("Type: " + getCompTypeDisplayName()));
+
+        // Show/hide payment per point field based on compensation type
+        if (paymentPerPointField != null) {
+            paymentPerPointField.visible = compensationType.equals("VALUATION_BASED");
+        }
     }
 
     private String getCompTypeDisplayName() {
@@ -318,11 +405,14 @@ public class CreateContractScreen extends StateCraftScreen {
 
         double budget;
         double bond;
+        double paymentPerPoint;
         try {
             budget = Double.parseDouble(budgetField != null && !budgetField.getValue().isEmpty()
                 ? budgetField.getValue() : "0");
             bond = Double.parseDouble(bondField != null && !bondField.getValue().isEmpty()
                 ? bondField.getValue() : "0");
+            paymentPerPoint = Double.parseDouble(paymentPerPointField != null && !paymentPerPointField.getValue().isEmpty()
+                ? paymentPerPointField.getValue() : "1.0");
         } catch (NumberFormatException e) {
             errorMessage = "Invalid number format";
             return;
@@ -334,10 +424,27 @@ public class CreateContractScreen extends StateCraftScreen {
             chunks.add(new CreateContractPacket.ChunkData(pos.x, pos.z));
         }
 
+        // Build milestone descriptions (for MILESTONE type)
+        java.util.Map<Integer, String> milestoneDescs = new java.util.HashMap<>();
+        if (compensationType.equals("MILESTONE")) {
+            if (milestone25Field != null && !milestone25Field.getValue().isEmpty()) {
+                milestoneDescs.put(25, milestone25Field.getValue().trim());
+            }
+            if (milestone50Field != null && !milestone50Field.getValue().isEmpty()) {
+                milestoneDescs.put(50, milestone50Field.getValue().trim());
+            }
+            if (milestone75Field != null && !milestone75Field.getValue().isEmpty()) {
+                milestoneDescs.put(75, milestone75Field.getValue().trim());
+            }
+            if (milestone100Field != null && !milestone100Field.getValue().isEmpty()) {
+                milestoneDescs.put(100, milestone100Field.getValue().trim());
+            }
+        }
+
         // Send packet
         NetworkHandler.sendToServer(new CreateContractPacket(
             nationName, title, description, requirements,
-            budget, bond, compensationType, chunks, dimension
+            budget, bond, compensationType, paymentPerPoint, chunks, dimension, milestoneDescs
         ));
 
         // Go back to contracts list
@@ -349,13 +456,15 @@ public class CreateContractScreen extends StateCraftScreen {
         renderDivider(graphics, guiLeft + 10, guiTop + 22, guiWidth - 20);
 
         // Step indicator
-        String stepText = "Step " + currentStep + "/" + TOTAL_STEPS;
+        String stepText = "Step " + currentStep + "/" + totalSteps;
         graphics.drawString(this.font, "§7" + stepText, guiLeft + guiWidth - font.width(stepText) - 15, guiTop + 8, COLOR_TEXT);
 
         if (currentStep == 1) {
             renderStep1Content(graphics);
-        } else {
+        } else if (currentStep == 2) {
             renderStep2Content(graphics);
+        } else {
+            renderStep3Content(graphics);
         }
 
         // Error message
@@ -364,31 +473,51 @@ public class CreateContractScreen extends StateCraftScreen {
         }
     }
 
-    private void renderStep1Content(GuiGraphics graphics) {
+    private void renderStep3Content(GuiGraphics graphics) {
         int x = guiLeft + 20;
         int y = guiTop + 28;
 
-        // Field labels
-        graphics.drawString(this.font, "§7Title:", x, y, 0xFFAAAAAA);
-        y += 28;
-        graphics.drawString(this.font, "§7Description:", x, y, 0xFFAAAAAA);
-        y += 28;
-        graphics.drawString(this.font, "§7Requirements:", x, y, 0xFFAAAAAA);
-        y += 34;
-        graphics.drawString(this.font, "§7Budget ($):", x, y, 0xFFAAAAAA);
-        graphics.drawString(this.font, "§7Bond ($):", x + 160, y, 0xFFAAAAAA);
-        y += 30;
-        graphics.drawString(this.font, "§7Payment:", x, y, 0xFFAAAAAA);
+        graphics.drawString(this.font, "§6Customize Milestone Descriptions", x, y, COLOR_PRIMARY);
+        y += 20;
 
-        // Compensation type description
-        y += 22;
-        String compDesc = switch (compensationType) {
-            case "FIXED" -> "§8Full payment on completion";
-            case "MILESTONE" -> "§8Payments at 25%, 50%, 75%, 100%";
-            case "VALUATION_BASED" -> "§8Based on chunk value increase";
-            default -> "";
-        };
-        graphics.drawString(this.font, compDesc, x, y, 0xFF888888);
+        graphics.drawString(this.font, "§725%:", x, y, 0xFFAAAAAA);
+        y += 38;
+        graphics.drawString(this.font, "§750%:", x, y, 0xFFAAAAAA);
+        y += 38;
+        graphics.drawString(this.font, "§775%:", x, y, 0xFFAAAAAA);
+        y += 38;
+        graphics.drawString(this.font, "§7100%:", x, y, 0xFFAAAAAA);
+    }
+
+    private void renderStep1Content(GuiGraphics graphics) {
+        int x = guiLeft + 20;
+        int y = guiTop + 28;
+        int fieldWidth = guiWidth - 40;
+        int halfWidth = (fieldWidth - 20) / 2;
+
+        // Field labels with better spacing
+        graphics.drawString(this.font, "§7Title:", x, y, 0xFFAAAAAA);
+        y += 32;
+        graphics.drawString(this.font, "§7Description:", x, y, 0xFFAAAAAA);
+        y += 32;
+        graphics.drawString(this.font, "§7Requirements:", x, y, 0xFFAAAAAA);
+        y += 38;
+        graphics.drawString(this.font, "§7Budget ($):", x, y, 0xFFAAAAAA);
+        graphics.drawString(this.font, "§7Bond ($):", x + halfWidth + 20, y, 0xFFAAAAAA);
+        y += 38;
+        graphics.drawString(this.font, "§7Payment:", x, y, 0xFFAAAAAA);
+        if (compensationType.equals("VALUATION_BASED")) {
+            graphics.drawString(this.font, "§7$/Point:", x + 170, y, 0xFFAAAAAA);
+        } else {
+            // Only show compensation description when not VALUATION_BASED
+            // (since VALUATION_BASED has the $/Point field in that space)
+            String compDesc = switch (compensationType) {
+                case "FIXED" -> "§8Full payment on completion";
+                case "MILESTONE" -> "§8Payments at 25%, 50%, 75%, 100%";
+                default -> "";
+            };
+            graphics.drawString(this.font, compDesc, x + 170, y, 0xFF888888);
+        }
     }
 
     private void renderStep2Content(GuiGraphics graphics) {
@@ -404,13 +533,13 @@ public class CreateContractScreen extends StateCraftScreen {
         // Dimension
         String dimDisplay = dimension.replace("minecraft:", "");
         graphics.drawString(this.font, "§7Dimension: §f" + dimDisplay, x + 140, y, COLOR_TEXT);
-        y += 20;
 
-        // Instructions for map button
-        graphics.drawString(this.font, "§7Use the map to visually select chunks:", x, y, 0xFFAAAAAA);
+        // Note: Don't draw anything else here that might overlap with buttons
+        // The "Use the map..." instruction is removed since the button itself is self-explanatory
 
-        // List some selected chunks
-        y = guiTop + 125;
+        // List some selected chunks - positioned well below the quick action buttons
+        // Buttons end at approximately guiTop + 35 + 95 + 18 = guiTop + 148
+        y = guiTop + 165;
         graphics.drawString(this.font, "§7Chunks included:", x, y, 0xFFAAAAAA);
         y += 12;
 
@@ -418,8 +547,8 @@ public class CreateContractScreen extends StateCraftScreen {
         int col = 0;
         int startX = x;
         for (ChunkPos chunk : selectedChunks) {
-            if (count >= 15) {
-                graphics.drawString(this.font, "§8... +" + (selectedChunks.size() - 15) + " more", startX, y, 0xFF666666);
+            if (count >= 9) {  // Reduced further to fit available space
+                graphics.drawString(this.font, "§8... +" + (selectedChunks.size() - 9) + " more", startX, y, 0xFF666666);
                 break;
             }
 

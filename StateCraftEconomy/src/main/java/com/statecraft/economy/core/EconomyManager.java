@@ -427,6 +427,49 @@ public class EconomyManager {
     }
 
     /**
+     * Alias for getNationBalance for clarity
+     */
+    public double getNationTreasuryBalance(UUID nationId) {
+        return getNationBalance(nationId);
+    }
+
+    /**
+     * Withdraw directly from nation treasury (no player involved)
+     * Used for government contract payments, etc.
+     */
+    public TransactionResult withdrawFromNationTreasury(UUID nationId, double amount, String description) {
+        if (amount <= 0) {
+            return new TransactionResult(false, "Amount must be positive", 0);
+        }
+
+        BankAccount nationTreasury = getOrCreateNationTreasury(nationId);
+        if (nationTreasury.getBalance() < amount) {
+            return new TransactionResult(false, "Insufficient funds in nation treasury", nationTreasury.getBalance());
+        }
+
+        nationTreasury.subtract(amount);
+        dirty = true;
+
+        return new TransactionResult(true, "Withdrew " + formatCurrency(amount) + " from nation treasury", nationTreasury.getBalance());
+    }
+
+    /**
+     * Deposit directly to nation treasury (no player involved)
+     * Used for tax collection, contract payments, etc.
+     */
+    public TransactionResult depositToNationTreasury(UUID nationId, double amount, String description) {
+        if (amount <= 0) {
+            return new TransactionResult(false, "Amount must be positive", 0);
+        }
+
+        BankAccount nationTreasury = getOrCreateNationTreasury(nationId);
+        nationTreasury.add(amount);
+        dirty = true;
+
+        return new TransactionResult(true, "Deposited " + formatCurrency(amount) + " to nation treasury", nationTreasury.getBalance());
+    }
+
+    /**
      * Get balance for any government entity (state or city)
      * @param type "state" or "city"
      * @param entityId The UUID of the state or city

@@ -1051,6 +1051,14 @@ public class ServerPacketHandler {
                 "Constitutional", "Max Officers", "INTEGER",
                 nation.getMaxOfficers(), ""
             ));
+            policies.add(new SyncNationLawsPacket.PolicyInfo(
+                "Constitutional", "Nation Name", "TEXT",
+                0, nation.getName()
+            ));
+            policies.add(new SyncNationLawsPacket.PolicyInfo(
+                "Constitutional", "Nation Flag", "TEXT",
+                0, nation.getFlagUrl() != null ? nation.getFlagUrl() : ""
+            ));
 
             // Diplomacy info
             Set<UUID> allies = nation.getAllies();
@@ -1363,12 +1371,21 @@ public class ServerPacketHandler {
                             }
                         }
 
+                        // Get valuation from economy integration
+                        double valuation = 0;
+                        if (IntegrationRegistry.hasEconomyIntegration()) {
+                            // Use total chunk value (includes all multipliers) for marketplace display
+                            valuation = IntegrationRegistry.getChunkTotalValue(
+                                chunkX, chunkZ, player.level().dimension().location().toString());
+                        }
+
                         listings.add(new SyncMarketplaceDataPacket.ListingInfo(
                             chunkX, chunkZ,
                             ownerName,
                             isGovernment,
                             chunk.getSalePrice(),
-                            cityName
+                            cityName,
+                            valuation
                         ));
                     }
                 }
@@ -2609,6 +2626,22 @@ public class ServerPacketHandler {
             try {
                 Contract.CompensationType compType = Contract.CompensationType.valueOf(packet.getCompensationType());
                 contract.setCompensationType(compType);
+
+                // For valuation-based, set the payment rate per improvement point
+                if (compType == Contract.CompensationType.VALUATION_BASED) {
+                    double paymentPerPoint = packet.getPaymentPerImprovementPoint();
+                    if (paymentPerPoint <= 0) {
+                        paymentPerPoint = 1.0; // Default $1 per improvement point
+                    }
+                    contract.setPaymentPerImprovementPoint(paymentPerPoint);
+                }
+
+                // For milestone type, set custom milestone descriptions
+                if (compType == Contract.CompensationType.MILESTONE && packet.getMilestoneDescriptions() != null) {
+                    for (java.util.Map.Entry<Integer, String> entry : packet.getMilestoneDescriptions().entrySet()) {
+                        contract.setMilestoneDescription(entry.getKey(), entry.getValue());
+                    }
+                }
             } catch (IllegalArgumentException e) {
                 contract.setCompensationType(Contract.CompensationType.MILESTONE);
             }
@@ -2864,6 +2897,17 @@ public class ServerPacketHandler {
                     success = contractManager.approveBid(contractId, bidId, deadlineDuration);
 
                     if (success) {
+                        // Store baseline improvement scores for valuation-based compensation
+                        if (contract.getCompensationType() == Contract.CompensationType.VALUATION_BASED) {
+                            for (net.minecraft.world.level.ChunkPos chunk : contract.getDesignatedChunks()) {
+                                int baselineScore = IntegrationRegistry.getChunkImprovementScore(
+                                    chunk.x, chunk.z, contract.getDimension());
+                                contract.setBaselineImprovementScore(chunk.toLong(), baselineScore);
+                            }
+                            StateCraft.LOGGER.info("Stored baseline improvement scores for valuation-based contract {}",
+                                contract.getContractNumber());
+                        }
+
                         resultMessage = "Bid from " + selectedBid.getBidderName() + " approved for contract " +
                             contract.getContractNumber() + "!";
 
@@ -2905,11 +2949,35 @@ public class ServerPacketHandler {
                     success = true;
                     break;
 
-                case COMPLETE_MILESTONE:
-                    // Contractor reports milestone, but payment requires verification
-                    if (!isContractor && !isLeader && !isLegislator) {
+                case REQUEST_MILESTONE_APPROVAL:
+                    // Only contractor can request milestone approval
+                    if (!isContractor) {
                         NetworkHandler.sendToPlayer(new ActionResultPacket(false,
-                            "Only the contractor or government officials can complete milestones!"), player);
+                            "Only the contractor can request milestone approval!"), player);
+                        return;
+                    }
+                    success = contract.requestMilestoneApproval(packet.getValue());
+                    if (success) {
+                        contractManager.markDirty();
+                        resultMessage = "Milestone " + packet.getValue() + "% approval requested! Awaiting legislature review.";
+
+                        // Notify nation leader
+                        ServerPlayer leader = player.getServer().getPlayerList().getPlayer(nation.getLeaderId());
+                        if (leader != null && !leader.getUUID().equals(player.getUUID())) {
+                            leader.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                "§e[Contracts] §f" + contract.getContractorName() + " has requested approval for milestone " +
+                                packet.getValue() + "% on contract " + contract.getContractNumber() + "."));
+                        }
+                    } else {
+                        resultMessage = "Failed to request milestone approval! Ensure progress is at or above " + packet.getValue() + "% and previous milestones are complete.";
+                    }
+                    break;
+
+                case COMPLETE_MILESTONE:
+                    // Only legislature can approve milestones
+                    if (!isLeader && !isLegislator) {
+                        NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                            "Only legislature members or the leader can approve milestones!"), player);
                         return;
                     }
                     success = contractManager.completeMilestone(contractId, packet.getValue());
@@ -2922,17 +2990,16 @@ public class ServerPacketHandler {
                             IntegrationRegistry.depositToPlayer(contract.getContractorId(), milestonePayment);
                             contract.recordPayment(milestonePayment);
                         }
-                        resultMessage = "Milestone " + packet.getValue() + "% completed! Payment of " +
+                        resultMessage = "Milestone " + packet.getValue() + "% approved! Payment of " +
                             IntegrationRegistry.formatCurrency(milestonePayment) + " released.";
 
                         // Notify contractor
-                        if (!isContractor) {
-                            ServerPlayer contractor = player.getServer().getPlayerList().getPlayer(contract.getContractorId());
-                            if (contractor != null) {
-                                contractor.sendSystemMessage(net.minecraft.network.chat.Component.literal(
-                                    "§a[Contracts] §fMilestone " + packet.getValue() + "% verified for " +
-                                    contract.getContractNumber() + "! Payment released."));
-                            }
+                        ServerPlayer contractor = player.getServer().getPlayerList().getPlayer(contract.getContractorId());
+                        if (contractor != null) {
+                            contractor.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                "§a[Contracts] §fMilestone " + packet.getValue() + "% approved for " +
+                                contract.getContractNumber() + "! Payment of " +
+                                IntegrationRegistry.formatCurrency(milestonePayment) + " released."));
                         }
                     } else {
                         resultMessage = "Failed to complete milestone!";
@@ -2948,12 +3015,52 @@ public class ServerPacketHandler {
                     }
                     success = contractManager.completeContract(contractId);
                     if (success) {
-                        // Release any remaining escrow to contractor
-                        double remainingEscrow = contract.getEscrowBalance();
-                        if (remainingEscrow > 0 && IntegrationRegistry.hasEconomyIntegration()) {
-                            contract.withdrawFromEscrow(remainingEscrow);
-                            IntegrationRegistry.depositToPlayer(contract.getContractorId(), remainingEscrow);
-                            contract.recordPayment(remainingEscrow);
+                        double finalPayment = 0;
+                        String paymentDetails = "";
+
+                        // Handle payment based on compensation type
+                        if (contract.getCompensationType() == Contract.CompensationType.VALUATION_BASED) {
+                            // Calculate payment based on improvement score increase
+                            java.util.Map<Long, Integer> currentScores = new java.util.HashMap<>();
+                            for (net.minecraft.world.level.ChunkPos chunk : contract.getDesignatedChunks()) {
+                                int currentScore = IntegrationRegistry.getChunkImprovementScore(
+                                    chunk.x, chunk.z, contract.getDimension());
+                                currentScores.put(chunk.toLong(), currentScore);
+                            }
+
+                            int totalImprovement = contract.calculateTotalImprovement(currentScores);
+                            double valuationPayment = contract.calculateValuationBasedPayment(currentScores);
+
+                            // Cap payment at budget (escrow balance)
+                            finalPayment = Math.min(valuationPayment, contract.getEscrowBalance());
+
+                            if (finalPayment > 0 && IntegrationRegistry.hasEconomyIntegration()) {
+                                contract.withdrawFromEscrow(finalPayment);
+                                IntegrationRegistry.depositToPlayer(contract.getContractorId(), finalPayment);
+                                contract.recordPayment(finalPayment);
+                            }
+
+                            // Return unused escrow to nation treasury
+                            double unusedEscrow = contract.getEscrowBalance();
+                            if (unusedEscrow > 0 && IntegrationRegistry.hasEconomyIntegration()) {
+                                contract.withdrawFromEscrow(unusedEscrow);
+                                IntegrationRegistry.depositToNation(nation.getName(), unusedEscrow,
+                                    "Unused escrow returned from contract " + contract.getContractNumber());
+                            }
+
+                            paymentDetails = String.format(" Improvement: %d points = %s (unused: %s returned to treasury)",
+                                totalImprovement, IntegrationRegistry.formatCurrency(finalPayment),
+                                IntegrationRegistry.formatCurrency(unusedEscrow));
+                        } else {
+                            // For FIXED and MILESTONE types, release remaining escrow
+                            double remainingEscrow = contract.getEscrowBalance();
+                            if (remainingEscrow > 0 && IntegrationRegistry.hasEconomyIntegration()) {
+                                contract.withdrawFromEscrow(remainingEscrow);
+                                IntegrationRegistry.depositToPlayer(contract.getContractorId(), remainingEscrow);
+                                contract.recordPayment(remainingEscrow);
+                                finalPayment = remainingEscrow;
+                            }
+                            paymentDetails = " Final payment: " + IntegrationRegistry.formatCurrency(finalPayment);
                         }
 
                         // Return contractor's bond
@@ -2961,15 +3068,15 @@ public class ServerPacketHandler {
                             IntegrationRegistry.depositToPlayer(contract.getContractorId(), contract.getBondAmount());
                         }
 
-                        resultMessage = "Contract " + contract.getContractNumber() + " completed successfully! " +
-                            "Final payment and bond released to " + contract.getContractorName() + ".";
+                        resultMessage = "Contract " + contract.getContractNumber() + " completed successfully!" +
+                            paymentDetails + " Bond released to " + contract.getContractorName() + ".";
 
                         // Notify contractor
                         ServerPlayer contractor = player.getServer().getPlayerList().getPlayer(contract.getContractorId());
                         if (contractor != null) {
                             contractor.sendSystemMessage(net.minecraft.network.chat.Component.literal(
                                 "§a[Contracts] §fCongratulations! Contract " + contract.getContractNumber() +
-                                " has been marked complete. Final payment and bond released!"));
+                                " has been marked complete." + paymentDetails + " Bond released!"));
                         }
                     } else {
                         resultMessage = "Failed to complete contract!";
@@ -3118,6 +3225,21 @@ public class ServerPacketHandler {
                 timeRemaining = contract.getDeadline() - System.currentTimeMillis();
             }
 
+            // Check if current player is the contractor
+            boolean isPlayerContractor = player.getUUID().equals(contract.getContractorId());
+
+            // Get milestone completion status
+            java.util.Map<Integer, Boolean> milestonesCompleted = new java.util.HashMap<>(contract.getMilestonesCompleted());
+
+            // Get pending milestone approval requests
+            java.util.Set<Integer> pendingMilestoneApprovals = new java.util.HashSet<>(contract.getMilestoneApprovalRequests().keySet());
+
+            // Get chunk coordinates
+            java.util.List<int[]> chunkCoordinates = new java.util.ArrayList<>();
+            for (net.minecraft.world.level.ChunkPos chunk : contract.getDesignatedChunks()) {
+                chunkCoordinates.add(new int[]{chunk.x, chunk.z});
+            }
+
             SyncContractsPacket.ContractSummary summary = new SyncContractsPacket.ContractSummary(
                 contract.getContractId().toString(),
                 contract.getContractNumber(),
@@ -3125,6 +3247,7 @@ public class ServerPacketHandler {
                 contract.getDescription() != null ? contract.getDescription() : "",
                 contract.getCreatorName(),
                 contract.getStatus().name(),
+                contract.getCompensationType().name(),
                 contract.getTotalBudget(),
                 contract.getBondAmount(),
                 contract.getDesignatedChunks().size(),
@@ -3133,7 +3256,12 @@ public class ServerPacketHandler {
                 contract.getContractorName() != null ? contract.getContractorName() : "",
                 contract.getProgressPercent(),
                 playerHasBid,
-                bidSummaries
+                isPlayerContractor,
+                bidSummaries,
+                milestonesCompleted,
+                pendingMilestoneApprovals,
+                chunkCoordinates,
+                contract.getDimension()
             );
 
             // Categorize by status
@@ -3378,17 +3506,40 @@ public class ServerPacketHandler {
             List<com.statecraft.legislature.Bill> history = legislature.getBillHistory();
             for (int i = 0; i < Math.min(10, history.size()); i++) {
                 com.statecraft.legislature.Bill bill = history.get(i);
+
+                // Convert policy changes to string map
+                java.util.Map<String, String> policyChangesMap = new java.util.HashMap<>();
+                for (java.util.Map.Entry<com.statecraft.legislature.PolicyType, String> entry : bill.getPolicyChanges().entrySet()) {
+                    policyChangesMap.put(entry.getKey().getDisplayName(), entry.getValue());
+                }
+
+                // Get full text if this is a custom law
+                String fullText = "";
+                for (java.util.Map.Entry<com.statecraft.legislature.PolicyType, String> entry : bill.getPolicyChanges().entrySet()) {
+                    if (entry.getKey() == com.statecraft.legislature.PolicyType.CUSTOM_LAW) {
+                        fullText = entry.getValue();
+                        break;
+                    }
+                }
+
                 recentHistory.add(new SyncLegislatureDataPacket.BillSummary(
                     bill.getBillId().toString(),
                     bill.getBillNumber(),
                     bill.getTitle(),
+                    bill.getDescription(),
                     bill.getAuthorName(),
                     bill.getStatus().name(),
                     bill.getYesVotes(),
                     bill.getNoVotes(),
-                    0,
-                    false,
-                    false
+                    bill.getAbstainVotes(),
+                    0, // timeRemaining
+                    bill.getEnactedTime() > 0 ? bill.getEnactedTime() : bill.getVoteEndTime(), // enacted time with fallback
+                    false, // playerHasVoted
+                    false, // needsLeaderAction
+                    bill.isVetoProof(),
+                    bill.isConstitutionalAmendment(),
+                    policyChangesMap,
+                    fullText
                 ));
             }
 

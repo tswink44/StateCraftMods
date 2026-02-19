@@ -54,6 +54,10 @@ public class TradingHubSettingsScreen extends Screen {
     private int scrollOffset = 0;
     private static final int MAX_VISIBLE_SHARES = 4;
 
+    // Error message display
+    private String errorMessage = "";
+    private int errorMessageTicks = 0;
+
     /**
      * Local copy of profit share for editing
      */
@@ -170,26 +174,52 @@ public class TradingHubSettingsScreen extends Screen {
         String playerName = playerNameInput.getValue().trim();
         String percentStr = percentageInput.getValue().trim();
 
-        if (playerName.isEmpty() || percentStr.isEmpty()) {
+        if (playerName.isEmpty()) {
+            setErrorMessage("Please enter a player name");
+            return;
+        }
+
+        if (percentStr.isEmpty()) {
+            setErrorMessage("Please enter a percentage");
             return;
         }
 
         try {
             double percentage = Double.parseDouble(percentStr) / 100.0; // Convert from display % to decimal
-            if (percentage <= 0 || percentage > 1.0) {
+            if (percentage <= 0) {
+                setErrorMessage("Percentage must be greater than 0");
+                return;
+            }
+            if (percentage > 1.0) {
+                setErrorMessage("Percentage cannot exceed 100%");
+                return;
+            }
+
+            // Calculate current total excluding this player if updating
+            double currentTotal = 0;
+            ProfitShareEntry existingEntry = null;
+            for (ProfitShareEntry entry : profitShares) {
+                if (entry.playerName.equalsIgnoreCase(playerName)) {
+                    existingEntry = entry;
+                } else {
+                    currentTotal += entry.percentage;
+                }
+            }
+
+            // Check if adding this would exceed 100%
+            if (currentTotal + percentage > 1.0 + 0.001) { // Small epsilon for floating point
+                setErrorMessage(String.format("Total share would be %.0f%% (max 100%%)", (currentTotal + percentage) * 100));
                 return;
             }
 
             // Check if player already exists in list
-            for (ProfitShareEntry entry : profitShares) {
-                if (entry.playerName.equalsIgnoreCase(playerName)) {
-                    // Update existing entry
-                    entry.percentage = percentage;
-                    playerNameInput.setValue("");
-                    percentageInput.setValue("");
-                    rebuildShareButtons();
-                    return;
-                }
+            if (existingEntry != null) {
+                // Update existing entry
+                existingEntry.percentage = percentage;
+                playerNameInput.setValue("");
+                percentageInput.setValue("");
+                rebuildShareButtons();
+                return;
             }
 
             // For new entries, we'll use a placeholder UUID
@@ -201,8 +231,13 @@ public class TradingHubSettingsScreen extends Screen {
             percentageInput.setValue("");
             rebuildShareButtons();
         } catch (NumberFormatException e) {
-            // Invalid percentage
+            setErrorMessage("Invalid percentage format");
         }
+    }
+
+    private void setErrorMessage(String message) {
+        this.errorMessage = message;
+        this.errorMessageTicks = 80; // Show for 4 seconds
     }
 
     private void removeProfitShare(int index) {
@@ -216,13 +251,11 @@ public class TradingHubSettingsScreen extends Screen {
     }
 
     private void saveSettings() {
-        // Normalize percentages to sum to 100%
+        // Validate total shares don't exceed 100%
         double total = profitShares.stream().mapToDouble(s -> s.percentage).sum();
-        if (total > 0 && Math.abs(total - 1.0) > 0.001) {
-            // Normalize
-            for (ProfitShareEntry entry : profitShares) {
-                entry.percentage = entry.percentage / total;
-            }
+        if (total > 1.0 + 0.001) { // Small epsilon for floating point
+            setErrorMessage(String.format("Total shares (%.0f%%) exceed 100%%!", total * 100));
+            return;
         }
 
         // Build packet data
@@ -305,11 +338,26 @@ public class TradingHubSettingsScreen extends Screen {
         // Add share label
         graphics.drawString(this.font, "§7Add share:", guiLeft + 20, guiTop + 156, COLOR_TEXT);
 
+        // Error message display
+        if (errorMessageTicks > 0 && !errorMessage.isEmpty()) {
+            int msgWidth = this.font.width(errorMessage);
+            graphics.drawString(this.font, "§c" + errorMessage,
+                guiLeft + (guiWidth - msgWidth) / 2, guiTop + 172, 0xFFFF5555);
+        }
+
         // Owner info
         String ownerText = blockEntity.getOwnerName().isEmpty() ? "Unowned" : "Owner: " + blockEntity.getOwnerName();
         graphics.drawString(this.font, "§7" + ownerText, guiLeft + 20, guiTop + guiHeight - 45, 0xFFAAAAAA);
 
         super.render(graphics, mouseX, mouseY, partialTick);
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        if (errorMessageTicks > 0) {
+            errorMessageTicks--;
+        }
     }
 
     @Override

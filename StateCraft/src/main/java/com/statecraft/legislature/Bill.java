@@ -59,6 +59,7 @@ public class Bill {
     private Status status;
     private long debateEndTime;
     private long voteEndTime;
+    private long enactedTime;
 
     // Results
     private boolean vetoProof;  // Passed with 2/3+ majority
@@ -115,6 +116,7 @@ public class Bill {
     public Status getStatus() { return status; }
     public long getDebateEndTime() { return debateEndTime; }
     public long getVoteEndTime() { return voteEndTime; }
+    public long getEnactedTime() { return enactedTime; }
     public boolean isVetoProof() { return vetoProof; }
     public int getYesVotes() { return yesVotes; }
     public int getNoVotes() { return noVotes; }
@@ -257,6 +259,7 @@ public class Bill {
             if (yesPercent >= constitutionalThreshold) {
                 // Constitutional amendments pass directly to ENACTED (cannot be vetoed)
                 status = Status.ENACTED;
+                enactedTime = System.currentTimeMillis();
                 vetoProof = true; // Mark as veto-proof for records
             } else {
                 status = Status.FAILED;
@@ -283,6 +286,7 @@ public class Bill {
     public void enact() {
         if (status == Status.PASSED) {
             status = Status.ENACTED;
+            enactedTime = System.currentTimeMillis();
         }
     }
 
@@ -309,6 +313,7 @@ public class Bill {
         tag.putString("status", status.name());
         tag.putLong("debateEndTime", debateEndTime);
         tag.putLong("voteEndTime", voteEndTime);
+        tag.putLong("enactedTime", enactedTime);
         tag.putBoolean("vetoProof", vetoProof);
         tag.putInt("yesVotes", yesVotes);
         tag.putInt("noVotes", noVotes);
@@ -375,6 +380,7 @@ public class Bill {
         bill.status = Status.valueOf(tag.getString("status"));
         bill.debateEndTime = tag.getLong("debateEndTime");
         bill.voteEndTime = tag.getLong("voteEndTime");
+        bill.enactedTime = tag.getLong("enactedTime");
         bill.vetoProof = tag.getBoolean("vetoProof");
         bill.yesVotes = tag.getInt("yesVotes");
         bill.noVotes = tag.getInt("noVotes");

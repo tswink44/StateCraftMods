@@ -1,7 +1,6 @@
 package com.statecraft.economy.client.screen;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.statecraft.economy.StateCraftEconomy;
 import com.statecraft.economy.block.entity.TradingHubBlockEntity;
 import com.statecraft.economy.gui.TradingHubMenu;
 import com.statecraft.economy.network.NetworkHandler;
@@ -16,14 +15,18 @@ import net.minecraft.world.entity.player.Inventory;
 
 /**
  * Trading Hub GUI Screen - Chest-like interface for bulk selling items
- * Features:
- * - 27 slot inventory (like a single chest)
- * - Settings button (opens settings screen)
- * - Sell All button to sell entire inventory
- * - Real-time value display
+ * Uses the standard single chest texture (generic_54.png) with modifications
+ *
+ * Layout (Y coordinates relative to GUI top):
+ * - Title bar: 0-17
+ * - Trading hub slots (3 rows): 17-71 (rows at Y=18, 36, 54)
+ * - Info bar: 71-84 (13 pixels)
+ * - Player inventory: 84-138 (rows at Y=84, 102, 120)
+ * - Gap: 138-142
+ * - Hotbar: 142-160
+ * - Total height: 180 (71 + 13 + 96)
  */
 public class TradingHubScreen extends AbstractContainerScreen<TradingHubMenu> {
-    // Use generic chest texture as base
     private static final ResourceLocation CONTAINER_BACKGROUND =
         new ResourceLocation("minecraft", "textures/gui/container/generic_54.png");
 
@@ -35,31 +38,29 @@ public class TradingHubScreen extends AbstractContainerScreen<TradingHubMenu> {
 
     public TradingHubScreen(TradingHubMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
-        // Same dimensions as a single chest (3 rows)
         this.imageWidth = 176;
-        this.imageHeight = 166;
-        // Adjust label positions
-        this.inventoryLabelY = this.imageHeight - 94;
+        // 71 (title + 3 rows) + 14 (info bar) + 97 (player inv section) = 182
+        this.imageHeight = 182;
+        // Inventory label Y position
+        this.inventoryLabelY = 92;
     }
 
     @Override
     protected void init() {
         super.init();
-        int x = (width - imageWidth) / 2;
-        int y = (height - imageHeight) / 2;
 
-        // Sell All button (bottom right of trading hub inventory)
+        // Sell All button (top right, next to title)
         sellButton = this.addRenderableWidget(Button.builder(
             Component.literal("Sell All"),
             btn -> performSellAll()
-        ).bounds(x + imageWidth - 58, y + 4, 50, 12).build());
+        ).bounds(leftPos + imageWidth - 58, topPos + 4, 50, 12).build());
 
         // Settings button (gear icon next to sell button) - only show if can modify
         if (menu.canModifySettings()) {
             settingsButton = this.addRenderableWidget(Button.builder(
                 Component.literal("⚙"),
                 btn -> openSettings()
-            ).bounds(x + imageWidth - 72, y + 4, 14, 12).build());
+            ).bounds(leftPos + imageWidth - 72, topPos + 4, 12, 12).build());
         }
 
         updateSellButton();
@@ -78,28 +79,21 @@ public class TradingHubScreen extends AbstractContainerScreen<TradingHubMenu> {
         }
 
         double value = menu.getCurrentSellValue();
-
-        // Send sell packet to server
         NetworkHandler.sendToServer(new TradingHubSellPacket(menu.getBlockEntity().getBlockPos()));
-
         setStatusMessage(String.format("Sold %d items for $%.2f!", itemCount, value), true);
     }
 
     private void openSettings() {
-        // Open the settings screen
         Minecraft.getInstance().setScreen(new TradingHubSettingsScreen(this, menu.getBlockEntity()));
     }
 
-    /**
-     * Return to main trading hub screen from settings
-     */
     public void returnFromSettings() {
         Minecraft.getInstance().setScreen(this);
     }
 
     private void setStatusMessage(String message, boolean success) {
         this.statusMessage = message;
-        this.statusMessageTicks = 60; // Show for 3 seconds
+        this.statusMessageTicks = 60;
         this.statusSuccess = success;
     }
 
@@ -107,7 +101,6 @@ public class TradingHubScreen extends AbstractContainerScreen<TradingHubMenu> {
     protected void containerTick() {
         super.containerTick();
         updateSellButton();
-
         if (statusMessageTicks > 0) {
             statusMessageTicks--;
         }
@@ -116,34 +109,38 @@ public class TradingHubScreen extends AbstractContainerScreen<TradingHubMenu> {
     @Override
     protected void renderBg(GuiGraphics graphics, float partialTick, int mouseX, int mouseY) {
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-        int x = (width - imageWidth) / 2;
-        int y = (height - imageHeight) / 2;
 
-        // Draw chest-like background (modified for 3 rows)
-        // Top part (title area)
-        graphics.blit(CONTAINER_BACKGROUND, x, y, 0, 0, imageWidth, 17);
+        // generic_54.png is 176x222:
+        // - Y 0-17: title bar (17px)
+        // - Y 17-125: 6 rows of container slots (108px)
+        // - Y 125-222: player inventory section (97px)
+        //
+        // We need 3 rows (54px) + info bar (14px) + player inv (97px)
 
-        // Container slots (3 rows)
-        graphics.blit(CONTAINER_BACKGROUND, x, y + 17, 0, 17, imageWidth, 54);
+        // Draw title bar + 3 rows of slots (71 pixels from top of texture)
+        graphics.blit(CONTAINER_BACKGROUND, leftPos, topPos, 0, 0, imageWidth, 71);
 
-        // Gap between container and player inventory
-        graphics.fill(x, y + 71, x + imageWidth, y + 83, 0xFFC6C6C6);
+        // Draw info bar area (custom fill between container and player inv)
+        graphics.fill(leftPos, topPos + 71, leftPos + imageWidth, topPos + 85, 0xFFC6C6C6);
+        graphics.fill(leftPos + 7, topPos + 73, leftPos + 169, topPos + 84, 0xFF4A4A4A);
 
-        // Player inventory section
-        graphics.blit(CONTAINER_BACKGROUND, x, y + 83, 0, 126, imageWidth, 96);
-
-        // Draw info bar background (between trading hub slots and player inventory)
-        graphics.fill(x + 7, y + 72, x + 169, y + 82, 0xFF4A4A4A);
+        // Draw player inventory section (from texture Y=125, which is 97 pixels tall)
+        graphics.blit(CONTAINER_BACKGROUND, leftPos, topPos + 85, 0, 125, imageWidth, 97);
     }
 
     @Override
     protected void renderLabels(GuiGraphics graphics, int mouseX, int mouseY) {
-        // Title
+        // Title (truncate if too long)
         TradingHubBlockEntity be = menu.getBlockEntity();
         String ownerText = be.getOwnerName().isEmpty() ? "" : " (" + be.getOwnerName() + ")";
-        graphics.drawString(this.font, "Trading Hub" + ownerText, 8, 6, 0x404040, false);
+        String title = "Trading Hub" + ownerText;
+        int maxTitleWidth = imageWidth - 80;
+        if (this.font.width(title) > maxTitleWidth) {
+            title = "Trading Hub";
+        }
+        graphics.drawString(this.font, title, 8, 6, 0x404040, false);
 
-        // Value summary in info bar
+        // Info bar text (Y 73-84, center text vertically)
         int itemCount = menu.getSellableItemCount();
         double totalValue = menu.getCurrentSellValue();
         double taxAmount = menu.getCurrentTaxAmount();
@@ -153,17 +150,16 @@ public class TradingHubScreen extends AbstractContainerScreen<TradingHubMenu> {
             if (taxAmount > 0) {
                 valueStr += String.format(" (tax: $%.2f)", taxAmount);
             }
-            graphics.drawString(this.font, valueStr, 10, 74, 0x55FF55, false);
+            graphics.drawString(this.font, valueStr, 10, 75, 0x55FF55, false);
         } else {
-            graphics.drawString(this.font, "Insert items to sell", 10, 74, 0xAAAAAA, false);
+            graphics.drawString(this.font, "Insert items to sell", 10, 75, 0xAAAAAA, false);
         }
 
-        // Status message (centered above player inventory)
+        // Status message (show in title area when selling)
         if (statusMessageTicks > 0 && !statusMessage.isEmpty()) {
             int color = statusSuccess ? 0x55FF55 : 0xFF5555;
             int msgWidth = this.font.width(statusMessage);
-            graphics.drawString(this.font, statusMessage,
-                (imageWidth - msgWidth) / 2, 62, color, false);
+            graphics.drawString(this.font, statusMessage, (imageWidth - msgWidth) / 2, 6, color, false);
         }
 
         // Inventory label

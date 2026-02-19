@@ -113,7 +113,9 @@ public class ClientPacketHandler {
                     packet.getCityName(),
                     packet.isPrivatelyOwned(),
                     packet.canListForSale(),
-                    packet.canBuy()
+                    packet.canBuy(),
+                    packet.getValuation(),
+                    packet.getEstimatedTax()
                 );
             }
         });

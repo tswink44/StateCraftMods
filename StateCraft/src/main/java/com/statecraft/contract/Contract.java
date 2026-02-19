@@ -54,6 +54,7 @@ public class Contract {
     // Milestones (for MILESTONE compensation type)
     private final Map<Integer, String> milestoneDescriptions;  // percentage -> description
     private final Map<Integer, Boolean> milestonesCompleted;   // percentage -> completed
+    private final Map<Integer, Long> milestoneApprovalRequests; // percentage -> request timestamp (pending approvals)
 
     // Bidding
     private final List<ContractBid> bids;
@@ -74,6 +75,17 @@ public class Contract {
     private long completedTime;
     private double amountPaid;
 
+    // Notification tracking
+    private boolean overdueNotificationSent;
+    private boolean deadlineWarning1DaySent;
+    private boolean deadlineWarning1HourSent;
+    private boolean biddingEnding1DaySent;
+    private boolean biddingEnding1HourSent;
+
+    // Valuation-based compensation tracking
+    private final Map<Long, Integer> baselineImprovementScores;  // chunkKey -> baseline score when contract started
+    private double paymentPerImprovementPoint;  // How much to pay per improvement point gained
+
     public Contract(UUID nationId, String contractNumber, String title, UUID creatorId, String creatorName) {
         this.contractId = UUID.randomUUID();
         this.nationId = nationId;
@@ -90,10 +102,18 @@ public class Contract {
         this.escrowBalance = 0;
         this.milestoneDescriptions = new HashMap<>();
         this.milestonesCompleted = new HashMap<>();
+        this.milestoneApprovalRequests = new HashMap<>();
         this.bids = new ArrayList<>();
         this.progressPercent = 0;
         this.status = Status.DRAFT;
         this.amountPaid = 0;
+        this.baselineImprovementScores = new HashMap<>();
+        this.paymentPerImprovementPoint = 1.0;  // Default $1 per improvement point
+        this.overdueNotificationSent = false;
+        this.deadlineWarning1DaySent = false;
+        this.deadlineWarning1HourSent = false;
+        this.biddingEnding1DaySent = false;
+        this.biddingEnding1HourSent = false;
 
         // Default milestones
         milestoneDescriptions.put(25, "Foundation/Base structure complete");
@@ -114,7 +134,9 @@ public class Contract {
         this.designatedChunks = new ArrayList<>();
         this.milestoneDescriptions = new HashMap<>();
         this.milestonesCompleted = new HashMap<>();
+        this.milestoneApprovalRequests = new HashMap<>();
         this.bids = new ArrayList<>();
+        this.baselineImprovementScores = new HashMap<>();
     }
 
     // Getters
@@ -135,6 +157,7 @@ public class Contract {
     public double getEscrowBalance() { return escrowBalance; }
     public Map<Integer, String> getMilestoneDescriptions() { return Collections.unmodifiableMap(milestoneDescriptions); }
     public Map<Integer, Boolean> getMilestonesCompleted() { return Collections.unmodifiableMap(milestonesCompleted); }
+    public Map<Integer, Long> getMilestoneApprovalRequests() { return Collections.unmodifiableMap(milestoneApprovalRequests); }
     public List<ContractBid> getBids() { return Collections.unmodifiableList(bids); }
     public long getBiddingEndTime() { return biddingEndTime; }
     public UUID getSelectedBidId() { return selectedBidId; }
@@ -146,6 +169,77 @@ public class Contract {
     public Status getStatus() { return status; }
     public long getCompletedTime() { return completedTime; }
     public double getAmountPaid() { return amountPaid; }
+    public Map<Long, Integer> getBaselineImprovementScores() { return Collections.unmodifiableMap(baselineImprovementScores); }
+    public double getPaymentPerImprovementPoint() { return paymentPerImprovementPoint; }
+    public boolean isOverdueNotificationSent() { return overdueNotificationSent; }
+    public boolean isDeadlineWarning1DaySent() { return deadlineWarning1DaySent; }
+    public boolean isDeadlineWarning1HourSent() { return deadlineWarning1HourSent; }
+    public boolean isBiddingEnding1DaySent() { return biddingEnding1DaySent; }
+    public boolean isBiddingEnding1HourSent() { return biddingEnding1HourSent; }
+
+    public void setOverdueNotificationSent(boolean sent) { this.overdueNotificationSent = sent; }
+    public void setDeadlineWarning1DaySent(boolean sent) { this.deadlineWarning1DaySent = sent; }
+    public void setDeadlineWarning1HourSent(boolean sent) { this.deadlineWarning1HourSent = sent; }
+    public void setBiddingEnding1DaySent(boolean sent) { this.biddingEnding1DaySent = sent; }
+    public void setBiddingEnding1HourSent(boolean sent) { this.biddingEnding1HourSent = sent; }
+
+    // ==================== Admin Setters (bypass status checks) ====================
+
+    /**
+     * Admin: Set contract status directly (bypasses normal transitions)
+     */
+    public void setStatus(Status status) {
+        this.status = status;
+    }
+
+    /**
+     * Admin: Set contractor ID directly
+     */
+    public void setContractorId(UUID contractorId) {
+        this.contractorId = contractorId;
+    }
+
+    /**
+     * Admin: Set contractor name directly
+     */
+    public void setContractorName(String contractorName) {
+        this.contractorName = contractorName;
+    }
+
+    /**
+     * Admin: Set progress directly
+     */
+    public void setProgressPercent(int percent) {
+        this.progressPercent = Math.max(0, Math.min(100, percent));
+    }
+
+    /**
+     * Admin: Set start time directly
+     */
+    public void setStartTime(long startTime) {
+        this.startTime = startTime;
+    }
+
+    /**
+     * Admin: Set deadline directly
+     */
+    public void setDeadline(long deadline) {
+        this.deadline = deadline;
+    }
+
+    /**
+     * Admin: Set completion time directly
+     */
+    public void setCompletedTime(long completedTime) {
+        this.completedTime = completedTime;
+    }
+
+    /**
+     * Admin: Force set total budget (bypasses draft check)
+     */
+    public void forceSetTotalBudget(double budget) {
+        this.totalBudget = Math.max(0, budget);
+    }
 
     // Setters for draft stage
     public void setTitle(String title) {
@@ -188,6 +282,52 @@ public class Contract {
         if (status == Status.DRAFT) {
             this.bondAmount = Math.max(0, bond);
         }
+    }
+
+    public void setPaymentPerImprovementPoint(double paymentPerPoint) {
+        if (status == Status.DRAFT) {
+            this.paymentPerImprovementPoint = Math.max(0, paymentPerPoint);
+        }
+    }
+
+    /**
+     * Store baseline improvement score for a chunk (called when contract starts)
+     */
+    public void setBaselineImprovementScore(long chunkKey, int score) {
+        baselineImprovementScores.put(chunkKey, score);
+    }
+
+    /**
+     * Get baseline improvement score for a chunk
+     */
+    public int getBaselineImprovementScore(long chunkKey) {
+        return baselineImprovementScores.getOrDefault(chunkKey, 0);
+    }
+
+    /**
+     * Calculate total improvement across all designated chunks
+     * @param currentScores Map of chunkKey -> current improvement score
+     * @return Total improvement points gained since contract started
+     */
+    public int calculateTotalImprovement(Map<Long, Integer> currentScores) {
+        int totalImprovement = 0;
+        for (ChunkPos chunk : designatedChunks) {
+            long key = chunk.toLong();
+            int baseline = baselineImprovementScores.getOrDefault(key, 0);
+            int current = currentScores.getOrDefault(key, 0);
+            totalImprovement += Math.max(0, current - baseline);
+        }
+        return totalImprovement;
+    }
+
+    /**
+     * Calculate valuation-based payment amount
+     * @param currentScores Map of chunkKey -> current improvement score
+     * @return Payment amount based on improvement
+     */
+    public double calculateValuationBasedPayment(Map<Long, Integer> currentScores) {
+        int improvement = calculateTotalImprovement(currentScores);
+        return improvement * paymentPerImprovementPoint;
     }
 
     public void addDesignatedChunk(ChunkPos chunk) {
@@ -294,7 +434,7 @@ public class Contract {
     }
 
     /**
-     * Complete a milestone
+     * Complete a milestone (legislature approval)
      */
     public boolean completeMilestone(int milestonePercent) {
         if (status != Status.ACTIVE) return false;
@@ -305,7 +445,48 @@ public class Contract {
         if (progressPercent < milestonePercent) return false;
 
         milestonesCompleted.put(milestonePercent, true);
+        // Remove from pending requests if it was there
+        milestoneApprovalRequests.remove(milestonePercent);
         return true;
+    }
+
+    /**
+     * Contractor requests approval for a milestone
+     * @return true if request was submitted, false if invalid
+     */
+    public boolean requestMilestoneApproval(int milestonePercent) {
+        if (status != Status.ACTIVE) return false;
+        if (!milestonesCompleted.containsKey(milestonePercent)) return false;
+        if (milestonesCompleted.get(milestonePercent)) return false; // Already completed
+        if (milestoneApprovalRequests.containsKey(milestonePercent)) return false; // Already requested
+
+        // Check that progress is at or above milestone
+        if (progressPercent < milestonePercent) return false;
+
+        // Check that previous milestones are completed
+        int[] milestones = {25, 50, 75, 100};
+        for (int m : milestones) {
+            if (m < milestonePercent && !milestonesCompleted.getOrDefault(m, false)) {
+                return false; // Previous milestone not complete
+            }
+        }
+
+        milestoneApprovalRequests.put(milestonePercent, System.currentTimeMillis());
+        return true;
+    }
+
+    /**
+     * Check if a milestone approval is pending
+     */
+    public boolean isMilestoneApprovalPending(int milestonePercent) {
+        return milestoneApprovalRequests.containsKey(milestonePercent);
+    }
+
+    /**
+     * Cancel a milestone approval request
+     */
+    public void cancelMilestoneApprovalRequest(int milestonePercent) {
+        milestoneApprovalRequests.remove(milestonePercent);
     }
 
     /**
@@ -463,6 +644,11 @@ public class Contract {
         tag.putInt("progressPercent", progressPercent);
         tag.putLong("completedTime", completedTime);
         tag.putDouble("amountPaid", amountPaid);
+        tag.putBoolean("overdueNotificationSent", overdueNotificationSent);
+        tag.putBoolean("deadlineWarning1DaySent", deadlineWarning1DaySent);
+        tag.putBoolean("deadlineWarning1HourSent", deadlineWarning1HourSent);
+        tag.putBoolean("biddingEnding1DaySent", biddingEnding1DaySent);
+        tag.putBoolean("biddingEnding1HourSent", biddingEnding1HourSent);
 
         // Designated chunks
         ListTag chunksTag = new ListTag();
@@ -488,6 +674,13 @@ public class Contract {
         }
         tag.put("milestonesCompleted", milestonesCompTag);
 
+        // Milestone approval requests
+        CompoundTag milestoneRequestsTag = new CompoundTag();
+        for (Map.Entry<Integer, Long> entry : milestoneApprovalRequests.entrySet()) {
+            milestoneRequestsTag.putLong(entry.getKey().toString(), entry.getValue());
+        }
+        tag.put("milestoneApprovalRequests", milestoneRequestsTag);
+
         // Bids
         ListTag bidsTag = new ListTag();
         for (ContractBid bid : bids) {
@@ -505,6 +698,14 @@ public class Contract {
         }
         tag.putLong("startTime", startTime);
         tag.putLong("deadline", deadline);
+
+        // Baseline improvement scores (for valuation-based compensation)
+        CompoundTag baselineTag = new CompoundTag();
+        for (Map.Entry<Long, Integer> entry : baselineImprovementScores.entrySet()) {
+            baselineTag.putInt(entry.getKey().toString(), entry.getValue());
+        }
+        tag.put("baselineScores", baselineTag);
+        tag.putDouble("paymentPerImprovementPoint", paymentPerImprovementPoint);
 
         return tag;
     }
@@ -532,6 +733,11 @@ public class Contract {
         contract.progressPercent = tag.getInt("progressPercent");
         contract.completedTime = tag.getLong("completedTime");
         contract.amountPaid = tag.getDouble("amountPaid");
+        contract.overdueNotificationSent = tag.contains("overdueNotificationSent") && tag.getBoolean("overdueNotificationSent");
+        contract.deadlineWarning1DaySent = tag.contains("deadlineWarning1DaySent") && tag.getBoolean("deadlineWarning1DaySent");
+        contract.deadlineWarning1HourSent = tag.contains("deadlineWarning1HourSent") && tag.getBoolean("deadlineWarning1HourSent");
+        contract.biddingEnding1DaySent = tag.contains("biddingEnding1DaySent") && tag.getBoolean("biddingEnding1DaySent");
+        contract.biddingEnding1HourSent = tag.contains("biddingEnding1HourSent") && tag.getBoolean("biddingEnding1HourSent");
 
         // Designated chunks
         ListTag chunksTag = tag.getList("designatedChunks", Tag.TAG_COMPOUND);
@@ -552,6 +758,14 @@ public class Contract {
             contract.milestonesCompleted.put(Integer.parseInt(key), milestonesCompTag.getBoolean(key));
         }
 
+        // Milestone approval requests
+        if (tag.contains("milestoneApprovalRequests")) {
+            CompoundTag milestoneRequestsTag = tag.getCompound("milestoneApprovalRequests");
+            for (String key : milestoneRequestsTag.getAllKeys()) {
+                contract.milestoneApprovalRequests.put(Integer.parseInt(key), milestoneRequestsTag.getLong(key));
+            }
+        }
+
         // Bids
         ListTag bidsTag = tag.getList("bids", Tag.TAG_COMPOUND);
         for (int i = 0; i < bidsTag.size(); i++) {
@@ -568,6 +782,16 @@ public class Contract {
         }
         contract.startTime = tag.getLong("startTime");
         contract.deadline = tag.getLong("deadline");
+
+        // Baseline improvement scores (for valuation-based compensation)
+        if (tag.contains("baselineScores")) {
+            CompoundTag baselineTag = tag.getCompound("baselineScores");
+            for (String key : baselineTag.getAllKeys()) {
+                contract.baselineImprovementScores.put(Long.parseLong(key), baselineTag.getInt(key));
+            }
+        }
+        contract.paymentPerImprovementPoint = tag.contains("paymentPerImprovementPoint")
+            ? tag.getDouble("paymentPerImprovementPoint") : 1.0;
 
         return contract;
     }

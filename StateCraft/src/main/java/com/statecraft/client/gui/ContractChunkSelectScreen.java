@@ -57,6 +57,12 @@ public class ContractChunkSelectScreen extends StateCraftScreen {
     private int dragEndChunkX, dragEndChunkZ;
     private boolean addingSelection = true; // true = add, false = remove
 
+    // Double-click detection
+    private long lastClickTime = 0;
+    private int lastClickChunkX = Integer.MIN_VALUE;
+    private int lastClickChunkZ = Integer.MIN_VALUE;
+    private static final long DOUBLE_CLICK_TIME_MS = 400;
+
     // Buttons
     private Button toggleModeButton;
     private Button clearButton;
@@ -169,9 +175,23 @@ public class ContractChunkSelectScreen extends StateCraftScreen {
         int half = size / 2;
         for (int dx = -half; dx <= half; dx++) {
             for (int dz = -half; dz <= half; dz++) {
-                selectedChunks.add(new ChunkPos(playerChunkX + dx, playerChunkZ + dz));
+                int chunkX = playerChunkX + dx;
+                int chunkZ = playerChunkZ + dz;
+                // Only add chunks that belong to the player's nation
+                if (isChunkInPlayerNation(chunkX, chunkZ)) {
+                    selectedChunks.add(new ChunkPos(chunkX, chunkZ));
+                }
             }
         }
+    }
+
+    /**
+     * Check if a chunk belongs to the player's nation
+     */
+    private boolean isChunkInPlayerNation(int chunkX, int chunkZ) {
+        long key = chunkKey(chunkX, chunkZ);
+        ChunkMapScreen.ChunkData data = chunkMap.get(key);
+        return data != null && data.isPlayerNation;
     }
 
     private void clearSelection() {
@@ -317,12 +337,6 @@ public class ContractChunkSelectScreen extends StateCraftScreen {
                         drawSelectedBorder(graphics, cellX, cellY);
                     }
 
-                    // Drag selection preview
-                    if (isDragging && isInDragArea(chunkX, chunkZ)) {
-                        int previewColor = addingSelection ? 0x4400FF00 : 0x44FF0000;
-                        graphics.fill(cellX, cellY, cellX + cellSize, cellY + cellSize, previewColor);
-                    }
-
                     // Player position marker
                     if (dx == 0 && dz == 0) {
                         graphics.drawCenteredString(this.font, "§l@",
@@ -340,9 +354,9 @@ public class ContractChunkSelectScreen extends StateCraftScreen {
 
         // Instructions
         int instructY = guiTop + guiHeight - 50;
-        graphics.drawString(this.font, "§7Click: Toggle | Drag: Multi-select",
+        graphics.drawString(this.font, "§7Double-click: Select/Deselect chunk",
             guiLeft + 15, instructY, 0xFF888888);
-        graphics.drawString(this.font, "§7Shift+Click: Remove",
+        graphics.drawString(this.font, "§cOnly your nation's chunks can be selected",
             guiLeft + 15, instructY + 10, 0xFF888888);
     }
 
@@ -493,15 +507,33 @@ public class ContractChunkSelectScreen extends StateCraftScreen {
             int clickedChunkX = playerChunkX + clickedCellX;
             int clickedChunkZ = playerChunkZ + clickedCellZ;
 
-            // Start drag
-            isDragging = true;
-            dragStartChunkX = clickedChunkX;
-            dragStartChunkZ = clickedChunkZ;
-            dragEndChunkX = clickedChunkX;
-            dragEndChunkZ = clickedChunkZ;
+            ChunkPos clickedPos = new ChunkPos(clickedChunkX, clickedChunkZ);
+            long currentTime = System.currentTimeMillis();
 
-            // Shift = remove mode
-            addingSelection = !hasShiftDown();
+            // Check if this is a double-click on the same chunk
+            boolean isDoubleClick = (currentTime - lastClickTime < DOUBLE_CLICK_TIME_MS) &&
+                                    (clickedChunkX == lastClickChunkX) &&
+                                    (clickedChunkZ == lastClickChunkZ);
+
+            // Update last click tracking
+            lastClickTime = currentTime;
+            lastClickChunkX = clickedChunkX;
+            lastClickChunkZ = clickedChunkZ;
+
+            // Only process on double-click
+            if (isDoubleClick) {
+                if (selectedChunks.contains(clickedPos)) {
+                    // Double-click on selected chunk: deselect it
+                    selectedChunks.remove(clickedPos);
+                } else {
+                    // Double-click on unselected chunk: select if in player's nation
+                    if (isChunkInPlayerNation(clickedChunkX, clickedChunkZ)) {
+                        selectedChunks.add(clickedPos);
+                    }
+                }
+                // Reset double-click tracking to prevent triple-click issues
+                lastClickTime = 0;
+            }
 
             return true;
         }
@@ -511,51 +543,13 @@ public class ContractChunkSelectScreen extends StateCraftScreen {
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (isDragging) {
-            int mapX = guiLeft + 15;
-            int mapY = guiTop + 35;
-            int mapWidth = MAP_SIZE * cellSize;
-            int mapHeight = MAP_SIZE * cellSize;
-
-            if (mouseX >= mapX && mouseX < mapX + mapWidth &&
-                mouseY >= mapY && mouseY < mapY + mapHeight) {
-
-                int halfSize = MAP_SIZE / 2;
-                int cellX = (int) ((mouseX - mapX) / cellSize) - halfSize;
-                int cellZ = (int) ((mouseY - mapY) / cellSize) - halfSize;
-
-                dragEndChunkX = playerChunkX + cellX;
-                dragEndChunkZ = playerChunkZ + cellZ;
-            }
-            return true;
-        }
+        // Drag selection disabled - use double-click to select, single-click to deselect
         return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (isDragging) {
-            isDragging = false;
-
-            // Apply selection
-            int minX = Math.min(dragStartChunkX, dragEndChunkX);
-            int maxX = Math.max(dragStartChunkX, dragEndChunkX);
-            int minZ = Math.min(dragStartChunkZ, dragEndChunkZ);
-            int maxZ = Math.max(dragStartChunkZ, dragEndChunkZ);
-
-            for (int x = minX; x <= maxX; x++) {
-                for (int z = minZ; z <= maxZ; z++) {
-                    ChunkPos pos = new ChunkPos(x, z);
-                    if (addingSelection) {
-                        selectedChunks.add(pos);
-                    } else {
-                        selectedChunks.remove(pos);
-                    }
-                }
-            }
-
-            return true;
-        }
+        // Drag selection disabled - use double-click to select, single-click to deselect
         return super.mouseReleased(mouseX, mouseY, button);
     }
 

@@ -32,7 +32,7 @@ public class SubmitBidScreen extends StateCraftScreen {
         this.contract = contract;
         this.hasExistingBid = contract.hasPlayerBid();
         this.guiWidth = 320;
-        this.guiHeight = 280;
+        this.guiHeight = 260;
     }
 
     @Override
@@ -41,10 +41,10 @@ public class SubmitBidScreen extends StateCraftScreen {
 
         int fieldWidth = guiWidth - 40;
         int x = guiLeft + 20;
-        int y = guiTop + 60;
+        int y = guiTop + 72; // Below labels
 
-        // Bid amount field
-        bidAmountField = new EditBox(this.font, x, y, 120, 18, Component.literal("Bid Amount"));
+        // Bid amount field (positioned below its label)
+        bidAmountField = new EditBox(this.font, x, y, 130, 18, Component.literal("Bid Amount"));
         bidAmountField.setMaxLength(12);
         bidAmountField.setHint(Component.literal("Your bid $"));
         bidAmountField.setFilter(this::isValidNumberInput);
@@ -52,26 +52,20 @@ public class SubmitBidScreen extends StateCraftScreen {
         bidAmountField.setValue(String.format("%.0f", contract.getBudget()));
         this.addRenderableWidget(bidAmountField);
 
-        // Proposed days field
-        proposedDaysField = new EditBox(this.font, x + 170, y, 80, 18, Component.literal("Days"));
+        // Proposed days field (positioned below its label)
+        proposedDaysField = new EditBox(this.font, x + 180, y, 70, 18, Component.literal("Days"));
         proposedDaysField.setMaxLength(4);
         proposedDaysField.setHint(Component.literal("Days"));
         proposedDaysField.setFilter(this::isValidIntegerInput);
         proposedDaysField.setValue("30"); // Default 30 days
         this.addRenderableWidget(proposedDaysField);
-        y += 35;
+        y += 32;
 
         // Proposal field (multi-line simulation using EditBox)
         proposalField = new EditBox(this.font, x, y, fieldWidth, 18, Component.literal("Proposal"));
         proposalField.setMaxLength(500);
         proposalField.setHint(Component.literal("Describe your plan and qualifications..."));
         this.addRenderableWidget(proposalField);
-        y += 28;
-
-        // Show bond requirement info
-        if (contract.getBondAmount() > 0) {
-            y += 20;
-        }
 
         // Bottom buttons
         int buttonY = guiTop + guiHeight - 28;
@@ -195,37 +189,37 @@ public class SubmitBidScreen extends StateCraftScreen {
             titleDisplay = titleDisplay.substring(0, 37) + "...";
         }
         graphics.drawString(this.font, "§7" + titleDisplay, x, y, 0xFFAAAAAA);
-        y += 16;
+        y += 14;
 
         // Budget info
         graphics.drawString(this.font, String.format("§7Budget: §a$%.2f §8| §7%d chunks",
             contract.getBudget(), contract.getChunkCount()), x, y, COLOR_TEXT);
         y += 14;
 
-        // Field labels
+        // Field labels (above input fields)
         graphics.drawString(this.font, "§7Your Bid ($):", x, y, 0xFFAAAAAA);
-        graphics.drawString(this.font, "§7Timeline (days):", x + 170, y, 0xFFAAAAAA);
-        y += 35;
+        graphics.drawString(this.font, "§7Timeline (days):", x + 180, y, 0xFFAAAAAA);
+        y += 34; // Skip over input fields
 
         graphics.drawString(this.font, "§7Your Proposal:", x, y, 0xFFAAAAAA);
-        y += 50;
+        y += 30;
 
-        // Bond requirement info
+        // Bond requirement info (compact)
         if (contract.getBondAmount() > 0) {
             renderDivider(graphics, x, y, guiWidth - 40);
-            y += 8;
+            y += 6;
 
             graphics.drawString(this.font, "§cBond Required:", x, y, COLOR_WARNING);
-            y += 12;
-            graphics.drawString(this.font, String.format("§7This contract requires a §c$%.2f§7 bond.", contract.getBondAmount()), x, y, 0xFFAAAAAA);
             y += 11;
-            graphics.drawString(this.font, "§8The bond will be held during the contract and", x, y, 0xFF666666);
+            graphics.drawString(this.font, String.format("§7This contract requires a §c$%.2f§7 bond.", contract.getBondAmount()), x, y, 0xFFAAAAAA);
             y += 10;
+            graphics.drawString(this.font, "§8The bond will be held during the contract and", x, y, 0xFF666666);
+            y += 9;
             graphics.drawString(this.font, "§8returned upon successful completion.", x, y, 0xFF666666);
+            y += 14;
         }
 
         // Bid comparison info
-        y = guiTop + guiHeight - 75;
         renderDivider(graphics, x, y, guiWidth - 40);
         y += 6;
 
@@ -239,7 +233,7 @@ public class SubmitBidScreen extends StateCraftScreen {
         }
 
         // Compensation type
-        y += 12;
+        y += 11;
         graphics.drawString(this.font, "§8Payment: " + getCompensationDescription(), x, y, 0xFF666666);
 
         // Error message

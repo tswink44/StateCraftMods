@@ -25,7 +25,8 @@ public class SyncMarketplaceDataPacket {
                 buf.readUtf(64),
                 buf.readBoolean(),
                 buf.readDouble(),
-                buf.readUtf(64)
+                buf.readUtf(64),
+                buf.readDouble()  // valuation
             ));
         }
     }
@@ -39,6 +40,7 @@ public class SyncMarketplaceDataPacket {
             buf.writeBoolean(listing.isGovernment);
             buf.writeDouble(listing.price);
             buf.writeUtf(listing.cityName, 64);
+            buf.writeDouble(listing.valuation);
         }
     }
 
@@ -53,14 +55,16 @@ public class SyncMarketplaceDataPacket {
         public final boolean isGovernment;
         public final double price;
         public final String cityName;
+        public final double valuation;
 
-        public ListingInfo(int chunkX, int chunkZ, String ownerName, boolean isGovernment, double price, String cityName) {
+        public ListingInfo(int chunkX, int chunkZ, String ownerName, boolean isGovernment, double price, String cityName, double valuation) {
             this.chunkX = chunkX;
             this.chunkZ = chunkZ;
             this.ownerName = ownerName;
             this.isGovernment = isGovernment;
             this.price = price;
             this.cityName = cityName;
+            this.valuation = valuation;
         }
     }
 }

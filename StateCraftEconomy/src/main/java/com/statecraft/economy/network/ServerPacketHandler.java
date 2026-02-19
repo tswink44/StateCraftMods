@@ -367,6 +367,19 @@ public class ServerPacketHandler {
             canBuy = chunkInfo.isForSale() && !playerId.equals(chunkInfo.sellerId());
         }
 
+        // Get valuation (improvement score)
+        String dimension = player.level().dimension().location().toString();
+        int valuation = com.statecraft.economy.valuation.ImprovementTracker.getInstance()
+            .getScoreNoScan(chunkX, chunkZ, dimension);
+
+        // Calculate estimated tax
+        double estimatedTax = 0;
+        double cityTaxRate = StateCraftIntegration.getChunkCityTaxRate(player.getServer(), chunkX, chunkZ, dimension);
+        if (cityTaxRate > 0 && valuation > 0) {
+            // Tax = valuation * rate (rate is stored as percentage, e.g., 5 = 5%)
+            estimatedTax = valuation * (cityTaxRate / 100.0);
+        }
+
         NetworkHandler.sendToPlayer(new SyncChunkMarketInfoPacket(
             chunkX, chunkZ,
             true, // isClaimed
@@ -377,7 +390,9 @@ public class ServerPacketHandler {
             cityName,
             chunkInfo.isPrivatelyOwned(),
             canListForSale,
-            canBuy
+            canBuy,
+            valuation,
+            estimatedTax
         ), player);
     }
 

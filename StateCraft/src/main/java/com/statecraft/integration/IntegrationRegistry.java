@@ -230,5 +230,41 @@ public class IntegrationRegistry {
         }
         return String.format("$%.2f", amount);
     }
+
+    /**
+     * Get the improvement score for a chunk
+     * @param chunkX The chunk X coordinate
+     * @param chunkZ The chunk Z coordinate
+     * @param dimension The dimension (e.g., "minecraft:overworld")
+     * @return The improvement score, or 0 if not available
+     */
+    public static int getChunkImprovementScore(int chunkX, int chunkZ, String dimension) {
+        if (economyIntegration != null) {
+            try {
+                return economyIntegration.getChunkImprovementScore(chunkX, chunkZ, dimension);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error getting chunk improvement score: {}", e.getMessage());
+            }
+        }
+        return 0;
+    }
+
+    /**
+     * Get the total valuation for a chunk (including all multipliers)
+     * @param chunkX The chunk X coordinate
+     * @param chunkZ The chunk Z coordinate
+     * @param dimension The dimension (e.g., "minecraft:overworld")
+     * @return The total chunk value, or 0 if not available
+     */
+    public static double getChunkTotalValue(int chunkX, int chunkZ, String dimension) {
+        if (economyIntegration != null) {
+            try {
+                return economyIntegration.getChunkTotalValue(chunkX, chunkZ, dimension);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error getting chunk total value: {}", e.getMessage());
+            }
+        }
+        return 0;
+    }
 }
 

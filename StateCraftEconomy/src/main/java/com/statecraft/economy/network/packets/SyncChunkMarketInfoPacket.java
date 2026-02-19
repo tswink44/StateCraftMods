@@ -18,6 +18,8 @@ public class SyncChunkMarketInfoPacket {
     private final boolean isPrivatelyOwned;
     private final boolean canListForSale;
     private final boolean canBuy;
+    private final int valuation;  // Improvement score
+    private final double estimatedTax;  // Estimated tax per cycle
 
     // Constructor for unclaimed chunk
     public SyncChunkMarketInfoPacket(int chunkX, int chunkZ) {
@@ -32,13 +34,16 @@ public class SyncChunkMarketInfoPacket {
         this.isPrivatelyOwned = false;
         this.canListForSale = false;
         this.canBuy = false;
+        this.valuation = 0;
+        this.estimatedTax = 0;
     }
 
     // Full constructor
     public SyncChunkMarketInfoPacket(int chunkX, int chunkZ, boolean isClaimed, boolean isForSale,
                                       double salePrice, String sellerName, String ownerName,
                                       String cityName, boolean isPrivatelyOwned,
-                                      boolean canListForSale, boolean canBuy) {
+                                      boolean canListForSale, boolean canBuy,
+                                      int valuation, double estimatedTax) {
         this.chunkX = chunkX;
         this.chunkZ = chunkZ;
         this.isClaimed = isClaimed;
@@ -50,6 +55,8 @@ public class SyncChunkMarketInfoPacket {
         this.isPrivatelyOwned = isPrivatelyOwned;
         this.canListForSale = canListForSale;
         this.canBuy = canBuy;
+        this.valuation = valuation;
+        this.estimatedTax = estimatedTax;
     }
 
     public SyncChunkMarketInfoPacket(FriendlyByteBuf buf) {
@@ -64,6 +71,8 @@ public class SyncChunkMarketInfoPacket {
         this.isPrivatelyOwned = buf.readBoolean();
         this.canListForSale = buf.readBoolean();
         this.canBuy = buf.readBoolean();
+        this.valuation = buf.readInt();
+        this.estimatedTax = buf.readDouble();
     }
 
     public void encode(FriendlyByteBuf buf) {
@@ -78,6 +87,8 @@ public class SyncChunkMarketInfoPacket {
         buf.writeBoolean(isPrivatelyOwned);
         buf.writeBoolean(canListForSale);
         buf.writeBoolean(canBuy);
+        buf.writeInt(valuation);
+        buf.writeDouble(estimatedTax);
     }
 
     // Getters
@@ -92,5 +103,7 @@ public class SyncChunkMarketInfoPacket {
     public boolean isPrivatelyOwned() { return isPrivatelyOwned; }
     public boolean canListForSale() { return canListForSale; }
     public boolean canBuy() { return canBuy; }
+    public int getValuation() { return valuation; }
+    public double getEstimatedTax() { return estimatedTax; }
 }
 

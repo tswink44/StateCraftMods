@@ -426,6 +426,27 @@ public class LegislatureManager {
                             nation.getName(), nation.getOfficers().size(), maxOfficers);
                     }
                     break;
+                case NATION_NAME:
+                    String oldName = nation.getName();
+                    String newName = value.trim();
+                    if (!newName.isEmpty() && !newName.equals(oldName)) {
+                        // Check if name is taken
+                        Nation existingNation = ChunkClaimManager.getInstance().getNationByName(newName);
+                        if (existingNation == null || existingNation.getId().equals(nation.getId())) {
+                            nation.setName(newName);
+                            ChunkClaimManager.getInstance().markDirty();
+                            StateCraft.LOGGER.info("Constitutional amendment: Nation renamed from '{}' to '{}'",
+                                oldName, newName);
+                        } else {
+                            StateCraft.LOGGER.warn("Cannot rename nation: name '{}' already taken", newName);
+                        }
+                    }
+                    break;
+                case NATION_FLAG:
+                    nation.setFlagUrl(value);
+                    StateCraft.LOGGER.info("Constitutional amendment: Nation flag updated for nation {}",
+                        nation.getName());
+                    break;
                 // Custom laws don't need direct application
                 default:
                     StateCraft.LOGGER.info("Policy change (roleplay): {} = {}", policy.getDisplayName(), value);
