@@ -1,5 +1,6 @@
 package com.statecraft.economy.network;
 
+import com.statecraft.economy.client.screen.AccountActivityScreen;
 import com.statecraft.economy.client.screen.ATMScreen;
 import com.statecraft.economy.client.screen.ChunkMarketScreen;
 import com.statecraft.economy.client.screen.SimpleATMScreen;
@@ -191,6 +192,20 @@ public class ClientPacketHandler {
             this.totalValue = totalValue;
             this.cityTaxRate = cityTaxRate;
         }
+    }
+
+    public static void handleSyncAccountActivity(SyncAccountActivityPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            // Open the AccountActivityScreen with the received data
+            mc.setScreen(new AccountActivityScreen(
+                packet.getAccountType(),
+                packet.getAccountName(),
+                packet.getAccountId(),
+                packet.getEntries()
+            ));
+        });
+        ctx.get().setPacketHandled(true);
     }
 
     public static double getCachedBalance() {

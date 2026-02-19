@@ -78,9 +78,11 @@ public class TradingHubScreen extends AbstractContainerScreen<TradingHubMenu> {
             return;
         }
 
-        double value = menu.getCurrentSellValue();
+        double grossValue = menu.getCurrentSellValue();
+        double taxAmount = menu.getCurrentTaxAmount();
+        double netValue = grossValue - taxAmount;
         NetworkHandler.sendToServer(new TradingHubSellPacket(menu.getBlockEntity().getBlockPos()));
-        setStatusMessage(String.format("Sold %d items for $%.2f!", itemCount, value), true);
+        setStatusMessage(String.format("Sold %d items for $%.2f!", itemCount, netValue), true);
     }
 
     private void openSettings() {

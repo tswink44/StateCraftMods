@@ -315,7 +315,8 @@ public class ClientPacketHandler {
                     packet.getMemberCount(),
                     packet.isGovernor(),
                     packet.canManage(),
-                    packet.getCityNames()
+                    packet.getCityNames(),
+                    packet.isNationLeader()
                 );
             }
         });
@@ -349,7 +350,8 @@ public class ClientPacketHandler {
                     packet.getResidentCount(),
                     packet.isMayor(),
                     packet.canManage(),
-                    packet.getResidentNames()
+                    packet.getResidentNames(),
+                    packet.canAppoint()
                 );
             }
         });
@@ -581,6 +583,26 @@ public class ClientPacketHandler {
             Minecraft mc = Minecraft.getInstance();
             if (mc.screen instanceof com.statecraft.client.gui.ContractsMainScreen screen) {
                 screen.updateData(packet);
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncCityChunks(SyncCityChunksPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof com.statecraft.client.gui.CityChunksScreen screen) {
+                screen.updateChunks(packet.getChunks());
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncNationPrivateChunks(SyncNationPrivateChunksPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof com.statecraft.client.gui.EminentDomainScreen screen) {
+                screen.updateChunks(packet.getChunks());
             }
         });
         ctx.get().setPacketHandled(true);

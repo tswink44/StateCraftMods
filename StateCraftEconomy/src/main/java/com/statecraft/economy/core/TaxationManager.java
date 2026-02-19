@@ -184,8 +184,8 @@ public class TaxationManager {
 
                 StateCraftEconomy.LOGGER.info("City keeps: ${}, passes to state: ${}", cityKeeps, toState);
 
-                // Deposit to city treasury
-                depositToCityTreasury(cityId, cityKeeps);
+                // Deposit full revenue to city treasury, then record the pass-through as outgoing
+                depositToCityTreasury(cityId, revenue, toState, stateId);
 
                 // Send city tax revenue mail
                 CityTaxSummary citySummary = cityTaxSummaries.get(cityId);
@@ -217,8 +217,8 @@ public class TaxationManager {
                 double toNation = revenue * nationPassthrough;
                 double stateKeeps = revenue - toNation;
 
-                // Deposit to state treasury
-                depositToStateTreasury(stateId, stateKeeps);
+                // Deposit full revenue to state treasury, then record the pass-through as outgoing
+                depositToStateTreasury(stateId, revenue, toNation, nationId);
 
                 // Send state tax revenue mail
                 String stateName = StateCraftIntegration.getStateName(stateId);
@@ -415,26 +415,76 @@ public class TaxationManager {
     }
 
     // Treasury deposit methods
-    private void depositToCityTreasury(UUID cityId, double amount) {
+
+    /**
+     * Deposit tax revenue to city treasury.
+     * Records two transactions: +revenue (tax collected) and -passThrough (passed to state).
+     * The city treasury net receives (revenue - passThrough).
+     */
+    private void depositToCityTreasury(UUID cityId, double revenue, double passThrough, UUID stateId) {
         EconomyManager ecoManager = EconomyManager.getInstance();
         var treasury = ecoManager.getOrCreateCityTreasury(cityId);
-        treasury.add(amount);
+        double netAmount = revenue - passThrough;
+        treasury.add(netAmount);
+
+        // Record incoming tax revenue (positive)
+        ecoManager.recordAccountTransaction(cityId, Transaction.Type.TAX, revenue, null,
+            "Property tax revenue collected", null, "Tax System");
+
+        // Record outgoing pass-through to state (negative) if any
+        if (passThrough > 0 && stateId != null) {
+            String stateName = StateCraftIntegration.getStateName(stateId);
+            if (stateName == null) stateName = "State";
+            ecoManager.recordAccountTransaction(cityId, Transaction.Type.TRANSFER_OUT, passThrough, stateId,
+                "Tax pass-through to state: " + stateName, null, "Tax System");
+        }
+
         ecoManager.markDirty();
-        StateCraftEconomy.LOGGER.debug("Deposited {} to city treasury {}", amount, cityId);
+        StateCraftEconomy.LOGGER.debug("Deposited {} (revenue {} - passthrough {}) to city treasury {}",
+            netAmount, revenue, passThrough, cityId);
     }
 
-    private void depositToStateTreasury(UUID stateId, double amount) {
+    /**
+     * Deposit tax pass-through to state treasury.
+     * Records two transactions: +revenue (received from cities) and -passThrough (passed to nation).
+     * The state treasury net receives (revenue - passThrough).
+     */
+    private void depositToStateTreasury(UUID stateId, double revenue, double passThrough, UUID nationId) {
         EconomyManager ecoManager = EconomyManager.getInstance();
         var treasury = ecoManager.getOrCreateStateTreasury(stateId);
-        treasury.add(amount);
+        double netAmount = revenue - passThrough;
+        treasury.add(netAmount);
+
+        // Record incoming pass-through from cities (positive)
+        ecoManager.recordAccountTransaction(stateId, Transaction.Type.TAX, revenue, null,
+            "Tax pass-through received from cities", null, "Tax System");
+
+        // Record outgoing pass-through to nation (negative) if any
+        if (passThrough > 0 && nationId != null) {
+            String nationName = StateCraftIntegration.getNationName(nationId);
+            if (nationName == null) nationName = "Nation";
+            ecoManager.recordAccountTransaction(stateId, Transaction.Type.TRANSFER_OUT, passThrough, nationId,
+                "Tax pass-through to nation: " + nationName, null, "Tax System");
+        }
+
         ecoManager.markDirty();
-        StateCraftEconomy.LOGGER.debug("Deposited {} to state treasury {}", amount, stateId);
+        StateCraftEconomy.LOGGER.debug("Deposited {} (revenue {} - passthrough {}) to state treasury {}",
+            netAmount, revenue, passThrough, stateId);
     }
 
+    /**
+     * Deposit tax pass-through to nation treasury.
+     * Records one transaction: +amount (received from states).
+     */
     private void depositToNationTreasury(UUID nationId, double amount) {
         EconomyManager ecoManager = EconomyManager.getInstance();
         var treasury = ecoManager.getOrCreateNationTreasury(nationId);
         treasury.add(amount);
+
+        // Record incoming pass-through from states (positive)
+        ecoManager.recordAccountTransaction(nationId, Transaction.Type.TAX, amount, null,
+            "Tax pass-through received from states", null, "Tax System");
+
         ecoManager.markDirty();
         StateCraftEconomy.LOGGER.debug("Deposited {} to nation treasury {}", amount, nationId);
     }

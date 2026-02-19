@@ -187,18 +187,22 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
 
     /**
      * Calculate the total tax amount for all items
+     * Uses the full sales tax calculation including city/state/nation taxes
      */
     public double calculateTotalTaxAmount() {
-        double total = 0;
+        double grossValue = 0;
         for (int i = 0; i < itemHandler.getSlots(); i++) {
             ItemStack stack = itemHandler.getStackInSlot(i);
             if (!stack.isEmpty() && ItemValueConfig.canSell(stack)) {
-                total += ItemValueConfig.getStackValue(stack);
+                grossValue += ItemValueConfig.getStackValue(stack);
             }
         }
 
-        double taxRate = ItemValueConfig.SELL_TAX_RATE.get();
-        return total * taxRate;
+        if (grossValue <= 0) return 0;
+
+        // Use the same tax calculation as sellAllItems for accurate preview
+        SalesTaxInfo taxInfo = calculateSalesTax(grossValue);
+        return taxInfo.totalTax;
     }
 
     /**

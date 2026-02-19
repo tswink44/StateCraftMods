@@ -194,18 +194,9 @@ public class ProtectionHandler {
 
         ClaimedChunk chunk = manager.getClaimedChunk(chunkPos, player.level().dimension());
 
-        // WILDERNESS PROTECTION: Unclaimed chunks are protected
-        // Players must claim land to build
+        // WILDERNESS: Unclaimed chunks are not protected - anyone can interact
         if (chunk == null) {
-            // Check if player is in ANY nation - nation members can interact in wilderness
-            // This encourages claiming while not completely blocking nation members
-            Nation playerNation = manager.getPlayerNation(player.getUUID());
-            if (playerNation != null) {
-                // Nation members can interact in wilderness (to claim and expand)
-                return true;
-            }
-            // Players not in a nation cannot interact in wilderness
-            return false;
+            return true;
         }
 
         // Get the nation that owns this chunk through city -> state -> nation hierarchy

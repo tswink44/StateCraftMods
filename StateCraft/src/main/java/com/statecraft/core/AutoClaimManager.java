@@ -90,7 +90,7 @@ public class AutoClaimManager {
                 // Find any city the player can manage
                 for (State state : nation.getAllStates()) {
                     for (City city : state.getAllCities()) {
-                        if (city.getMayorId().equals(playerId) || nation.isAdmin(playerId)) {
+                        if (playerId.equals(city.getMayorId()) || nation.isAdmin(playerId)) {
                             targetCity = city;
                             break;
                         }

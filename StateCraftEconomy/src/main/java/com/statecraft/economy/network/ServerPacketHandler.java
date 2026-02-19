@@ -440,5 +440,107 @@ public class ServerPacketHandler {
         });
         ctx.get().setPacketHandled(true);
     }
+
+    /**
+     * Handle request for account activity/transaction history
+     */
+    public static void handleRequestAccountActivity(RequestAccountActivityPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            EconomyManager manager = EconomyManager.getInstance();
+            String accountType = packet.getAccountType();
+            String accountId = packet.getAccountId();
+            UUID accountUUID;
+
+            try {
+                accountUUID = UUID.fromString(accountId);
+            } catch (IllegalArgumentException e) {
+                return; // Invalid UUID, ignore
+            }
+
+            // Permission check: players can always view their own account
+            // For government accounts, verify they have admin access
+            String accountName = "";
+
+            switch (accountType) {
+                case "PERSONAL" -> {
+                    if (!accountUUID.equals(player.getUUID())) {
+                        return; // Can't view other player's activity
+                    }
+                    accountName = player.getName().getString();
+                }
+                case "NATION", "STATE", "CITY" -> {
+                    if (!StateCraftEconomy.isStateCraftLoaded()) return;
+
+                    // Verify player has admin access to this government account
+                    var govAccounts = StateCraftIntegration.getPlayerAdminAccounts(player);
+                    boolean hasAccess = govAccounts.stream()
+                        .anyMatch(a -> a.type().equals(accountType) && a.id().equals(accountId));
+
+                    if (!hasAccess) {
+                        // Also allow members to view (read-only) - check membership
+                        boolean isMember = StateCraftIntegration.isPlayerMemberOfEntity(player, accountType, accountUUID);
+                        if (!isMember) {
+                            return; // No access
+                        }
+                    }
+
+                    // Get account name
+                    accountName = govAccounts.stream()
+                        .filter(a -> a.type().equals(accountType) && a.id().equals(accountId))
+                        .map(SyncAccountsPacket.AccountInfo::name)
+                        .findFirst()
+                        .orElse(StateCraftIntegration.getEntityName(accountType, accountUUID));
+                }
+                default -> {
+                    return; // Unknown account type
+                }
+            }
+
+            // Get transaction history for this account
+            java.util.List<com.statecraft.economy.core.Transaction> transactions = manager.getTransactionHistory(accountUUID);
+
+            // Convert to activity entries
+            java.util.List<SyncAccountActivityPacket.ActivityEntry> entries = new java.util.ArrayList<>();
+            boolean isGovAccount = !"PERSONAL".equals(accountType);
+
+            for (com.statecraft.economy.core.Transaction tx : transactions) {
+                String initiatorName = tx.getInitiatorName() != null ? tx.getInitiatorName() : "";
+
+                // For personal accounts, if no explicit initiator, it was the player themselves
+                if (initiatorName.isEmpty() && "PERSONAL".equals(accountType)) {
+                    initiatorName = player.getName().getString();
+                }
+
+                // Determine if this transaction is incoming (positive) or outgoing (negative)
+                // For government accounts, TAX and DEPOSIT are incoming revenue;
+                // TRANSFER_OUT, WITHDRAWAL are outgoing.
+                boolean incoming;
+                if (isGovAccount) {
+                    incoming = switch (tx.getType()) {
+                        case TAX, DEPOSIT, TRANSFER_IN, SALE -> true;
+                        case WITHDRAWAL, TRANSFER_OUT, FEE, PURCHASE, NATION_DEPOSIT -> false;
+                        default -> tx.isIncoming();
+                    };
+                } else {
+                    incoming = tx.isIncoming();
+                }
+
+                entries.add(new SyncAccountActivityPacket.ActivityEntry(
+                    tx.getType().name(),
+                    tx.getAmount(),
+                    tx.getDescription(),
+                    tx.getTimestamp(),
+                    initiatorName,
+                    incoming
+                ));
+            }
+
+            NetworkHandler.sendToPlayer(new SyncAccountActivityPacket(accountType, accountName, accountId, entries), player);
+        });
+        ctx.get().setPacketHandled(true);
+    }
 }
 

@@ -3,6 +3,7 @@ package com.statecraft.economy.data;
 import com.statecraft.economy.StateCraftEconomy;
 import com.statecraft.economy.core.BankAccount;
 import com.statecraft.economy.core.EconomyManager;
+import com.statecraft.economy.core.Transaction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -11,6 +12,8 @@ import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.storage.DimensionDataStorage;
 
 import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -90,6 +93,32 @@ public class EconomySavedData extends SavedData {
         StateCraftEconomy.LOGGER.info("Loaded economy data: {} player accounts, {} nation treasuries, {} state treasuries, {} city treasuries",
             data.playerAccounts.size(), data.nationTreasuries.size(), data.stateTreasuries.size(), data.cityTreasuries.size());
 
+        // Load transaction history
+        if (tag.contains("TransactionHistory")) {
+            Map<UUID, List<Transaction>> history = new HashMap<>();
+            ListTag historyList = tag.getList("TransactionHistory", Tag.TAG_COMPOUND);
+            for (int i = 0; i < historyList.size(); i++) {
+                CompoundTag accountHistoryTag = historyList.getCompound(i);
+                UUID accountId = accountHistoryTag.getUUID("AccountId");
+                ListTag txList = accountHistoryTag.getList("Transactions", Tag.TAG_COMPOUND);
+                List<Transaction> transactions = new ArrayList<>();
+                for (int j = 0; j < txList.size(); j++) {
+                    CompoundTag txTag = txList.getCompound(j);
+                    Transaction.Type type = Transaction.Type.valueOf(txTag.getString("Type"));
+                    double amount = txTag.getDouble("Amount");
+                    UUID otherId = txTag.contains("OtherId") ? txTag.getUUID("OtherId") : null;
+                    String description = txTag.getString("Description");
+                    long timestamp = txTag.getLong("Timestamp");
+                    UUID initiatorId = txTag.contains("InitiatorId") ? txTag.getUUID("InitiatorId") : null;
+                    String initiatorName = txTag.contains("InitiatorName") ? txTag.getString("InitiatorName") : null;
+                    transactions.add(new Transaction(type, amount, otherId, description, timestamp, initiatorId, initiatorName));
+                }
+                history.put(accountId, transactions);
+            }
+            EconomyManager.getInstance().setTransactionHistory(history);
+            StateCraftEconomy.LOGGER.info("Loaded transaction history for {} accounts", history.size());
+        }
+
         return data;
     }
 
@@ -153,6 +182,35 @@ public class EconomySavedData extends SavedData {
             cityList.add(accountTag);
         }
         tag.put("CityTreasuries", cityList);
+
+        // Save transaction history
+        ListTag historyList = new ListTag();
+        Map<UUID, List<Transaction>> transactionHistory = manager.getTransactionHistoryMap();
+        for (Map.Entry<UUID, List<Transaction>> entry : transactionHistory.entrySet()) {
+            CompoundTag accountHistoryTag = new CompoundTag();
+            accountHistoryTag.putUUID("AccountId", entry.getKey());
+            ListTag txList = new ListTag();
+            for (Transaction tx : entry.getValue()) {
+                CompoundTag txTag = new CompoundTag();
+                txTag.putString("Type", tx.getType().name());
+                txTag.putDouble("Amount", tx.getAmount());
+                if (tx.getOtherId() != null) {
+                    txTag.putUUID("OtherId", tx.getOtherId());
+                }
+                txTag.putString("Description", tx.getDescription());
+                txTag.putLong("Timestamp", tx.getTimestamp());
+                if (tx.getInitiatorId() != null) {
+                    txTag.putUUID("InitiatorId", tx.getInitiatorId());
+                }
+                if (tx.getInitiatorName() != null) {
+                    txTag.putString("InitiatorName", tx.getInitiatorName());
+                }
+                txList.add(txTag);
+            }
+            accountHistoryTag.put("Transactions", txList);
+            historyList.add(accountHistoryTag);
+        }
+        tag.put("TransactionHistory", historyList);
 
         manager.clearDirty();
         return tag;

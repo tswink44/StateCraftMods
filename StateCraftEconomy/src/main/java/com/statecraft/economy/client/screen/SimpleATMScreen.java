@@ -6,6 +6,7 @@ import com.statecraft.economy.core.Bank;
 import com.statecraft.economy.core.EconomyManager;
 import com.statecraft.economy.network.NetworkHandler;
 import com.statecraft.economy.network.packets.ATMTransactionPacket;
+import com.statecraft.economy.network.packets.RequestAccountActivityPacket;
 import com.statecraft.economy.network.packets.RequestAccountsPacket;
 import com.statecraft.economy.network.packets.RequestTransferRecipientsPacket;
 import com.statecraft.economy.network.packets.SyncAccountsPacket;
@@ -104,6 +105,7 @@ public class SimpleATMScreen extends Screen {
 
     // UI Components
     private EditBox amountInput;
+    private EditBox noteInput;
     private EditBox recipientInput;
     private final List<Button> menuButtons = new ArrayList<>();
 
@@ -137,6 +139,13 @@ public class SimpleATMScreen extends Screen {
         recipientInput.setHint(Component.literal("Type to search..."));
         addRenderableWidget(recipientInput);
 
+        // Note input field (optional note for deposits/withdrawals)
+        noteInput = new EditBox(this.font, guiLeft + 20, guiTop + 100, 140, 20, Component.literal("Note"));
+        noteInput.setMaxLength(64);
+        noteInput.setVisible(false);
+        noteInput.setHint(Component.literal("Optional note..."));
+        addRenderableWidget(noteInput);
+
         // Request available accounts from server
         requestAccounts();
         requestBalance();
@@ -151,6 +160,7 @@ public class SimpleATMScreen extends Screen {
 
         amountInput.setVisible(false);
         recipientInput.setVisible(false);
+        noteInput.setVisible(false);
         accountDropdownOpen = false;
 
         switch (currentMode) {
@@ -220,6 +230,14 @@ public class SimpleATMScreen extends Screen {
             })
             .bounds(rightX, y, halfWidth, 20)
             .build());
+
+        y += 28;
+
+        // Account Activity button (full width)
+        addMenuButton(Button.builder(Component.literal("§eAccount Activity"),
+            btn -> requestAccountActivity())
+            .bounds(centerX - buttonWidth/2, y, buttonWidth, 20)
+            .build());
     }
 
     private void buildBankSelect() {
@@ -259,10 +277,16 @@ public class SimpleATMScreen extends Screen {
         amountInput.setWidth(buttonWidth);
         amountInput.setFocused(true);
 
+        // Note input (optional)
+        noteInput.setVisible(true);
+        noteInput.setX(centerX - buttonWidth/2);
+        noteInput.setY(guiTop + 110);
+        noteInput.setWidth(buttonWidth);
+
         // Confirm button
         addMenuButton(Button.builder(Component.literal("§aConfirm Deposit"),
             btn -> performDeposit())
-            .bounds(centerX - buttonWidth/2, guiTop + 100, buttonWidth, 20)
+            .bounds(centerX - buttonWidth/2, guiTop + 140, buttonWidth, 20)
             .build());
 
         // Back button
@@ -282,13 +306,24 @@ public class SimpleATMScreen extends Screen {
         amountInput.setWidth(buttonWidth);
         amountInput.setFocused(true);
 
+        // Note input (optional)
+        noteInput.setVisible(true);
+        noteInput.setX(centerX - buttonWidth/2);
+        noteInput.setY(guiTop + 110);
+        noteInput.setWidth(buttonWidth);
+
         // Confirm button
         addMenuButton(Button.builder(Component.literal("§aConfirm Withdrawal"),
             btn -> performWithdraw())
-            .bounds(centerX - buttonWidth/2, guiTop + 100, buttonWidth, 20)
+            .bounds(centerX - buttonWidth/2, guiTop + 140, buttonWidth, 20)
             .build());
 
         // Back button
+        addMenuButton(Button.builder(Component.literal("< Back"),
+            btn -> switchMode(ScreenMode.MAIN_MENU))
+            .bounds(centerX - buttonWidth/2, guiTop + guiHeight - 35, buttonWidth, 20)
+            .build());
+    }
         addMenuButton(Button.builder(Component.literal("< Back"),
             btn -> switchMode(ScreenMode.MAIN_MENU))
             .bounds(centerX - buttonWidth/2, guiTop + guiHeight - 35, buttonWidth, 20)
@@ -374,6 +409,7 @@ public class SimpleATMScreen extends Screen {
     private void switchMode(ScreenMode mode) {
         currentMode = mode;
         amountInput.setValue("");
+        noteInput.setValue("");
         recipientInput.setValue("");
         accountDropdownOpen = false;
         transferTypeDropdownOpen = false;
@@ -620,11 +656,13 @@ public class SimpleATMScreen extends Screen {
         switch (currentMode) {
             case DEPOSIT_INPUT -> {
                 graphics.drawCenteredString(this.font, "§fEnter deposit amount:", this.width / 2, guiTop + 50, COLOR_TEXT);
-                graphics.drawCenteredString(this.font, "§7Currency items will be removed from inventory", this.width / 2, guiTop + 130, 0xFF888888);
+                graphics.drawCenteredString(this.font, "§7Note (optional):", this.width / 2, guiTop + 98, 0xFF888888);
+                graphics.drawCenteredString(this.font, "§7Currency items will be removed from inventory", this.width / 2, guiTop + 168, 0xFF888888);
             }
             case WITHDRAW_INPUT -> {
                 graphics.drawCenteredString(this.font, "§fEnter withdrawal amount:", this.width / 2, guiTop + 50, COLOR_TEXT);
-                graphics.drawCenteredString(this.font, "§7Currency items will be added to inventory", this.width / 2, guiTop + 130, 0xFF888888);
+                graphics.drawCenteredString(this.font, "§7Note (optional):", this.width / 2, guiTop + 98, 0xFF888888);
+                graphics.drawCenteredString(this.font, "§7Currency items will be added to inventory", this.width / 2, guiTop + 168, 0xFF888888);
             }
             case TRANSFER_INPUT -> {
                 // Show balance at top for transfer mode
@@ -844,6 +882,25 @@ public class SimpleATMScreen extends Screen {
         }
     }
 
+    private void requestAccountActivity() {
+        // Request account activity for the currently selected account
+        SyncAccountsPacket.AccountInfo selectedAccount = getSelectedAccount();
+        String accType;
+        String accId;
+        if (selectedAccount != null) {
+            accType = selectedAccount.type();
+            accId = selectedAccount.id();
+        } else {
+            // Default to personal account
+            accType = "PERSONAL";
+            accId = Minecraft.getInstance().player != null
+                ? Minecraft.getInstance().player.getUUID().toString() : "";
+        }
+        if (!accId.isEmpty()) {
+            NetworkHandler.sendToServer(new RequestAccountActivityPacket(accType, accId));
+        }
+    }
+
     private void performDeposit() {
         try {
             double amount = Double.parseDouble(amountInput.getValue());
@@ -863,7 +920,9 @@ public class SimpleATMScreen extends Screen {
             NetworkHandler.sendToServer(new ATMTransactionPacket(
                 ATMTransactionPacket.Action.DEPOSIT,
                 amount,
-                accountTarget
+                accountTarget,
+                "",
+                noteInput.getValue().trim()
             ));
             showStatus("§aProcessing deposit...", false);
         } catch (NumberFormatException e) {
@@ -894,7 +953,9 @@ public class SimpleATMScreen extends Screen {
             NetworkHandler.sendToServer(new ATMTransactionPacket(
                 ATMTransactionPacket.Action.WITHDRAW,
                 amount,
-                accountTarget
+                accountTarget,
+                "",
+                noteInput.getValue().trim()
             ));
             showStatus("§aProcessing withdrawal...", false);
         } catch (NumberFormatException e) {
@@ -1030,6 +1091,7 @@ public class SimpleATMScreen extends Screen {
             requestBalance(); // Refresh balance
             requestAccounts(); // Refresh accounts
             amountInput.setValue("");
+            noteInput.setValue("");
             recipientInput.setValue("");
         }
     }

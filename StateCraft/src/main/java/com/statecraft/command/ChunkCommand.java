@@ -58,7 +58,7 @@ public class ChunkCommand {
             for (State state : nation.getAllStates()) {
                 for (City city : state.getAllCities()) {
                     // Check if player is mayor or nation admin
-                    if (city.getMayorId().equals(player.getUUID()) || nation.isAdmin(player.getUUID())) {
+                    if (player.getUUID().equals(city.getMayorId()) || nation.isAdmin(player.getUUID())) {
                         playerCity = city;
                         break;
                     }
@@ -145,7 +145,7 @@ public class ChunkCommand {
             }
 
             // Check permission - must be city mayor or nation admin
-            if (!targetCity.getMayorId().equals(player.getUUID()) && !nation.isAdmin(player.getUUID())) {
+            if (!player.getUUID().equals(targetCity.getMayorId()) && !nation.isAdmin(player.getUUID())) {
                 context.getSource().sendFailure(Component.literal("You don't have permission to claim chunks for this city!"));
                 return 0;
             }
@@ -215,7 +215,7 @@ public class ChunkCommand {
             }
 
             Nation nation = ChunkClaimManager.getInstance().getPlayerNation(player.getUUID());
-            if (nation == null || (!city.getMayorId().equals(player.getUUID()) && !nation.isAdmin(player.getUUID()))) {
+            if (nation == null || (!player.getUUID().equals(city.getMayorId()) && !nation.isAdmin(player.getUUID()))) {
                 context.getSource().sendFailure(Component.literal("You don't have permission to unclaim this chunk!"));
                 return 0;
             }
@@ -301,7 +301,7 @@ public class ChunkCommand {
                 canTransfer = true;
             } else {
                 City city = ChunkClaimManager.getInstance().getCity(chunk.getCityId());
-                if (city != null && city.getMayorId().equals(player.getUUID())) {
+                if (city != null && player.getUUID().equals(city.getMayorId())) {
                     canTransfer = true;
                 }
                 Nation nation = ChunkClaimManager.getInstance().getPlayerNation(player.getUUID());

@@ -460,6 +460,13 @@ public class NetworkHandler {
             .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncOfficerManagementData(pkt, ctx), ctx))
             .add();
 
+        // Appointment packets (Client -> Server)
+        CHANNEL.messageBuilder(AppointLeaderPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(AppointLeaderPacket::encode)
+            .decoder(AppointLeaderPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleAppointLeader)
+            .add();
+
         // Contract packets (Client -> Server)
         CHANNEL.messageBuilder(RequestContractsPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
             .encoder(RequestContractsPacket::encode)
@@ -490,6 +497,32 @@ public class NetworkHandler {
             .encoder(SyncContractsPacket::encode)
             .decoder(SyncContractsPacket::new)
             .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncContracts(pkt, ctx), ctx))
+            .add();
+
+        // City chunks packets
+        CHANNEL.messageBuilder(RequestCityChunksPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestCityChunksPacket::encode)
+            .decoder(RequestCityChunksPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestCityChunks)
+            .add();
+
+        CHANNEL.messageBuilder(SyncCityChunksPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncCityChunksPacket::encode)
+            .decoder(SyncCityChunksPacket::new)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncCityChunks(pkt, ctx), ctx))
+            .add();
+
+        // Eminent domain / nation private chunks packets
+        CHANNEL.messageBuilder(RequestNationPrivateChunksPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestNationPrivateChunksPacket::encode)
+            .decoder(RequestNationPrivateChunksPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestNationPrivateChunks)
+            .add();
+
+        CHANNEL.messageBuilder(SyncNationPrivateChunksPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncNationPrivateChunksPacket::encode)
+            .decoder(SyncNationPrivateChunksPacket::new)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncNationPrivateChunks(pkt, ctx), ctx))
             .add();
 
         StateCraft.LOGGER.info("StateCraft network packets registered");

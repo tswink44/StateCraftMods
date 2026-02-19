@@ -58,7 +58,7 @@ public class CityCommand {
             }
 
             // Check permission - must be state governor or nation admin
-            if (!state.getGovernorId().equals(player.getUUID()) && !nation.isAdmin(player.getUUID())) {
+            if (!player.getUUID().equals(state.getGovernorId()) && !nation.isAdmin(player.getUUID())) {
                 context.getSource().sendFailure(Component.literal("You don't have permission to create cities in this state!"));
                 return 0;
             }
@@ -86,6 +86,9 @@ public class CityCommand {
                 }
             }
 
+            // Check if player is already mayor of another city
+            boolean vacantMayor = ChunkClaimManager.getInstance().isMayorOfAnyCity(player.getUUID());
+
             City city = ChunkClaimManager.getInstance().createCity(state, cityName, player.getUUID());
             if (city == null) {
                 context.getSource().sendFailure(Component.literal("Could not create city. Max cities may be reached."));
@@ -103,7 +106,14 @@ public class CityCommand {
             markDataDirty(context);
             String feeMessage = creationFee > 0 && IntegrationRegistry.hasEconomyIntegration()
                 ? " (Cost: " + IntegrationRegistry.formatCurrency(creationFee) + ")" : "";
-            context.getSource().sendSuccess(() -> Component.literal("§aCity §e" + cityName + "§a created in state §e" + stateName + "§a!" + feeMessage), true);
+            if (vacantMayor) {
+                context.getSource().sendSuccess(() -> Component.literal(
+                    "§aCity §e" + cityName + "§a created in state §e" + stateName +
+                    "§a with §eVACANT§a mayor position! Use /sc appoint to assign a mayor." + feeMessage), true);
+            } else {
+                context.getSource().sendSuccess(() -> Component.literal(
+                    "§aCity §e" + cityName + "§a created in state §e" + stateName + "§a!" + feeMessage), true);
+            }
             return 1;
         } catch (Exception e) {
             context.getSource().sendFailure(Component.literal("This command must be run by a player!"));
@@ -125,7 +135,7 @@ public class CityCommand {
             City foundCity = null;
             for (State state : nation.getAllStates()) {
                 for (City city : state.getAllCities()) {
-                    if (city.getMayorId().equals(player.getUUID()) || city.isResident(player.getUUID())) {
+                    if (player.getUUID().equals(city.getMayorId()) || city.isResident(player.getUUID())) {
                         foundCity = city;
                         break;
                     }
@@ -236,7 +246,7 @@ public class CityCommand {
             City mayorCity = null;
             for (State state : nation.getAllStates()) {
                 for (City city : state.getAllCities()) {
-                    if (city.getMayorId().equals(player.getUUID())) {
+                    if (player.getUUID().equals(city.getMayorId())) {
                         mayorCity = city;
                         break;
                     }

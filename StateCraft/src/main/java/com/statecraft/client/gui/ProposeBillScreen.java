@@ -40,6 +40,9 @@ public class ProposeBillScreen extends StateCraftScreen {
     // TEXT policy value (stored separately to persist across screen changes)
     private String textPolicyValue = "";
 
+    // CHUNK_TARGET value (stored separately, format: "chunkX,chunkZ,dimension")
+    private String chunkTargetValue = "";
+
     // Current bill policy changes
     private final Map<PolicyType, String> policyChanges = new HashMap<>();
 
@@ -178,6 +181,18 @@ public class ProposeBillScreen extends StateCraftScreen {
                 graphics.fill(btnX, btnY + 13, btnX + 60, btnY + 14, 0xFF1A2A1A);
                 String btnText = textPolicyValue.isEmpty() ? "§eEdit..." : "§aEdited";
                 graphics.drawCenteredString(this.font, btnText, btnX + 30, btnY + 3, COLOR_TEXT);
+            } else if (valueType == PolicyType.ValueType.CHUNK_TARGET) {
+                // For CHUNK_TARGET type, show "Select..." button that opens the chunk selector
+                policyValueField.visible = false;
+                int btnX = guiLeft + guiWidth - 80;
+                int btnY = y;
+                boolean hovered = mouseX >= btnX && mouseX < btnX + 65 && mouseY >= btnY && mouseY < btnY + 14;
+                int bgColor = hovered ? 0xFF6A4A4A : 0xFF4A2A2A;
+                graphics.fill(btnX, btnY, btnX + 65, btnY + 14, bgColor);
+                graphics.fill(btnX, btnY, btnX + 65, btnY + 1, 0xFF7A5A5A);
+                graphics.fill(btnX, btnY + 13, btnX + 65, btnY + 14, 0xFF2A1A1A);
+                String btnText = chunkTargetValue.isEmpty() ? "§eSelect..." : "§aSelected";
+                graphics.drawCenteredString(this.font, btnText, btnX + 32, btnY + 3, COLOR_TEXT);
             } else {
                 // Show normal value field
                 policyValueField.visible = true;
@@ -397,6 +412,7 @@ public class ProposeBillScreen extends StateCraftScreen {
             case CURRENCY -> "$amount";
             case TEXT -> "text";
             case NATION_TARGET -> "nation";
+            case CHUNK_TARGET -> "Select chunk...";
         };
     }
 
@@ -406,6 +422,10 @@ public class ProposeBillScreen extends StateCraftScreen {
                 case BOOLEAN -> value.equalsIgnoreCase("true") ? "Yes" : "No";
                 case PERCENTAGE -> String.format("%.0f%%", Double.parseDouble(value) * 100);
                 case CURRENCY -> "$" + value;
+                case CHUNK_TARGET -> {
+                    String[] parts = value.split(",", 3);
+                    yield "Chunk (" + parts[0] + ", " + parts[1] + ")";
+                }
                 default -> value;
             };
         } catch (Exception e) {
@@ -442,6 +462,22 @@ public class ProposeBillScreen extends StateCraftScreen {
                         textPolicyValue,
                         text -> {
                             textPolicyValue = text;
+                            this.minecraft.setScreen(this);
+                        },
+                        () -> this.minecraft.setScreen(this)
+                    ));
+                    return true;
+                }
+
+            // CHUNK_TARGET select button click - open eminent domain chunk selector
+            } else if (selectedPolicy != null && selectedPolicy.getValueType() == PolicyType.ValueType.CHUNK_TARGET) {
+                int btnX = guiLeft + guiWidth - 80;
+                int btnY = y;
+                if (mouseX >= btnX && mouseX < btnX + 65 && mouseY >= btnY && mouseY < btnY + 14) {
+                    this.minecraft.setScreen(new EminentDomainScreen(
+                        nationName,
+                        chunkValue -> {
+                            chunkTargetValue = chunkValue;
                             this.minecraft.setScreen(this);
                         },
                         () -> this.minecraft.setScreen(this)
@@ -584,6 +620,13 @@ public class ProposeBillScreen extends StateCraftScreen {
                 showError("Enter text using the Edit button");
                 return;
             }
+        } else if (selectedPolicy.getValueType() == PolicyType.ValueType.CHUNK_TARGET) {
+            // Use the stored chunk target value (set by the chunk selector screen)
+            value = chunkTargetValue.trim();
+            if (value.isEmpty()) {
+                showError("Select a chunk using the Select button");
+                return;
+            }
         } else {
             value = policyValueField.getValue().trim();
             if (value.isEmpty()) {
@@ -611,6 +654,7 @@ public class ProposeBillScreen extends StateCraftScreen {
         selectedPolicy = null;
         policyValueField.setValue("");
         textPolicyValue = "";
+        chunkTargetValue = "";
         booleanToggleValue = false;
     }
 

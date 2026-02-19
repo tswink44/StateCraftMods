@@ -4,7 +4,9 @@ import com.statecraft.StateCraft;
 import com.statecraft.config.StateCraftConfig;
 import com.statecraft.core.ChunkClaimManager;
 import com.statecraft.core.City;
+import com.statecraft.core.ClaimedChunk;
 import com.statecraft.core.Nation;
+import com.statecraft.core.OwnershipType;
 import com.statecraft.core.State;
 import com.statecraft.data.NationSavedData;
 import com.statecraft.mail.Mail;
@@ -395,6 +397,75 @@ public class LegislatureManager {
                     nation.setChunkClaimFee(Double.parseDouble(value));
                     StateCraft.LOGGER.info("Policy change: Chunk claim fee set to ${} for nation {}",
                         value, nation.getName());
+                    break;
+                case EMINENT_DOMAIN:
+                    // Parse chunk target: "chunkX,chunkZ,dimension"
+                    String[] edParts = value.split(",", 3);
+                    if (edParts.length < 3) {
+                        StateCraft.LOGGER.error("Invalid eminent domain value: {}", value);
+                        break;
+                    }
+                    int edChunkX = Integer.parseInt(edParts[0].trim());
+                    int edChunkZ = Integer.parseInt(edParts[1].trim());
+                    String edDimension = edParts[2].trim();
+
+                    // Find the chunk
+                    net.minecraft.world.level.ChunkPos edPos = new net.minecraft.world.level.ChunkPos(edChunkX, edChunkZ);
+                    net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> edDimKey =
+                        net.minecraft.resources.ResourceKey.create(
+                            net.minecraft.core.registries.Registries.DIMENSION,
+                            new net.minecraft.resources.ResourceLocation(edDimension));
+                    ClaimedChunk edChunk = ChunkClaimManager.getInstance().getClaimedChunk(edPos, edDimKey);
+
+                    if (edChunk == null) {
+                        StateCraft.LOGGER.warn("Eminent domain: Chunk ({}, {}) not found or not claimed", edChunkX, edChunkZ);
+                        break;
+                    }
+
+                    if (edChunk.getOwnershipType() != OwnershipType.PLAYER || edChunk.getPlayerOwner() == null) {
+                        StateCraft.LOGGER.warn("Eminent domain: Chunk ({}, {}) is not privately owned", edChunkX, edChunkZ);
+                        break;
+                    }
+
+                    UUID previousOwner = edChunk.getPlayerOwner();
+
+                    // Calculate compensation (10x the tax valuation)
+                    double chunkValuation = 0;
+                    if (com.statecraft.integration.IntegrationRegistry.hasEconomyIntegration()) {
+                        chunkValuation = com.statecraft.integration.IntegrationRegistry.getChunkTotalValue(edChunkX, edChunkZ, edDimension);
+                    }
+                    double compensation = chunkValuation * 10;
+
+                    // Withdraw from nation treasury
+                    boolean withdrawn = false;
+                    if (compensation > 0 && com.statecraft.integration.IntegrationRegistry.hasEconomyIntegration()) {
+                        withdrawn = com.statecraft.integration.IntegrationRegistry.withdrawFromNation(
+                            nation.getName(), compensation,
+                            "Eminent domain compensation for chunk (" + edChunkX + ", " + edChunkZ + ")");
+
+                        if (!withdrawn) {
+                            StateCraft.LOGGER.warn("Eminent domain: Nation '{}' treasury has insufficient funds for compensation ${}",
+                                nation.getName(), compensation);
+                            // Still proceed — the law was enacted democratically
+                        }
+                    }
+
+                    // Deposit compensation to previous owner
+                    if (compensation > 0 && withdrawn && com.statecraft.integration.IntegrationRegistry.hasEconomyIntegration()) {
+                        com.statecraft.integration.IntegrationRegistry.depositToPlayer(
+                            previousOwner, compensation,
+                            "Eminent domain compensation for chunk (" + edChunkX + ", " + edChunkZ + ") in " + nation.getName());
+                    }
+
+                    // Revert chunk to public (hierarchy) ownership
+                    edChunk.setPlayerOwner(null);
+                    edChunk.setOwnershipType(OwnershipType.HIERARCHY);
+                    // Clear any sale listing
+                    edChunk.setForSale(false);
+                    ChunkClaimManager.getInstance().markDirty();
+
+                    StateCraft.LOGGER.info("Eminent domain enacted: Chunk ({}, {}) repossessed from player {} in nation {}. Compensation: ${}",
+                        edChunkX, edChunkZ, previousOwner, nation.getName(), compensation);
                     break;
                 case NATION_SALES_TAX_RATE:
                     nation.setSalesTaxRate(Double.parseDouble(value));

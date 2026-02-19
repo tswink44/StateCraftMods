@@ -504,6 +504,159 @@ public class StateCraftIntegration {
     }
 
     /**
+     * Check if a player is a member of a government entity (nation, state, or city)
+     */
+    public static boolean isPlayerMemberOfEntity(ServerPlayer player, String entityType, UUID entityId) {
+        if (!initialized) return false;
+
+        try {
+            var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
+            var getInstance = managerClass.getMethod("getInstance");
+            var claimManager = getInstance.invoke(null);
+
+            var getPlayerNation = managerClass.getMethod("getPlayerNation", UUID.class);
+            var nation = getPlayerNation.invoke(claimManager, player.getUUID());
+
+            if (nation == null) return false;
+
+            var nationClass = Class.forName("com.statecraft.core.Nation");
+            var getId = nationClass.getMethod("getId");
+            UUID nationId = (UUID) getId.invoke(nation);
+
+            switch (entityType) {
+                case "NATION" -> {
+                    return nationId.equals(entityId);
+                }
+                case "STATE" -> {
+                    var getAllStates = nationClass.getMethod("getAllStates");
+                    @SuppressWarnings("unchecked")
+                    var states = (java.util.Collection<?>) getAllStates.invoke(nation);
+                    if (states != null) {
+                        var stateClass = Class.forName("com.statecraft.core.State");
+                        var stateGetId = stateClass.getMethod("getId");
+                        for (Object state : states) {
+                            UUID stateId = (UUID) stateGetId.invoke(state);
+                            if (stateId.equals(entityId)) return true;
+                        }
+                    }
+                }
+                case "CITY" -> {
+                    var getAllStates = nationClass.getMethod("getAllStates");
+                    @SuppressWarnings("unchecked")
+                    var states = (java.util.Collection<?>) getAllStates.invoke(nation);
+                    if (states != null) {
+                        var stateClass = Class.forName("com.statecraft.core.State");
+                        var stateGetAllCities = stateClass.getMethod("getAllCities");
+                        var cityClass = Class.forName("com.statecraft.core.City");
+                        var cityGetId = cityClass.getMethod("getId");
+                        for (Object state : states) {
+                            @SuppressWarnings("unchecked")
+                            var cities = (java.util.Collection<?>) stateGetAllCities.invoke(state);
+                            if (cities != null) {
+                                for (Object city : cities) {
+                                    UUID cityId = (UUID) cityGetId.invoke(city);
+                                    if (cityId.equals(entityId)) return true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.debug("Error checking membership: {}", e.getMessage());
+        }
+        return false;
+    }
+
+    /**
+     * Get the display name for a government entity by type and UUID
+     */
+    public static String getEntityName(String entityType, UUID entityId) {
+        if (!initialized) return "Unknown";
+
+        try {
+            var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
+            var getInstance = managerClass.getMethod("getInstance");
+            var claimManager = getInstance.invoke(null);
+
+            switch (entityType) {
+                case "NATION" -> {
+                    var getAllNations = managerClass.getMethod("getAllNations");
+                    @SuppressWarnings("unchecked")
+                    var nations = (java.util.Collection<?>) getAllNations.invoke(claimManager);
+                    if (nations != null) {
+                        var nationClass = Class.forName("com.statecraft.core.Nation");
+                        var getId = nationClass.getMethod("getId");
+                        var getName = nationClass.getMethod("getName");
+                        for (Object nation : nations) {
+                            if (entityId.equals(getId.invoke(nation))) {
+                                return (String) getName.invoke(nation);
+                            }
+                        }
+                    }
+                }
+                case "STATE" -> {
+                    var getAllNations = managerClass.getMethod("getAllNations");
+                    @SuppressWarnings("unchecked")
+                    var nations = (java.util.Collection<?>) getAllNations.invoke(claimManager);
+                    if (nations != null) {
+                        var nationClass = Class.forName("com.statecraft.core.Nation");
+                        var getAllStates = nationClass.getMethod("getAllStates");
+                        var stateClass = Class.forName("com.statecraft.core.State");
+                        var stateGetId = stateClass.getMethod("getId");
+                        var stateGetName = stateClass.getMethod("getName");
+                        for (Object nation : nations) {
+                            @SuppressWarnings("unchecked")
+                            var states = (java.util.Collection<?>) getAllStates.invoke(nation);
+                            if (states != null) {
+                                for (Object state : states) {
+                                    if (entityId.equals(stateGetId.invoke(state))) {
+                                        return (String) stateGetName.invoke(state);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                case "CITY" -> {
+                    var getAllNations = managerClass.getMethod("getAllNations");
+                    @SuppressWarnings("unchecked")
+                    var nations = (java.util.Collection<?>) getAllNations.invoke(claimManager);
+                    if (nations != null) {
+                        var nationClass = Class.forName("com.statecraft.core.Nation");
+                        var getAllStates = nationClass.getMethod("getAllStates");
+                        var stateClass = Class.forName("com.statecraft.core.State");
+                        var stateGetAllCities = stateClass.getMethod("getAllCities");
+                        var cityClass = Class.forName("com.statecraft.core.City");
+                        var cityGetId = cityClass.getMethod("getId");
+                        var cityGetName = cityClass.getMethod("getName");
+                        for (Object nation : nations) {
+                            @SuppressWarnings("unchecked")
+                            var states = (java.util.Collection<?>) getAllStates.invoke(nation);
+                            if (states != null) {
+                                for (Object state : states) {
+                                    @SuppressWarnings("unchecked")
+                                    var cities = (java.util.Collection<?>) stateGetAllCities.invoke(state);
+                                    if (cities != null) {
+                                        for (Object city : cities) {
+                                            if (entityId.equals(cityGetId.invoke(city))) {
+                                                return (String) cityGetName.invoke(city);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.debug("Error getting entity name: {}", e.getMessage());
+        }
+        return "Unknown";
+    }
+
+    /**
      * Get nation balance
      */
     public static double getNationBalance(ServerPlayer player) {

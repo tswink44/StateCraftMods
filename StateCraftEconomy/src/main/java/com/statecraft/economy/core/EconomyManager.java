@@ -38,9 +38,9 @@ public class EconomyManager {
     // Cached currency values: itemId -> value
     private Map<String, Double> currencyValues = new HashMap<>();
 
-    // Transaction history (limited)
+    // Transaction history (limited) - keyed by account UUID (player, nation, state, or city)
     private final Map<UUID, List<Transaction>> transactionHistory = new ConcurrentHashMap<>();
-    private static final int MAX_HISTORY_PER_PLAYER = 50;
+    private static final int MAX_HISTORY_PER_ACCOUNT = 100;
 
     private boolean dirty = false;
 
@@ -448,6 +448,7 @@ public class EconomyManager {
         }
 
         nationTreasury.subtract(amount);
+        recordAccountTransaction(nationId, Transaction.Type.WITHDRAWAL, amount, null, description, null, "System");
         dirty = true;
 
         return new TransactionResult(true, "Withdrew " + formatCurrency(amount) + " from nation treasury", nationTreasury.getBalance());
@@ -464,6 +465,7 @@ public class EconomyManager {
 
         BankAccount nationTreasury = getOrCreateNationTreasury(nationId);
         nationTreasury.add(amount);
+        recordAccountTransaction(nationId, Transaction.Type.DEPOSIT, amount, null, description, null, "System");
         dirty = true;
 
         return new TransactionResult(true, "Deposited " + formatCurrency(amount) + " to nation treasury", nationTreasury.getBalance());
@@ -510,6 +512,8 @@ public class EconomyManager {
         nationTreasury.add(amount);
 
         recordTransaction(playerId, Transaction.Type.NATION_DEPOSIT, amount, nationId, description);
+        // Also record on the nation treasury account
+        recordAccountTransaction(nationId, Transaction.Type.DEPOSIT, amount, playerId, description, playerId, null);
         dirty = true;
 
         return new TransactionResult(true, "Deposited " + formatCurrency(amount) + " to nation treasury", playerAccount.getBalance());
@@ -527,6 +531,8 @@ public class EconomyManager {
         playerAccount.add(amount);
 
         recordTransaction(playerId, Transaction.Type.NATION_WITHDRAWAL, amount, nationId, description);
+        // Also record on the nation treasury account
+        recordAccountTransaction(nationId, Transaction.Type.WITHDRAWAL, amount, playerId, description, playerId, null);
         dirty = true;
 
         return new TransactionResult(true, "Withdrew " + formatCurrency(amount) + " from nation treasury", nationTreasury.getBalance());
@@ -568,19 +574,51 @@ public class EconomyManager {
     // ==================== Transaction History ====================
 
     private void recordTransaction(UUID playerId, Transaction.Type type, double amount, UUID otherId, String description) {
-        List<Transaction> history = transactionHistory.computeIfAbsent(playerId, k -> new ArrayList<>());
+        recordTransaction(playerId, type, amount, otherId, description, null, null);
+    }
 
-        Transaction tx = new Transaction(type, amount, otherId, description, System.currentTimeMillis());
+    /**
+     * Record a transaction with initiator info (who performed the action)
+     */
+    public void recordTransaction(UUID accountId, Transaction.Type type, double amount, UUID otherId, String description,
+                                   UUID initiatorId, String initiatorName) {
+        List<Transaction> history = transactionHistory.computeIfAbsent(accountId, k -> new ArrayList<>());
+
+        Transaction tx = new Transaction(type, amount, otherId, description, System.currentTimeMillis(), initiatorId, initiatorName);
         history.add(0, tx); // Add at beginning
 
         // Trim history
-        while (history.size() > MAX_HISTORY_PER_PLAYER) {
+        while (history.size() > MAX_HISTORY_PER_ACCOUNT) {
             history.remove(history.size() - 1);
         }
     }
 
+    /**
+     * Record a transaction on a government account (nation/state/city treasury)
+     */
+    public void recordAccountTransaction(UUID accountId, Transaction.Type type, double amount,
+                                          UUID otherId, String description,
+                                          UUID initiatorId, String initiatorName) {
+        recordTransaction(accountId, type, amount, otherId, description, initiatorId, initiatorName);
+    }
+
     public List<Transaction> getTransactionHistory(UUID playerId) {
         return transactionHistory.getOrDefault(playerId, Collections.emptyList());
+    }
+
+    /**
+     * Get the full transaction history map (for persistence)
+     */
+    public Map<UUID, List<Transaction>> getTransactionHistoryMap() {
+        return transactionHistory;
+    }
+
+    /**
+     * Load transaction history from saved data
+     */
+    public void setTransactionHistory(Map<UUID, List<Transaction>> history) {
+        transactionHistory.clear();
+        transactionHistory.putAll(history);
     }
 
     // ==================== Utilities ====================

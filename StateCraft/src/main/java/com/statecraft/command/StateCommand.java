@@ -81,6 +81,9 @@ public class StateCommand {
                 }
             }
 
+            // Check if player is already governor of another state
+            boolean vacantGovernor = ChunkClaimManager.getInstance().isGovernorOfAnyState(player.getUUID());
+
             State state = ChunkClaimManager.getInstance().createState(nation, name, player.getUUID());
             if (state == null) {
                 context.getSource().sendFailure(Component.literal("§cCould not create state. An error occurred."));
@@ -98,7 +101,12 @@ public class StateCommand {
             markDataDirty(context);
             String feeMessage = creationFee > 0 && IntegrationRegistry.hasEconomyIntegration()
                 ? " (Cost: " + IntegrationRegistry.formatCurrency(creationFee) + ")" : "";
-            context.getSource().sendSuccess(() -> Component.literal("§aState §e" + name + "§a created successfully!" + feeMessage), true);
+            if (vacantGovernor) {
+                context.getSource().sendSuccess(() -> Component.literal(
+                    "§aState §e" + name + "§a created with §eVACANT§a governor position! Use /sc appoint to assign a governor." + feeMessage), true);
+            } else {
+                context.getSource().sendSuccess(() -> Component.literal("§aState §e" + name + "§a created successfully!" + feeMessage), true);
+            }
             return 1;
         } catch (Exception e) {
             context.getSource().sendFailure(Component.literal("This command must be run by a player!"));

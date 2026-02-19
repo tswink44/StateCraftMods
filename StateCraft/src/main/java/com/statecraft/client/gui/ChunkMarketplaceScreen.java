@@ -24,10 +24,10 @@ import java.util.Map;
  */
 public class ChunkMarketplaceScreen extends StateCraftScreen {
 
-    private static final int MAP_SIZE = 11; // 11x11 chunk grid
-    private static final int MIN_CELL_SIZE = 8;
-    private static final int MAX_CELL_SIZE = 14;
-    private static final int TERRAIN_RESOLUTION = 4; // Sample 4x4 points per chunk
+    private static final int MAP_SIZE = 17; // 17x17 chunk grid (matches ChunkMapScreen)
+    private static final int MIN_CELL_SIZE = 12;
+    private static final int MAX_CELL_SIZE = 24;
+    private static final int TERRAIN_RESOLUTION = 8; // Sample 8x8 points per chunk for better building clarity
 
     // View mode
     private boolean mapMode = false;
@@ -88,7 +88,7 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
 
     @Override
     protected boolean shouldRenderTitle() {
-        return false;
+        return true;
     }
 
     @Override
@@ -101,19 +101,19 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
 
         // Calculate appropriate dimensions based on mode
         if (mapMode) {
-            // For map mode, calculate cell size to fit screen
-            int availableWidth = this.width - 100; // margins
-            int availableHeight = this.height - 100; // margins
+            // Match ChunkMapScreen sizing approach
+            int availableWidth = this.width - 80 - 80; // 80 for margins, 80 for sidebar buttons
+            int availableHeight = this.height - 100; // 100 for top/bottom margins
 
-            // Calculate max cell size that fits, accounting for sidebar
-            int maxCellsWidth = (availableWidth - SIDEBAR_WIDTH - 30) / MAP_SIZE;
-            int maxCellsHeight = (availableHeight - 60) / MAP_SIZE;
+            // Calculate max cell size that fits
+            int maxCellsWidth = availableWidth / MAP_SIZE;
+            int maxCellsHeight = availableHeight / MAP_SIZE;
             cellSize = Math.min(maxCellsWidth, maxCellsHeight);
             cellSize = Math.max(MIN_CELL_SIZE, Math.min(MAX_CELL_SIZE, cellSize));
 
             // Set GUI size based on calculated cell size
             this.guiWidth = MAP_SIZE * cellSize + SIDEBAR_WIDTH + 30;
-            this.guiHeight = MAP_SIZE * cellSize + 70;
+            this.guiHeight = MAP_SIZE * cellSize + 80;
         } else {
             // List mode - compact size
             this.guiWidth = 280;
@@ -146,21 +146,15 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
 
                 long key = chunkKey(chunkX, chunkZ);
                 int[] colors = new int[TERRAIN_RESOLUTION * TERRAIN_RESOLUTION];
+                int blockStep = 16 / TERRAIN_RESOLUTION;
 
                 try {
-                    ChunkAccess chunk = level.getChunk(chunkX, chunkZ);
-                    int step = 16 / TERRAIN_RESOLUTION;
-
                     for (int z = 0; z < TERRAIN_RESOLUTION; z++) {
                         for (int x = 0; x < TERRAIN_RESOLUTION; x++) {
-                            int worldX = chunkX * 16 + x * step + step / 2;
-                            int worldZ = chunkZ * 16 + z * step + step / 2;
+                            int worldX = chunkX * 16 + x * blockStep + blockStep / 2;
+                            int worldZ = chunkZ * 16 + z * blockStep + blockStep / 2;
 
-                            int height = chunk.getHeight(Heightmap.Types.WORLD_SURFACE, x * step, z * step);
-                            BlockPos pos = new BlockPos(worldX, height, worldZ);
-                            BlockState state = level.getBlockState(pos);
-
-                            colors[z * TERRAIN_RESOLUTION + x] = getBlockColor(state);
+                            colors[z * TERRAIN_RESOLUTION + x] = getTerrainColor(level, worldX, worldZ);
                         }
                     }
                 } catch (Exception e) {
@@ -176,82 +170,149 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
         terrainLoaded = true;
     }
 
+    private int getTerrainColor(Level level, int x, int z) {
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(x, 0, z);
+        int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING, x, z);
+        pos.setY(y);
+
+        // Go down to find first non-air block
+        while (y > level.getMinBuildHeight() && level.getBlockState(pos).isAir()) {
+            y--;
+            pos.setY(y);
+        }
+
+        BlockState state = level.getBlockState(pos);
+        return getBlockColor(state);
+    }
+
     private int getBlockColor(BlockState state) {
+        // Map common blocks to colors - improved for building clarity (matches ChunkMapScreen)
         var block = state.getBlock();
-
-        // Grass and plants
-        if (block == Blocks.GRASS_BLOCK) return 0xFF7CBD6B;
-        if (block == Blocks.GRASS || block == Blocks.TALL_GRASS) return 0xFF7CBD6B;
-        if (block == Blocks.FERN || block == Blocks.LARGE_FERN) return 0xFF6AAA5A;
-
-        // Trees
-        if (block == Blocks.OAK_LEAVES || block == Blocks.BIRCH_LEAVES) return 0xFF4A8A3A;
-        if (block == Blocks.SPRUCE_LEAVES) return 0xFF3A6A3A;
-        if (block == Blocks.DARK_OAK_LEAVES) return 0xFF3A5A3A;
-        if (block == Blocks.JUNGLE_LEAVES || block == Blocks.ACACIA_LEAVES) return 0xFF5A9A4A;
-        if (block == Blocks.MANGROVE_LEAVES) return 0xFF4A7A4A;
-
-        // Wood
-        if (state.is(net.minecraft.tags.BlockTags.LOGS)) return 0xFF8B6914;
+        String blockId = state.getBlock().getDescriptionId();
 
         // Water
-        if (block == Blocks.WATER) return 0xFF3F76E4;
+        if (block == Blocks.WATER) return 0xFF3B6FCF;
 
-        // Sand and beaches
-        if (block == Blocks.SAND) return 0xFFDBCFA3;
-        if (block == Blocks.RED_SAND) return 0xFFA95821;
+        // Lava
+        if (block == Blocks.LAVA) return 0xFFFF6600;
 
-        // Stone and ores
-        if (block == Blocks.STONE || block == Blocks.ANDESITE || block == Blocks.DIORITE || block == Blocks.GRANITE)
-            return 0xFF808080;
+        // === BUILDING MATERIALS ===
+        if (blockId.contains("stone_brick") || blockId.contains("stonebrick")) return 0xFFB0B8C0;
+        if (block == Blocks.BRICKS || blockId.contains("brick")) return 0xFFB54A32;
 
-        // Dirt variants
-        if (block == Blocks.DIRT || block == Blocks.COARSE_DIRT || block == Blocks.ROOTED_DIRT) return 0xFF8B6914;
-        if (block == Blocks.PODZOL) return 0xFF6B5344;
-        if (block == Blocks.MUD || block == Blocks.MUDDY_MANGROVE_ROOTS) return 0xFF4A4A4A;
+        // Concrete
+        if (blockId.contains("concrete")) {
+            if (blockId.contains("white")) return 0xFFE8E8E8;
+            if (blockId.contains("black")) return 0xFF252525;
+            if (blockId.contains("gray") && !blockId.contains("light")) return 0xFF4B4B4B;
+            if (blockId.contains("light_gray")) return 0xFF9B9B9B;
+            if (blockId.contains("red")) return 0xFFA02722;
+            if (blockId.contains("orange")) return 0xFFE06101;
+            if (blockId.contains("yellow")) return 0xFFF9C628;
+            if (blockId.contains("lime")) return 0xFF70B919;
+            if (blockId.contains("green")) return 0xFF5D7C15;
+            if (blockId.contains("cyan")) return 0xFF157788;
+            if (blockId.contains("light_blue")) return 0xFF3AB3DA;
+            if (blockId.contains("blue")) return 0xFF3C44AA;
+            if (blockId.contains("purple")) return 0xFF8932B8;
+            if (blockId.contains("magenta")) return 0xFFC74EBD;
+            if (blockId.contains("pink")) return 0xFFF38BAA;
+            if (blockId.contains("brown")) return 0xFF835432;
+            return 0xFFC0C0C0;
+        }
+
+        // Wool and carpet
+        if (blockId.contains("wool") || blockId.contains("carpet")) {
+            if (blockId.contains("white")) return 0xFFE9ECEC;
+            if (blockId.contains("black")) return 0xFF1D1D21;
+            return 0xFFD0D0D0;
+        }
+
+        // Glass
+        if (blockId.contains("glass")) return 0xFF88D4E5;
+
+        // Planks
+        if (blockId.contains("plank")) {
+            if (blockId.contains("oak")) return 0xFFB8945F;
+            if (blockId.contains("spruce")) return 0xFF73533B;
+            if (blockId.contains("birch")) return 0xFFD5C98D;
+            if (blockId.contains("jungle")) return 0xFFB58857;
+            if (blockId.contains("acacia")) return 0xFFA85D3D;
+            if (blockId.contains("dark_oak")) return 0xFF4F3218;
+            if (blockId.contains("crimson")) return 0xFF7E3A56;
+            if (blockId.contains("warped")) return 0xFF2B6963;
+            return 0xFFAA8855;
+        }
+
+        // Other building materials
+        if (blockId.contains("polished")) return 0xFFA0A0A0;
+        if (blockId.contains("quartz")) return 0xFFECE5DD;
+        if (blockId.contains("prismarine")) return 0xFF63A495;
+        if (blockId.contains("purpur")) return 0xFFA77BA7;
+        if (blockId.contains("nether_brick")) return 0xFF2C151A;
+
+        // Metal/gem blocks
+        if (blockId.contains("copper") && !blockId.contains("ore")) {
+            if (blockId.contains("oxidized")) return 0xFF52A384;
+            if (blockId.contains("weathered")) return 0xFF6C9C6E;
+            if (blockId.contains("exposed")) return 0xFF9F7B65;
+            return 0xFFBF6B46;
+        }
+        if (block == Blocks.IRON_BLOCK) return 0xFFDBDBDB;
+        if (block == Blocks.GOLD_BLOCK) return 0xFFF9D627;
+        if (block == Blocks.DIAMOND_BLOCK) return 0xFF6BE8E4;
+        if (block == Blocks.EMERALD_BLOCK) return 0xFF17DD62;
+
+        // === NATURAL BLOCKS ===
+        if (block == Blocks.GRASS_BLOCK || block == Blocks.TALL_GRASS ||
+            block == Blocks.FERN || blockId.contains("grass") || blockId.contains("fern")) {
+            return 0xFF4A7A35;
+        }
+
+        if (blockId.contains("leaves")) return 0xFF3A6025;
+        if (blockId.contains("log") || blockId.contains("wood")) return 0xFF5B4028;
+
+        // Sand
+        if (block == Blocks.SAND || block == Blocks.SANDSTONE) return 0xFFD4C483;
+        if (block == Blocks.RED_SAND || block == Blocks.RED_SANDSTONE) return 0xFFB5633A;
+
+        // Stone types
+        if (block == Blocks.STONE || block == Blocks.COBBLESTONE ||
+            block == Blocks.ANDESITE || block == Blocks.DIORITE || block == Blocks.GRANITE) {
+            return 0xFF707070;
+        }
+        if (block == Blocks.DEEPSLATE || block == Blocks.COBBLED_DEEPSLATE) return 0xFF454545;
+
+        // Dirt
+        if (block == Blocks.DIRT || block == Blocks.COARSE_DIRT ||
+            block == Blocks.ROOTED_DIRT || block == Blocks.PODZOL) {
+            return 0xFF7A5B3B;
+        }
 
         // Snow and ice
-        if (block == Blocks.SNOW_BLOCK || block == Blocks.SNOW || block == Blocks.POWDER_SNOW) return 0xFFFFFFFF;
-        if (block == Blocks.ICE || block == Blocks.PACKED_ICE || block == Blocks.BLUE_ICE) return 0xFFA0D0FF;
-
-        // Building blocks
-        if (block == Blocks.COBBLESTONE || block == Blocks.MOSSY_COBBLESTONE) return 0xFF6A6A6A;
-        if (block == Blocks.STONE_BRICKS || block == Blocks.MOSSY_STONE_BRICKS) return 0xFF7A7A7A;
-        if (state.is(net.minecraft.tags.BlockTags.PLANKS)) return 0xFFBC9862;
-        if (block == Blocks.BRICKS) return 0xFF9B5B4A;
+        if (block == Blocks.SNOW || block == Blocks.SNOW_BLOCK || block == Blocks.POWDER_SNOW) return 0xFFEEEEEE;
+        if (block == Blocks.ICE || block == Blocks.PACKED_ICE || block == Blocks.BLUE_ICE) return 0xFFAADDFF;
 
         // Terracotta
-        if (block == Blocks.TERRACOTTA) return 0xFF9E6246;
+        if (blockId.contains("terracotta")) return 0xFF9B5B3B;
 
-        // Concrete and wool (common colors)
-        if (block == Blocks.WHITE_CONCRETE || block == Blocks.WHITE_WOOL) return 0xFFCFCFCF;
-        if (block == Blocks.BLACK_CONCRETE || block == Blocks.BLACK_WOOL) return 0xFF1D1D21;
-        if (block == Blocks.RED_CONCRETE || block == Blocks.RED_WOOL) return 0xFF8E2121;
-        if (block == Blocks.BLUE_CONCRETE || block == Blocks.BLUE_WOOL) return 0xFF35399D;
+        // Nether
+        if (block == Blocks.NETHERRACK) return 0xFF6B3030;
+        if (block == Blocks.SOUL_SAND || block == Blocks.SOUL_SOIL) return 0xFF5B4B3B;
+        if (block == Blocks.CRIMSON_NYLIUM) return 0xFF8B2020;
+        if (block == Blocks.WARPED_NYLIUM) return 0xFF207B7B;
 
-        // Nether blocks
-        if (block == Blocks.NETHERRACK) return 0xFF6F3535;
-        if (block == Blocks.CRIMSON_NYLIUM) return 0xFF941818;
-        if (block == Blocks.WARPED_NYLIUM) return 0xFF167E86;
+        // End
+        if (block == Blocks.END_STONE) return 0xFFDBD8A0;
 
-        // End blocks
-        if (block == Blocks.END_STONE) return 0xFFDBDEA1;
-
-        // Paths
+        // Misc
+        if (block == Blocks.MYCELIUM) return 0xFF8B7B8B;
+        if (block == Blocks.GRAVEL) return 0xFF9B9B9B;
         if (block == Blocks.DIRT_PATH) return 0xFF9B7D4A;
-
-        // Flowers (generic bright color)
         if (state.is(net.minecraft.tags.BlockTags.FLOWERS)) return 0xFFFF6B6B;
-
-        // Crops
         if (block == Blocks.WHEAT) return 0xFFD4B364;
         if (block == Blocks.CARROTS || block == Blocks.POTATOES) return 0xFF4CAF50;
 
-        // Mycelium
-        if (block == Blocks.MYCELIUM) return 0xFF8B7B8B;
-
-        // Gravel
-        if (block == Blocks.GRAVEL) return 0xFF9B9B9B;
 
         // Default
         return 0xFF707070;
@@ -271,12 +332,13 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
             ).pos(guiLeft + guiWidth - 75, guiTop + 6).size(65, 14).build());
 
             if (mapMode) {
-                // Terrain toggle button (in map mode) - moved to bottom left
-                String terrainText = terrainMode ? "Grid Mode" : "Terrain";
+                // Terrain toggle button (in map mode) - positioned like ChunkMapScreen
+                int mapRight = guiLeft + 15 + MAP_SIZE * cellSize + 10;
+                String terrainText = terrainMode ? "Grid" : "Terrain";
                 toggleTerrainButton = this.addRenderableWidget(Button.builder(
                     Component.literal(terrainText),
                     btn -> toggleTerrain()
-                ).pos(guiLeft + 10, guiTop + guiHeight - 48).size(70, 16).build());
+                ).pos(mapRight, guiTop + 35).size(60, 18).build());
             }
 
             if (!mapMode) {
@@ -292,11 +354,11 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
                 ).pos(guiLeft + guiWidth - 25, guiTop + guiHeight - 55).size(18, 14).build());
             }
 
-            // Back button
+            // Back button (matches ChunkMapScreen Close button)
             this.addRenderableWidget(Button.builder(
                 Component.literal("Back"),
                 btn -> goBack()
-            ).pos(centerX - 40, guiTop + guiHeight - 26).size(80, 18).build());
+            ).pos(guiLeft + guiWidth / 2 - 40, guiTop + guiHeight - 28).size(80, 20).build());
         } else {
             // Buy confirmation popup buttons
             int popupCenterX = this.width / 2;
@@ -338,13 +400,8 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
             return;
         }
 
-        int startX = guiLeft + 10;
-
-        // Render title row
-        graphics.fill(startX, guiTop + 6, guiLeft + guiWidth - 80, guiTop + 20, 0xAA808080);
-        graphics.fill(startX, guiTop + 6, guiLeft + guiWidth - 80, guiTop + 7, 0xFF505050);
-        graphics.fill(startX, guiTop + 19, guiLeft + guiWidth - 80, guiTop + 20, 0xFF404040);
-        graphics.drawString(this.font, "Chunk Marketplace", startX + 4, guiTop + 9, 0xFFFFFFFF);
+        // Divider under title (matches ChunkMapScreen)
+        renderDivider(graphics, guiLeft + 10, guiTop + 22, guiWidth - 20);
 
         if (!dataLoaded) {
             graphics.drawCenteredString(this.font, "Loading...", this.width / 2, guiTop + 100, 0xFFAAAAAA);
@@ -446,11 +503,11 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
 
     private void renderMapView(GuiGraphics graphics, int mouseX, int mouseY) {
         int mapX = guiLeft + 15;
-        int mapY = guiTop + 28;
+        int mapY = guiTop + 35;
         int mapPixelSize = MAP_SIZE * cellSize;
 
-        // Map background
-        graphics.fill(mapX - 1, mapY - 1, mapX + mapPixelSize + 1, mapY + mapPixelSize + 1, 0xFF222222);
+        // Map background (matches ChunkMapScreen)
+        graphics.fill(mapX - 1, mapY - 1, mapX + mapPixelSize + 1, mapY + mapPixelSize + 1, 0xFF333333);
 
         // Render chunks
         int halfSize = MAP_SIZE / 2;
@@ -507,13 +564,14 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
             }
         }
 
-        // Right sidebar
+        // Right sidebar - positioned below the terrain toggle button
         int sidebarX = mapX + mapPixelSize + 10;
-        int sidebarY = mapY;
+        int sidebarY = mapY + 24; // Below terrain toggle button
         int sidebarWidth = guiLeft + guiWidth - sidebarX - 10;
+        int sidebarHeight = mapPixelSize - 24;
 
         // Sidebar background
-        graphics.fill(sidebarX, sidebarY, sidebarX + sidebarWidth, sidebarY + 160, 0xAA333344);
+        graphics.fill(sidebarX, sidebarY, sidebarX + sidebarWidth, sidebarY + sidebarHeight, 0xAA333344);
 
         // Sidebar title
         graphics.drawString(this.font, "§6Selected", sidebarX + 4, sidebarY + 4, 0xFFFFFFFF);
@@ -568,13 +626,24 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
             graphics.drawString(this.font, "§8to select", sidebarX + 4, sidebarY + 32, 0xFF888888);
         }
 
-        // Legend at bottom
-        int legendY = mapY + mapPixelSize + 4;
-        graphics.fill(guiLeft + 100, legendY, guiLeft + 110, legendY + 10, 0xFF3366CC);
-        graphics.drawString(this.font, "§7Gov", guiLeft + 115, legendY + 1, 0xFFCCCCCC);
+        // Legend at bottom (matches ChunkMapScreen style)
+        int legendX = mapX;
+        int legendY = mapY + mapPixelSize + 6;
+        graphics.drawString(this.font, "§7Legend:", legendX, legendY, 0xFFCCCCCC);
+        legendY += 12;
+        graphics.fill(legendX, legendY + 1, legendX + 8, legendY + 9, 0xFF3366CC);
+        graphics.drawString(this.font, "§9Gov", legendX + 12, legendY, 0xFFCCCCCC);
 
-        graphics.fill(guiLeft + 150, legendY, guiLeft + 160, legendY + 10, 0xFFCCAA33);
-        graphics.drawString(this.font, "§7Player", guiLeft + 165, legendY + 1, 0xFFCCCCCC);
+        graphics.fill(legendX + 50, legendY + 1, legendX + 58, legendY + 9, 0xFFCCAA33);
+        graphics.drawString(this.font, "§ePlayer", legendX + 62, legendY, 0xFFCCCCCC);
+
+        // Coordinates display
+        graphics.drawString(this.font, "§7Pos: §f" + playerChunkX + ", " + playerChunkZ,
+                           guiLeft + guiWidth - 90, guiTop + 24, 0xFFFFFFFF);
+
+        // Mode indicator
+        String modeText = terrainMode ? "§aTerrain" : "§7Grid";
+        graphics.drawString(this.font, modeText, guiLeft + 15, guiTop + 24, 0xFFFFFFFF);
     }
 
     private void renderTerrainChunk(GuiGraphics graphics, int cellX, int cellY, long key) {
@@ -618,7 +687,7 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
 
     private boolean handleMapClick(double mouseX, double mouseY) {
         int mapX = guiLeft + 15;
-        int mapY = guiTop + 28;
+        int mapY = guiTop + 35;
         int mapWidth = MAP_SIZE * cellSize;
         int mapHeight = MAP_SIZE * cellSize;
 

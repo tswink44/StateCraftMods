@@ -30,6 +30,7 @@ public class CityInfoScreen extends StateCraftScreen {
     private int residentCount = 0;
     private boolean isMayor = false;
     private boolean canManage = false;
+    private boolean canAppoint = false;
     private String flagUrl = "";
     private List<String> residentNames = new ArrayList<>();
 
@@ -44,6 +45,7 @@ public class CityInfoScreen extends StateCraftScreen {
     private Button settingsButton;
     private Button mailButton;
     private Button leaveButton;
+    private Button appointButton;
 
     @Override
     protected void init() {
@@ -53,26 +55,34 @@ public class CityInfoScreen extends StateCraftScreen {
         NetworkHandler.sendToServer(new RequestCityDetailsPacket(nationName, stateName, cityName));
 
         int buttonY = guiTop + guiHeight - 30;
-        int buttonWidth = 38;
-        int spacing = 42;
+        int buttonWidth = 35;
+        int spacing = 39;
+        int startX = guiLeft + 6;
 
         // Claim Chunk button
         this.addRenderableWidget(createButton(
-            guiLeft + 6, buttonY, buttonWidth + 5, 20,
+            startX, buttonY, buttonWidth, 20,
             Component.literal("Claim"),
             btn -> claimCurrentChunk()
         ));
 
         // View Map button
         this.addRenderableWidget(createButton(
-            guiLeft + 6 + spacing + 5, buttonY, buttonWidth, 20,
+            startX + spacing, buttonY, buttonWidth, 20,
             Component.literal("Map"),
             btn -> openChunkMap()
         ));
 
+        // Chunks list button
+        this.addRenderableWidget(createButton(
+            startX + spacing * 2, buttonY, buttonWidth + 5, 20,
+            Component.literal("Chunks"),
+            btn -> openChunksScreen()
+        ));
+
         // Mailbox button - hidden until we know permissions
         mailButton = this.addRenderableWidget(createButton(
-            guiLeft + 6 + (spacing + 5) * 2, buttonY, buttonWidth, 20,
+            startX + spacing * 3 + 5, buttonY, buttonWidth, 20,
             Component.literal("§eMail"),
             btn -> openMailboxScreen()
         ));
@@ -80,15 +90,23 @@ public class CityInfoScreen extends StateCraftScreen {
 
         // Settings button - hidden until we know permissions
         settingsButton = this.addRenderableWidget(createButton(
-            guiLeft + 6 + (spacing + 5) * 3, buttonY, buttonWidth, 20,
+            startX + spacing * 3 + 5, buttonY, buttonWidth, 20,
             Component.literal("Settings"),
             btn -> openSettingsScreen()
         ));
         settingsButton.visible = false;
 
+        // Appoint Mayor button - hidden until we know if player is governor/leader
+        appointButton = this.addRenderableWidget(createButton(
+            startX + spacing * 4 + 5, buttonY, buttonWidth, 20,
+            Component.literal("§bAppoint"),
+            btn -> openAppointScreen()
+        ));
+        appointButton.visible = false;
+
         // Leave button - hidden until we know permissions (not mayor)
         leaveButton = this.addRenderableWidget(createButton(
-            guiLeft + 6 + (spacing + 5) * 4, buttonY, buttonWidth, 20,
+            startX + spacing * 4 + 5, buttonY, buttonWidth, 20,
             Component.literal("§cLeave"),
             btn -> leaveCity()
         ));
@@ -186,8 +204,18 @@ public class CityInfoScreen extends StateCraftScreen {
         this.minecraft.setScreen(new ChunkMapScreen());
     }
 
+    private void openChunksScreen() {
+        this.minecraft.setScreen(new CityChunksScreen(nationName, stateName, cityName));
+    }
+
     private void openSettingsScreen() {
         this.minecraft.setScreen(new CitySettingsScreen(nationName, stateName, cityName));
+    }
+
+    private void openAppointScreen() {
+        this.minecraft.setScreen(new AppointScreen(nationName, stateName, cityName,
+            AppointScreen.AppointType.MAYOR,
+            () -> this.minecraft.setScreen(new CityInfoScreen(nationName, stateName, cityName))));
     }
 
     private void openMailboxScreen() {
@@ -235,6 +263,17 @@ public class CityInfoScreen extends StateCraftScreen {
     // Called by network handler when data is received
     public void updateData(String mayorName, int chunkCount, int residentCount,
                            boolean isMayor, boolean canManage, List<String> residentNames, String flagUrl) {
+        updateData(mayorName, chunkCount, residentCount, isMayor, canManage, residentNames, flagUrl, false);
+    }
+
+    public void updateData(String mayorName, int chunkCount, int residentCount,
+                           boolean isMayor, boolean canManage, List<String> residentNames, boolean canAppoint) {
+        updateData(mayorName, chunkCount, residentCount, isMayor, canManage, residentNames, "", canAppoint);
+    }
+
+    public void updateData(String mayorName, int chunkCount, int residentCount,
+                           boolean isMayor, boolean canManage, List<String> residentNames, String flagUrl,
+                           boolean canAppoint) {
         this.mayorName = mayorName;
         this.chunkCount = chunkCount;
         this.residentCount = residentCount;
@@ -242,6 +281,7 @@ public class CityInfoScreen extends StateCraftScreen {
         this.canManage = canManage;
         this.residentNames = residentNames;
         this.flagUrl = flagUrl != null ? flagUrl : "";
+        this.canAppoint = canAppoint;
         this.dataLoaded = true;
 
         // Show settings and mail buttons only for mayors/managers
@@ -251,16 +291,20 @@ public class CityInfoScreen extends StateCraftScreen {
         if (mailButton != null) {
             mailButton.visible = canManage;
         }
-        // Show leave button for non-mayors
+        // Show appoint button for governors/leaders (they can appoint mayors)
+        if (appointButton != null) {
+            appointButton.visible = canAppoint;
+        }
+        // Show leave button for non-mayors (but not if appoint is shown in same slot)
         if (leaveButton != null) {
-            leaveButton.visible = !isMayor;
+            leaveButton.visible = !isMayor && !canAppoint;
         }
     }
 
     // Overload for backward compatibility
     public void updateData(String mayorName, int chunkCount, int residentCount,
                            boolean isMayor, boolean canManage, List<String> residentNames) {
-        updateData(mayorName, chunkCount, residentCount, isMayor, canManage, residentNames, "");
+        updateData(mayorName, chunkCount, residentCount, isMayor, canManage, residentNames, "", false);
     }
 }
 

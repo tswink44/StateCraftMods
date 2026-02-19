@@ -210,6 +210,16 @@ public class ElectionManager {
             return "You are already registered as a candidate";
         }
 
+        // Check if player is already leader of a different nation
+        if (!playerId.equals(nation.getLeaderId())) {
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            if (manager.isLeaderOfAnyNation(playerId)) {
+                String existingNation = manager.getLeaderNationName(playerId);
+                return "You are already the leader of " + (existingNation != null ? existingNation : "another nation") +
+                    "! You can only lead one nation at a time.";
+            }
+        }
+
         // Check and charge candidate fee
         double fee = StateCraftConfig.ELECTION_CANDIDATE_FEE.get();
         if (fee > 0 && IntegrationRegistry.hasEconomyIntegration()) {
@@ -378,10 +388,10 @@ public class ElectionManager {
         if (nation.isMember(playerId)) return true;
 
         for (State state : nation.getAllStates()) {
-            if (state.getGovernorId().equals(playerId)) return true;
+            if (playerId.equals(state.getGovernorId())) return true;
             if (state.isCitizen(playerId)) return true;
             for (City city : state.getAllCities()) {
-                if (city.getMayorId().equals(playerId)) return true;
+                if (playerId.equals(city.getMayorId())) return true;
                 if (city.isResident(playerId)) return true;
             }
         }

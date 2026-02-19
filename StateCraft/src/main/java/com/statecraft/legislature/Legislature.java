@@ -46,7 +46,8 @@ public class Legislature {
     /**
      * Get all legislature members who can vote
      * Includes: All State Governors + Nation Officers
-     * Excludes: Nation Leader (unless they're a Governor, then they're still excluded from voting)
+     * Excludes: Nation Leader (unless the nation has fewer than 3 total members,
+     *           in which case the leader can also vote and propose legislation)
      */
     public Set<UUID> getVotingMembers(Nation nation) {
         Set<UUID> members = new HashSet<>();
@@ -56,6 +57,7 @@ public class Legislature {
         for (State state : nation.getAllStates()) {
             UUID governorId = state.getGovernorId();
             // Governors can vote, but Leader cannot vote even if they're a Governor
+            // (unless nation is small - handled below)
             if (!governorId.equals(leaderId)) {
                 members.add(governorId);
             }
@@ -68,13 +70,22 @@ public class Legislature {
             }
         }
 
+        // If the nation has fewer than 3 members, the leader can also vote and propose legislation
+        if (nation.getAllMembers().size() < 3) {
+            members.add(leaderId);
+        }
+
         return members;
     }
 
     /**
-     * Check if a player can propose bills (must be a voting member)
+     * Check if a player can propose bills (must be a voting member or the nation leader)
      */
     public boolean canProposeBill(Nation nation, UUID playerId) {
+        // Nation leader can propose bills
+        if (playerId.equals(nation.getLeaderId())) {
+            return true;
+        }
         return getVotingMembers(nation).contains(playerId);
     }
 

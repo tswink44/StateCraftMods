@@ -84,10 +84,8 @@ public class ChunkClaimManager {
     public boolean hasPermission(UUID playerId, ChunkPos pos, ResourceKey<Level> dimension, Permission permission) {
         ClaimedChunk chunk = getClaimedChunk(pos, dimension);
         if (chunk == null) {
-            // WILDERNESS PROTECTION: Unclaimed chunks are protected
-            // Only nation members can interact in wilderness (to encourage claiming)
-            Nation playerNation = getPlayerNation(playerId);
-            return playerNation != null;
+            // WILDERNESS: Unclaimed chunks are not protected - anyone can interact
+            return true;
         }
 
         // Get the player's role in this chunk's hierarchy
@@ -128,11 +126,96 @@ public class ChunkClaimManager {
         return cityRole;
     }
 
+    // ==================== Leadership Role Checks ====================
+
+    /**
+     * Check if a player is already the leader of any nation.
+     * A player can only be the leader of one nation at a time.
+     */
+    public boolean isLeaderOfAnyNation(UUID playerId) {
+        for (Nation nation : nations.values()) {
+            if (playerId.equals(nation.getLeaderId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if a player is already the governor of any state.
+     * A player can only be the governor of one state at a time.
+     */
+    public boolean isGovernorOfAnyState(UUID playerId) {
+        for (State state : stateIndex.values()) {
+            if (playerId.equals(state.getGovernorId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if a player is already the mayor of any city.
+     * A player can only be the mayor of one city at a time.
+     */
+    public boolean isMayorOfAnyCity(UUID playerId) {
+        for (City city : cityIndex.values()) {
+            if (playerId.equals(city.getMayorId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Get the name of the nation where a player is leader, or null.
+     */
+    @Nullable
+    public String getLeaderNationName(UUID playerId) {
+        for (Nation nation : nations.values()) {
+            if (playerId.equals(nation.getLeaderId())) {
+                return nation.getName();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Get the name of the state where a player is governor, or null.
+     */
+    @Nullable
+    public String getGovernorStateName(UUID playerId) {
+        for (State state : stateIndex.values()) {
+            if (playerId.equals(state.getGovernorId())) {
+                return state.getName();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Get the name of the city where a player is mayor, or null.
+     */
+    @Nullable
+    public String getMayorCityName(UUID playerId) {
+        for (City city : cityIndex.values()) {
+            if (playerId.equals(city.getMayorId())) {
+                return city.getName();
+            }
+        }
+        return null;
+    }
+
     // ==================== Nation Operations ====================
 
     public Nation createNation(String name, UUID leaderId) {
         // Check if player already has a nation
         if (playerNationIndex.containsKey(leaderId)) {
+            return null;
+        }
+
+        // Check if player is already the leader of another nation
+        if (isLeaderOfAnyNation(leaderId)) {
             return null;
         }
 
@@ -279,7 +362,13 @@ public class ChunkClaimManager {
     // ==================== State Operations ====================
 
     public State createState(Nation nation, String name, UUID governorId) {
-        State state = nation.createState(name, governorId);
+        // If governorId is provided and already governor elsewhere, create with vacant governor
+        UUID actualGovernorId = governorId;
+        if (governorId != null && isGovernorOfAnyState(governorId)) {
+            actualGovernorId = null; // Create with vacant governor position
+        }
+
+        State state = nation.createState(name, actualGovernorId);
         if (state != null) {
             stateIndex.put(state.getId(), state);
             markDirty();
@@ -300,7 +389,13 @@ public class ChunkClaimManager {
     // ==================== City Operations ====================
 
     public City createCity(State state, String name, UUID mayorId) {
-        City city = state.createCity(name, mayorId);
+        // If mayorId is provided and already mayor elsewhere, create with vacant mayor
+        UUID actualMayorId = mayorId;
+        if (mayorId != null && isMayorOfAnyCity(mayorId)) {
+            actualMayorId = null; // Create with vacant mayor position
+        }
+
+        City city = state.createCity(name, actualMayorId);
         if (city != null) {
             cityIndex.put(city.getId(), city);
             markDirty();

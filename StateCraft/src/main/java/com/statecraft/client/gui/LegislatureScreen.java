@@ -505,14 +505,14 @@ public class LegislatureScreen extends StateCraftScreen {
         this.totalMembers = totalMembers;
         this.dataLoaded = true;
 
-        // Enable propose button if player is a legislature member
+        // Enable propose button if player is a legislature member or nation leader
         // Find and enable the propose button
         this.children().stream()
             .filter(w -> w instanceof Button)
             .map(w -> (Button)w)
             .filter(b -> b.getMessage().getString().contains("Propose"))
             .findFirst()
-            .ifPresent(b -> b.active = isLegislatureMember);
+            .ifPresent(b -> b.active = isLegislatureMember || isNationLeader);
 
         // Rebuild bill action buttons with new data
         rebuildBillButtons();

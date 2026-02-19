@@ -17,9 +17,16 @@ public class SyncStateDetailsPacket {
     private final boolean isGovernor;
     private final boolean canManage;
     private final List<String> cityNames;
+    private final boolean isNationLeader;
 
     public SyncStateDetailsPacket(String stateName, String governorName, int cityCount, int chunkCount,
                                    int memberCount, boolean isGovernor, boolean canManage, List<String> cityNames) {
+        this(stateName, governorName, cityCount, chunkCount, memberCount, isGovernor, canManage, cityNames, false);
+    }
+
+    public SyncStateDetailsPacket(String stateName, String governorName, int cityCount, int chunkCount,
+                                   int memberCount, boolean isGovernor, boolean canManage, List<String> cityNames,
+                                   boolean isNationLeader) {
         this.stateName = stateName;
         this.governorName = governorName;
         this.cityCount = cityCount;
@@ -28,6 +35,7 @@ public class SyncStateDetailsPacket {
         this.isGovernor = isGovernor;
         this.canManage = canManage;
         this.cityNames = cityNames;
+        this.isNationLeader = isNationLeader;
     }
 
     public SyncStateDetailsPacket(FriendlyByteBuf buf) {
@@ -43,6 +51,7 @@ public class SyncStateDetailsPacket {
         for (int i = 0; i < count; i++) {
             cityNames.add(buf.readUtf(64));
         }
+        this.isNationLeader = buf.readBoolean();
     }
 
     public void encode(FriendlyByteBuf buf) {
@@ -57,6 +66,7 @@ public class SyncStateDetailsPacket {
         for (String name : cityNames) {
             buf.writeUtf(name, 64);
         }
+        buf.writeBoolean(isNationLeader);
     }
 
     public String getStateName() { return stateName; }
@@ -67,5 +77,6 @@ public class SyncStateDetailsPacket {
     public boolean isGovernor() { return isGovernor; }
     public boolean canManage() { return canManage; }
     public List<String> getCityNames() { return cityNames; }
+    public boolean isNationLeader() { return isNationLeader; }
 }
 

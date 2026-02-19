@@ -45,6 +45,8 @@ public enum PolicyType {
         "Minimum payment for jobs (roleplay enforcement)"),
     CHUNK_CLAIM_FEE("Chunk Claim Fee", Category.ECONOMY, 0, 1000000, ValueType.CURRENCY,
         "Fee cities must pay to claim each chunk"),
+    EMINENT_DOMAIN("Eminent Domain", Category.ECONOMY, 0, 0, ValueType.CHUNK_TARGET,
+        "Repossess a privately owned chunk. Owner receives 10x the tax valuation from nation treasury."),
 
     // Constitutional policies (require constitutional amendment to change)
     LEADER_TERM_DURATION("Leader Term Duration", Category.CONSTITUTIONAL, 1, 365, ValueType.INTEGER,
@@ -109,6 +111,14 @@ public enum PolicyType {
                 case TEXT:
                 case NATION_TARGET:
                     return value != null && !value.trim().isEmpty();
+                case CHUNK_TARGET:
+                    // Format: "chunkX,chunkZ,dimension"
+                    if (value == null || value.trim().isEmpty()) return false;
+                    String[] parts = value.split(",", 3);
+                    if (parts.length < 3) return false;
+                    Integer.parseInt(parts[0].trim());
+                    Integer.parseInt(parts[1].trim());
+                    return !parts[2].trim().isEmpty();
                 default:
                     return false;
             }
@@ -141,7 +151,8 @@ public enum PolicyType {
         PERCENTAGE,
         CURRENCY,
         TEXT,
-        NATION_TARGET
+        NATION_TARGET,
+        CHUNK_TARGET
     }
 }
 

@@ -154,6 +154,19 @@ public class NetworkHandler {
             .consumerMainThread(NetworkHandler::handleSyncChunkValuationClient)
             .add();
 
+        // Account activity packets
+        CHANNEL.messageBuilder(RequestAccountActivityPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestAccountActivityPacket::encode)
+            .decoder(RequestAccountActivityPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestAccountActivity)
+            .add();
+
+        CHANNEL.messageBuilder(SyncAccountActivityPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncAccountActivityPacket::encode)
+            .decoder(SyncAccountActivityPacket::new)
+            .consumerMainThread(NetworkHandler::handleSyncAccountActivityClient)
+            .add();
+
         StateCraftEconomy.LOGGER.info("StateCraft Economy network packets registered");
     }
 
@@ -190,6 +203,11 @@ public class NetworkHandler {
 
     private static void handleSyncChunkValuationClient(SyncChunkValuationPacket packet, Supplier<NetworkEvent.Context> ctx) {
         DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientPacketHandler.handleSyncChunkValuation(packet, ctx));
+        ctx.get().setPacketHandled(true);
+    }
+
+    private static void handleSyncAccountActivityClient(SyncAccountActivityPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientPacketHandler.handleSyncAccountActivity(packet, ctx));
         ctx.get().setPacketHandled(true);
     }
 

@@ -14,7 +14,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Screen showing detailed nation information
+ * Screen showing detailed nation information using horizontal info rows
+ * and a simplified button bar at the bottom.
  */
 public class NationInfoScreen extends StateCraftScreen {
 
@@ -41,19 +42,22 @@ public class NationInfoScreen extends StateCraftScreen {
     private List<String> allyNames = new ArrayList<>();
     private List<String> enemyNames = new ArrayList<>();
 
+    // Buttons that have conditional visibility
+    private Button managementButton;
+    private Button leaveButton;
+    private Button joinButton;
+
     public NationInfoScreen(String nationName) {
         super(Component.literal("Nation: " + nationName));
         this.nationName = nationName;
-        this.guiWidth = 300; this.guiHeight = 240;
+        this.guiWidth = 280;
+        this.guiHeight = 230;
     }
 
-    private Button settingsButton;
-    private Button mailButton;
-    private Button leaveButton;
-    private Button joinButton;
-    private Button legislatureButton;
-    private Button viewLawsButton;
-    private Button contractsButton;
+    @Override
+    protected boolean shouldRenderTitle() {
+        return false; // We render our own title row
+    }
 
     @Override
     protected void init() {
@@ -62,81 +66,35 @@ public class NationInfoScreen extends StateCraftScreen {
         // Request detailed data
         NetworkHandler.sendToServer(new RequestNationDetailsPacket(nationName));
 
-        // Two rows of buttons
-        int row1Y = guiTop + guiHeight - 52;
-        int row2Y = guiTop + guiHeight - 28;
-        int buttonWidth = 55;
-        int buttonSpacing = 60;
+        // Bottom button bar
+        int buttonY = guiTop + guiHeight - 28;
         int startX = guiLeft + 10;
 
-        // === Row 1: Navigation buttons (always visible) ===
-
-        // Members button
+        // Members button (always visible)
         this.addRenderableWidget(createButton(
-            startX, row1Y, buttonWidth, 20,
+            startX, buttonY, 55, 20,
             Component.literal("Members"),
             btn -> openMembersScreen()
         ));
 
-        // States button
+        // States button (always visible)
         this.addRenderableWidget(createButton(
-            startX + buttonSpacing, row1Y, buttonWidth, 20,
+            startX + 58, buttonY, 50, 20,
             Component.literal("States"),
             btn -> openStatesScreen()
         ));
 
-        // Elections button
-        this.addRenderableWidget(createButton(
-            startX + buttonSpacing * 2, row1Y, buttonWidth, 20,
-            Component.literal("§6Vote"),
-            btn -> openElectionsScreen()
+        // Management button (visible for members)
+        managementButton = this.addRenderableWidget(createButton(
+            startX + 111, buttonY, 72, 20,
+            Component.literal("§bManagement"),
+            btn -> openManagementScreen()
         ));
+        managementButton.visible = false; // Hidden until we know if member
 
-        // View Laws button (visible to all members)
-        viewLawsButton = this.addRenderableWidget(createButton(
-            startX + buttonSpacing * 3, row1Y, buttonWidth, 20,
-            Component.literal("§fView Laws"),
-            btn -> openViewLawsScreen()
-        ));
-        viewLawsButton.visible = false; // Hidden until we know if member
-
-        // Legislature button (only for legislature members - governors/officers)
-        legislatureButton = this.addRenderableWidget(createButton(
-            startX + buttonSpacing * 4, row1Y, buttonWidth, 20,
-            Component.literal("§bPropose"),
-            btn -> openLegislatureScreen()
-        ));
-        legislatureButton.visible = false;
-
-        // Contracts button (visible to all members)
-        contractsButton = this.addRenderableWidget(createButton(
-            startX + buttonSpacing * 3, row2Y, buttonWidth, 20,
-            Component.literal("§eContracts"),
-            btn -> openContractsScreen()
-        ));
-        contractsButton.visible = false; // Hidden until we know if member
-
-        // === Row 2: Admin/action buttons ===
-
-        // Mailbox button (admin only) - hidden until we know permissions
-        mailButton = this.addRenderableWidget(createButton(
-            startX, row2Y, buttonWidth, 20,
-            Component.literal("§eMail"),
-            btn -> openMailboxScreen()
-        ));
-        mailButton.visible = false;
-
-        // Settings button (admin only) - hidden until we know permissions
-        settingsButton = this.addRenderableWidget(createButton(
-            startX + buttonSpacing, row2Y, buttonWidth, 20,
-            Component.literal("Settings"),
-            btn -> openSettingsScreen()
-        ));
-        settingsButton.visible = false;
-
-        // Leave button (hidden for leaders) - hidden until we know permissions
+        // Leave button (visible for members who are not the leader)
         leaveButton = this.addRenderableWidget(createButton(
-            startX + buttonSpacing * 2, row2Y, buttonWidth, 20,
+            startX + 186, buttonY, 40, 20,
             Component.literal("§cLeave"),
             btn -> leaveNation()
         ));
@@ -144,7 +102,7 @@ public class NationInfoScreen extends StateCraftScreen {
 
         // Join button (only visible for non-members when nation is open)
         joinButton = this.addRenderableWidget(createButton(
-            startX + buttonSpacing * 2, row2Y, buttonWidth, 20,
+            startX + 186, buttonY, 40, 20,
             Component.literal("§aJoin"),
             btn -> joinNation()
         ));
@@ -152,7 +110,7 @@ public class NationInfoScreen extends StateCraftScreen {
 
         // Back button (always visible, right side)
         this.addRenderableWidget(createButton(
-            guiLeft + guiWidth - 55, row2Y, 45, 20,
+            guiLeft + guiWidth - 50, buttonY, 40, 20,
             Component.literal("Back"),
             btn -> goBack()
         ));
@@ -163,99 +121,107 @@ public class NationInfoScreen extends StateCraftScreen {
         // Render flag in top-left corner above the title bar
         renderFlag(graphics);
 
-        // Divider under title
-        renderDivider(graphics, guiLeft + 10, guiTop + 22, guiWidth - 20);
+        int startX = guiLeft + 10;
+        int rowEnd = guiLeft + guiWidth - 10;
+        int rowHeight = 14;
+
+        // Title row
+        graphics.fill(startX, guiTop + 6, rowEnd, guiTop + 20, 0xAA808080);
+        graphics.fill(startX, guiTop + 6, rowEnd, guiTop + 7, 0xFF505050);
+        graphics.fill(startX, guiTop + 19, rowEnd, guiTop + 20, 0xFF404040);
+        graphics.drawString(this.font, "Nation: " + nationName, startX + 4, guiTop + 9, 0xFFFFFF00);
 
         if (!dataLoaded) {
-            graphics.drawCenteredString(this.font, "§7Loading...", this.width / 2, guiTop + 100, COLOR_TEXT);
+            graphics.drawCenteredString(this.font, "§7Loading...", this.width / 2, guiTop + 80, COLOR_TEXT);
             return;
         }
 
-        int leftCol = guiLeft + 15;
-        int rightCol = guiLeft + guiWidth / 2 + 10;
-        int y = guiTop + 32;
-        int lineHeight = 12;
+        int y = guiTop + 24;
+        int spacing = 16;
 
-        // Left column - Basic Info
-        graphics.drawString(this.font, "§6Basic Info", leftCol, y, COLOR_PRIMARY);
-        y += lineHeight + 2;
+        // Leader row
+        renderInfoRow(graphics, startX, rowEnd, y, "§7Leader", "§f" + leaderName);
+        y += spacing;
 
-        graphics.drawString(this.font, "§7Leader: §f" + leaderName, leftCol, y, COLOR_TEXT);
-        y += lineHeight;
+        // Status row
+        String statusText = isOpen ? "§aOpen" : "§cClosed";
+        renderInfoRow(graphics, startX, rowEnd, y, "§7Status", statusText);
+        y += spacing;
 
-        graphics.drawString(this.font, "§7Status: " + (isOpen ? "§aOpen" : "§cClosed"), leftCol, y, COLOR_TEXT);
-        y += lineHeight;
+        // Balance row
+        renderInfoRow(graphics, startX, rowEnd, y, "§7Treasury", "§e" + formatBalance(balance));
+        y += spacing;
 
-        graphics.drawString(this.font, "§7Balance: §e" + formatBalance(balance), leftCol, y, COLOR_TEXT);
-        y += lineHeight + 8;
+        // Gap
+        y += 4;
 
-        // Statistics
-        graphics.drawString(this.font, "§6Statistics", leftCol, y, COLOR_PRIMARY);
-        y += lineHeight + 2;
+        // Statistics section header
+        graphics.fill(startX, y, rowEnd, y + rowHeight, 0xAA606060);
+        graphics.fill(startX, y, rowEnd, y + 1, 0xFF505050);
+        graphics.fill(startX, y + rowHeight - 1, rowEnd, y + rowHeight, 0xFF404040);
+        graphics.drawString(this.font, "§6Statistics", startX + 4, y + 3, COLOR_PRIMARY);
+        y += spacing;
 
-        graphics.drawString(this.font, "§7States: §f" + stateCount + "/" + maxStates, leftCol, y, COLOR_TEXT);
-        y += lineHeight;
+        // States row
+        renderInfoRow(graphics, startX, rowEnd, y, "§7States", "§f" + stateCount + "/" + maxStates);
+        y += spacing;
 
-        graphics.drawString(this.font, "§7Cities: §f" + cityCount, leftCol, y, COLOR_TEXT);
-        y += lineHeight;
+        // Cities row
+        renderInfoRow(graphics, startX, rowEnd, y, "§7Cities", "§f" + cityCount);
+        y += spacing;
 
-        graphics.drawString(this.font, "§7Chunks: §f" + chunkCount, leftCol, y, COLOR_TEXT);
-        y += lineHeight;
+        // Chunks row
+        renderInfoRow(graphics, startX, rowEnd, y, "§7Chunks", "§f" + chunkCount);
+        y += spacing;
 
-        graphics.drawString(this.font, "§7Members: §f" + memberCount, leftCol, y, COLOR_TEXT);
+        // Members row
+        renderInfoRow(graphics, startX, rowEnd, y, "§7Members", "§f" + memberCount);
+        y += spacing;
 
-        // Right column - Diplomacy & States
-        y = guiTop + 32;
+        // Gap
+        y += 4;
 
-        graphics.drawString(this.font, "§6States", rightCol, y, COLOR_PRIMARY);
-        y += lineHeight + 2;
+        // Diplomacy section header
+        graphics.fill(startX, y, rowEnd, y + rowHeight, 0xAA606060);
+        graphics.fill(startX, y, rowEnd, y + 1, 0xFF505050);
+        graphics.fill(startX, y + rowHeight - 1, rowEnd, y + rowHeight, 0xFF404040);
+        graphics.drawString(this.font, "§6Diplomacy", startX + 4, y + 3, COLOR_PRIMARY);
+        y += spacing;
 
-        if (stateNames.isEmpty()) {
-            graphics.drawString(this.font, "§8No states yet", rightCol, y, 0xFFAAAAAA);
-            y += lineHeight;
-        } else {
-            for (int i = 0; i < Math.min(3, stateNames.size()); i++) {
-                graphics.drawString(this.font, "§7• §f" + stateNames.get(i), rightCol, y, COLOR_TEXT);
-                y += lineHeight;
-            }
-            if (stateNames.size() > 3) {
-                graphics.drawString(this.font, "§8  +" + (stateNames.size() - 3) + " more...", rightCol, y, 0xFFAAAAAA);
-                y += lineHeight;
-            }
-        }
+        // Allies row
+        String alliesText = allyNames.isEmpty() ? "§8None" : "§a" + String.join(", ", allyNames);
+        renderInfoRow(graphics, startX, rowEnd, y, "§7Allies", alliesText);
+        y += spacing;
 
-        y += 6;
-        graphics.drawString(this.font, "§6Diplomacy", rightCol, y, COLOR_PRIMARY);
-        y += lineHeight + 2;
+        // Enemies row
+        String enemiesText = enemyNames.isEmpty() ? "§8None" : "§c" + String.join(", ", enemyNames);
+        renderInfoRow(graphics, startX, rowEnd, y, "§7Enemies", enemiesText);
+    }
 
-        // Allies
-        graphics.drawString(this.font, "§aAllies: §f" + (allyNames.isEmpty() ? "None" : String.join(", ", allyNames)), rightCol, y, COLOR_TEXT);
-        y += lineHeight;
-
-        // Enemies
-        graphics.drawString(this.font, "§cEnemies: §f" + (enemyNames.isEmpty() ? "None" : String.join(", ", enemyNames)), rightCol, y, COLOR_TEXT);
-
-        // Description at bottom (above the two button rows)
-        if (!description.isEmpty()) {
-            int descY = guiTop + guiHeight - 75;
-            renderDivider(graphics, guiLeft + 10, descY - 5, guiWidth - 20);
-
-            // Truncate if too long
-            String desc = description;
-            if (this.font.width(desc) > guiWidth - 30) {
-                desc = this.font.plainSubstrByWidth(desc, guiWidth - 40) + "...";
-            }
-            graphics.drawString(this.font, "§7" + desc, leftCol, descY, 0xFFCCCCCC);
-        }
+    /**
+     * Render a single info row with a label on the left and value on the right
+     */
+    private void renderInfoRow(GuiGraphics graphics, int left, int right, int y, String label, String value) {
+        int rowHeight = 14;
+        // Row background
+        graphics.fill(left, y, right, y + rowHeight, 0xAA808080);
+        // Top/bottom borders
+        graphics.fill(left, y, right, y + 1, 0xFF505050);
+        graphics.fill(left, y + rowHeight - 1, right, y + rowHeight, 0xFF404040);
+        // Label (left-aligned)
+        graphics.drawString(this.font, label, left + 4, y + 3, COLOR_TEXT);
+        // Value (right-aligned)
+        int valueWidth = this.font.width(value.replaceAll("§.", ""));
+        graphics.drawString(this.font, value, right - valueWidth - 6, y + 3, COLOR_TEXT);
     }
 
     private String formatBalance(long balance) {
         if (balance >= 1000000) {
-            return String.format("%.1fM", balance / 1000000.0);
+            return String.format("$%.1fM", balance / 1000000.0);
         } else if (balance >= 1000) {
-            return String.format("%.1fK", balance / 1000.0);
+            return String.format("$%.1fK", balance / 1000.0);
         }
-        return String.valueOf(balance);
+        return "$" + balance;
     }
 
     private void openMembersScreen() {
@@ -266,41 +232,17 @@ public class NationInfoScreen extends StateCraftScreen {
         this.minecraft.setScreen(new StatesListScreen(nationName));
     }
 
-    private void openElectionsScreen() {
-        this.minecraft.setScreen(new ElectionScreen());
-    }
-
-    private void openLegislatureScreen() {
-        this.minecraft.setScreen(new LegislatureScreen(nationName));
-    }
-
-    private void openViewLawsScreen() {
-        this.minecraft.setScreen(new NationLawsScreen(nationName));
-    }
-
-    private void openContractsScreen() {
-        this.minecraft.setScreen(new ContractsMainScreen(nationName));
-    }
-
-    private void openSettingsScreen() {
-        this.minecraft.setScreen(new NationSettingsScreen(nationName));
-    }
-
-    private void openMailboxScreen() {
-        this.minecraft.setScreen(new GovMailboxScreen(GovMailboxScreen.EntityType.NATION, nationName, ""));
+    private void openManagementScreen() {
+        this.minecraft.setScreen(new CountryManagementScreen(nationName, isAdmin, isMember, isLeader));
     }
 
     private void leaveNation() {
-        // Send leave request to server
         NetworkHandler.sendToServer(LeaveCitizenshipPacket.leaveNation(nationName));
-        // Return to nations list
         this.minecraft.setScreen(new NationsListScreen());
     }
 
     private void joinNation() {
-        // Send join request to server
         NetworkHandler.sendToServer(JoinCitizenshipPacket.joinNation(nationName));
-        // Refresh the screen to show updated status
         this.minecraft.setScreen(new NationInfoScreen(nationName));
     }
 
@@ -319,17 +261,13 @@ public class NationInfoScreen extends StateCraftScreen {
         if (flagUrl != null && !flagUrl.isEmpty()) {
             ResourceLocation texture = FlagTextureManager.getInstance().getFlagTexture(flagUrl);
             if (texture != null) {
-                // Draw the flag texture
                 graphics.blit(texture, flagX, flagY, 0, 0, FLAG_SIZE, FLAG_SIZE, FLAG_SIZE, FLAG_SIZE);
             } else if (FlagTextureManager.getInstance().isLoading(flagUrl)) {
-                // Show loading indicator
                 graphics.drawCenteredString(this.font, "...", flagX + FLAG_SIZE / 2, flagY + FLAG_SIZE / 2 - 4, 0xFF888888);
             } else {
-                // No flag or failed to load
                 graphics.drawCenteredString(this.font, "?", flagX + FLAG_SIZE / 2, flagY + FLAG_SIZE / 2 - 4, 0xFF666666);
             }
         } else {
-            // No flag URL set - show placeholder
             graphics.drawCenteredString(this.font, "N", flagX + FLAG_SIZE / 2, flagY + FLAG_SIZE / 2 - 4, 0xFF4A90D9);
         }
     }
@@ -363,24 +301,9 @@ public class NationInfoScreen extends StateCraftScreen {
         this.flagUrl = flagUrl != null ? flagUrl : "";
         this.dataLoaded = true;
 
-        // Show settings and mail buttons only for admins
-        if (settingsButton != null) {
-            settingsButton.visible = isAdmin;
-        }
-        if (mailButton != null) {
-            mailButton.visible = isAdmin;
-        }
-        // Show legislature button for members (actual access is checked server-side)
-        if (legislatureButton != null) {
-            legislatureButton.visible = isMember;
-        }
-        // Show view laws button for all members
-        if (viewLawsButton != null) {
-            viewLawsButton.visible = isMember;
-        }
-        // Show contracts button for all members
-        if (contractsButton != null) {
-            contractsButton.visible = isMember;
+        // Show management button for members
+        if (managementButton != null) {
+            managementButton.visible = isMember;
         }
         // Show leave button only for members who are not the leader
         if (leaveButton != null) {

@@ -27,13 +27,28 @@ public class Transaction {
     private final UUID otherId; // Other player/entity involved (nullable)
     private final String description;
     private final long timestamp;
+    private final UUID initiatorId;   // Who initiated this transaction (nullable)
+    private final String initiatorName; // Display name of initiator (nullable)
 
+    /**
+     * Legacy constructor (no initiator info)
+     */
     public Transaction(Type type, double amount, UUID otherId, String description, long timestamp) {
+        this(type, amount, otherId, description, timestamp, null, null);
+    }
+
+    /**
+     * Full constructor with initiator tracking
+     */
+    public Transaction(Type type, double amount, UUID otherId, String description, long timestamp,
+                       UUID initiatorId, String initiatorName) {
         this.type = type;
         this.amount = amount;
         this.otherId = otherId;
         this.description = description;
         this.timestamp = timestamp;
+        this.initiatorId = initiatorId;
+        this.initiatorName = initiatorName;
     }
 
     public Type getType() {
@@ -54,6 +69,14 @@ public class Transaction {
 
     public long getTimestamp() {
         return timestamp;
+    }
+
+    public UUID getInitiatorId() {
+        return initiatorId;
+    }
+
+    public String getInitiatorName() {
+        return initiatorName;
     }
 
     public boolean isIncoming() {
