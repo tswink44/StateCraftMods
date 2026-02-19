@@ -238,7 +238,7 @@ public class EconomyManager {
         }
 
         BankAccount account = getOrCreateAccount(playerId);
-        account.subtract(amount);
+        account.forceSubtract(amount);
         recordTransaction(playerId, Transaction.Type.WITHDRAWAL, amount, null, "[FORCED] " + description);
         dirty = true;
 

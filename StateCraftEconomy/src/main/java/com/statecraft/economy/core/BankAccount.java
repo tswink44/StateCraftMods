@@ -57,7 +57,7 @@ public class BankAccount {
     }
 
     public void setBalance(double balance) {
-        this.balance = Math.max(0, balance);
+        this.balance = balance;
     }
 
     public void add(double amount) {
@@ -72,6 +72,16 @@ public class BankAccount {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Force subtract an amount, allowing the balance to go negative.
+     * Used for mandatory payments like taxes where non-payment has consequences.
+     */
+    public void forceSubtract(double amount) {
+        if (amount > 0) {
+            this.balance -= amount;
+        }
     }
 
     public long getLastInterestTime() {
