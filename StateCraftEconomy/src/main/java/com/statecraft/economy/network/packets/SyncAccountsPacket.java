@@ -45,8 +45,8 @@ public class SyncAccountsPacket {
 
     /**
      * Information about an available account
-     * @param type PERSONAL, NATION, STATE, or CITY
-     * @param name Display name (e.g., player name, nation name)
+     * @param type PERSONAL, NATION, STATE, CITY, or COMPANY
+     * @param name Display name (e.g., player name, nation name, company name)
      * @param id Unique identifier for the account
      * @param balance Current balance
      */
@@ -57,6 +57,8 @@ public class SyncAccountsPacket {
                 case "NATION" -> "Nation: " + name;
                 case "STATE" -> "State: " + name;
                 case "CITY" -> "City: " + name;
+                case "COMPANY" -> "Company: " + name;
+                case "BANK_DEPOSIT" -> "Bank: " + name;
                 default -> name;
             };
         }

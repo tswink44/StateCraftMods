@@ -172,6 +172,32 @@ public class ServerPacketHandler {
                 accounts.addAll(govAccounts);
             }
 
+            // Add company accounts the player can manage (founder or officer)
+            var companyManager = com.statecraft.economy.company.CompanyManager.getInstance();
+            for (var company : companyManager.getPlayerManagedCompanies(player.getUUID())) {
+                double companyBalance = manager.getCompanyBalance(company.getId());
+                accounts.add(new SyncAccountsPacket.AccountInfo(
+                    "COMPANY",
+                    company.getName(),
+                    company.getId().toString(),
+                    companyBalance
+                ));
+            }
+
+            // Add bank deposit accounts (banks where the player is a member)
+            var bankManager = com.statecraft.economy.company.BankManager.getInstance();
+            for (var bank : bankManager.getPlayerBanks(player.getUUID())) {
+                var company = companyManager.getCompany(bank.getCompanyId());
+                String bankName = company != null ? company.getName() : "Bank";
+                double depositorBalance = bank.getDepositorBalance(player.getUUID());
+                accounts.add(new SyncAccountsPacket.AccountInfo(
+                    "BANK_DEPOSIT",
+                    bankName,
+                    bank.getCompanyId().toString(),
+                    depositorBalance
+                ));
+            }
+
             NetworkHandler.sendToPlayer(new SyncAccountsPacket(accounts), player);
         });
         ctx.get().setPacketHandled(true);
@@ -502,9 +528,25 @@ public class ServerPacketHandler {
             // Get transaction history for this account
             java.util.List<com.statecraft.economy.core.Transaction> transactions = manager.getTransactionHistory(accountUUID);
 
-            // Convert to activity entries
+            // Get current account balance to compute running balances.
+            // Transactions are newest-first, so we start from the current balance
+            // and work backwards: each entry's running balance is the balance AFTER
+            // that transaction occurred.
+            double currentBalance;
+            switch (accountType) {
+                case "PERSONAL" -> currentBalance = manager.getBalance(accountUUID);
+                case "NATION" -> currentBalance = manager.getNationTreasuryBalance(accountUUID);
+                case "STATE" -> currentBalance = manager.getGovernmentBalance("state", accountUUID);
+                case "CITY" -> currentBalance = manager.getGovernmentBalance("city", accountUUID);
+                default -> currentBalance = 0;
+            }
+
+            // Convert to activity entries with running balance
             java.util.List<SyncAccountActivityPacket.ActivityEntry> entries = new java.util.ArrayList<>();
             boolean isGovAccount = !"PERSONAL".equals(accountType);
+
+            // Track the running balance as we walk newest-to-oldest
+            double runningBal = currentBalance;
 
             for (com.statecraft.economy.core.Transaction tx : transactions) {
                 String initiatorName = tx.getInitiatorName() != null ? tx.getInitiatorName() : "";
@@ -520,13 +562,16 @@ public class ServerPacketHandler {
                 boolean incoming;
                 if (isGovAccount) {
                     incoming = switch (tx.getType()) {
-                        case TAX, DEPOSIT, TRANSFER_IN, SALE -> true;
-                        case WITHDRAWAL, TRANSFER_OUT, FEE, PURCHASE, NATION_DEPOSIT -> false;
+                        case TAX, DEPOSIT, TRANSFER_IN, SALE, IMPORT_TARIFF -> true;
+                        case WITHDRAWAL, TRANSFER_OUT, FEE, PURCHASE, NATION_DEPOSIT, MARKETPLACE_PURCHASE -> false;
                         default -> tx.isIncoming();
                     };
                 } else {
                     incoming = tx.isIncoming();
                 }
+
+                // The running balance at this point is the balance AFTER this transaction
+                double balanceAfter = runningBal;
 
                 entries.add(new SyncAccountActivityPacket.ActivityEntry(
                     tx.getType().name(),
@@ -534,11 +579,33 @@ public class ServerPacketHandler {
                     tx.getDescription(),
                     tx.getTimestamp(),
                     initiatorName,
-                    incoming
+                    incoming,
+                    balanceAfter
                 ));
+
+                // Walk backwards: undo this transaction to get the balance before it
+                if (incoming) {
+                    runningBal -= tx.getAmount();
+                } else {
+                    runningBal += tx.getAmount();
+                }
             }
 
             NetworkHandler.sendToPlayer(new SyncAccountActivityPacket(accountType, accountName, accountId, entries), player);
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    /**
+     * Handle request for marketplace listings
+     */
+    public static void handleRequestMarketListings(RequestMarketListingsPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            com.statecraft.economy.network.packets.MarketplaceActionPacket.sendListingsToPlayer(
+                player, packet.getSearchQuery(), packet.isMyListingsOnly());
         });
         ctx.get().setPacketHandled(true);
     }

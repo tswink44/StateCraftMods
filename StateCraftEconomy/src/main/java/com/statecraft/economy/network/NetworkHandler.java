@@ -167,6 +167,31 @@ public class NetworkHandler {
             .consumerMainThread(NetworkHandler::handleSyncAccountActivityClient)
             .add();
 
+        // Marketplace packets
+        CHANNEL.messageBuilder(OpenMarketplaceScreenPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(OpenMarketplaceScreenPacket::encode)
+            .decoder(OpenMarketplaceScreenPacket::new)
+            .consumerMainThread(NetworkHandler::handleOpenMarketplaceScreenClient)
+            .add();
+
+        CHANNEL.messageBuilder(RequestMarketListingsPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestMarketListingsPacket::encode)
+            .decoder(RequestMarketListingsPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestMarketListings)
+            .add();
+
+        CHANNEL.messageBuilder(SyncMarketListingsPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncMarketListingsPacket::encode)
+            .decoder(SyncMarketListingsPacket::new)
+            .consumerMainThread(NetworkHandler::handleSyncMarketListingsClient)
+            .add();
+
+        CHANNEL.messageBuilder(MarketplaceActionPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(MarketplaceActionPacket::encode)
+            .decoder(MarketplaceActionPacket::new)
+            .consumerMainThread(MarketplaceActionPacket::handle)
+            .add();
+
         StateCraftEconomy.LOGGER.info("StateCraft Economy network packets registered");
     }
 
@@ -208,6 +233,16 @@ public class NetworkHandler {
 
     private static void handleSyncAccountActivityClient(SyncAccountActivityPacket packet, Supplier<NetworkEvent.Context> ctx) {
         DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientPacketHandler.handleSyncAccountActivity(packet, ctx));
+        ctx.get().setPacketHandled(true);
+    }
+
+    private static void handleOpenMarketplaceScreenClient(OpenMarketplaceScreenPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientPacketHandler.handleOpenMarketplaceScreen(packet, ctx));
+        ctx.get().setPacketHandled(true);
+    }
+
+    private static void handleSyncMarketListingsClient(SyncMarketListingsPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientPacketHandler.handleSyncMarketListings(packet, ctx));
         ctx.get().setPacketHandled(true);
     }
 

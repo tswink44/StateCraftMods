@@ -118,6 +118,25 @@ public class CountryManagementScreen extends StateCraftScreen {
                 btn -> openContractsScreen()
             ));
             row++;
+
+            // Diplomacy
+            rows.add(new MenuRow("§d🌐 Diplomacy", startY + spacing * row, true));
+            this.addRenderableWidget(createCompactArrowButton(
+                arrowX, startY + spacing * row, arrowBtnWidth, buttonHeight,
+                btn -> openDiplomacyScreen()
+            ));
+            row++;
+
+            // Executive Actions (leader only)
+            if (isLeader) {
+                row++; // Gap before leader section
+                rows.add(new MenuRow("§c⚡ Executive Actions", startY + spacing * row, true));
+                this.addRenderableWidget(createCompactArrowButton(
+                    arrowX, startY + spacing * row, arrowBtnWidth, buttonHeight,
+                    btn -> openExecutiveActionsScreen()
+                ));
+                row++;
+            }
         }
 
         // If not a member, show a message row
@@ -187,6 +206,14 @@ public class CountryManagementScreen extends StateCraftScreen {
 
     private void openContractsScreen() {
         this.minecraft.setScreen(new ContractsMainScreen(nationName));
+    }
+
+    private void openDiplomacyScreen() {
+        this.minecraft.setScreen(new DiplomacyScreen(nationName));
+    }
+
+    private void openExecutiveActionsScreen() {
+        this.minecraft.setScreen(new ExecutiveActionsScreen(nationName));
     }
 
     private void goBack() {

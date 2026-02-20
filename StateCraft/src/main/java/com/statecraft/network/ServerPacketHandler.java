@@ -178,7 +178,7 @@ public class ServerPacketHandler {
                 nation.getTotalCityCount(),
                 nation.getTotalChunkCount(),
                 nation.getAllMembers().size(),
-                nation.getBalance(),
+                IntegrationRegistry.getNationBalance(nation.getName()),
                 nation.isOpen(),
                 nation.getDescription(),
                 leaderName,
@@ -1310,6 +1310,7 @@ public class ServerPacketHandler {
                         boolean isGovernor = state != null && player.getUUID().equals(state.getGovernorId());
                         boolean isPresident = nation != null && player.getUUID().equals(nation.getLeaderId());
                         boolean isNationAdmin = nation != null && nation.isAdmin(player.getUUID());
+
                         canManagePermits = isMayor || isGovernor || isPresident || isNationAdmin;
                     }
                 }
@@ -2235,8 +2236,8 @@ public class ServerPacketHandler {
                     city.removeResident(playerId);
 
                     // Mark data dirty
-                    if (player.level() instanceof ServerLevel serverLevel) {
-                        NationSavedData.get(serverLevel).markForSave();
+                    if (player.level() instanceof ServerLevel level) {
+                        NationSavedData.get(level).markForSave();
                     }
 
                     NetworkHandler.sendToPlayer(new ActionResultPacket(true,
@@ -3552,9 +3553,9 @@ public class ServerPacketHandler {
                     bill.getStatus().name(),
                     bill.getYesVotes(),
                     bill.getNoVotes(),
-                    bill.getAbstainVotes(),
-                    0, // timeRemaining
-                    bill.getEnactedTime() > 0 ? bill.getEnactedTime() : bill.getVoteEndTime(), // enacted time with fallback
+                    0, // abstainVotes
+                    0L, // timeRemaining
+                    bill.getEnactedTime() > 0 ? bill.getEnactedTime() : bill.getVoteEndTime(), // enactedTime
                     false, // playerHasVoted
                     false, // needsLeaderAction
                     bill.isVetoProof(),
@@ -4037,17 +4038,40 @@ public class ServerPacketHandler {
         List<com.statecraft.legislature.Bill> history = legislature.getBillHistory();
         for (int i = 0; i < Math.min(10, history.size()); i++) {
             com.statecraft.legislature.Bill historyBill = history.get(i);
+
+            // Convert policy changes to string map
+            java.util.Map<String, String> histPolicyChanges = new java.util.HashMap<>();
+            for (java.util.Map.Entry<com.statecraft.legislature.PolicyType, String> entry : historyBill.getPolicyChanges().entrySet()) {
+                histPolicyChanges.put(entry.getKey().getDisplayName(), entry.getValue());
+            }
+
+            // Get full text if this is a custom law
+            String histFullText = "";
+            for (java.util.Map.Entry<com.statecraft.legislature.PolicyType, String> entry : historyBill.getPolicyChanges().entrySet()) {
+                if (entry.getKey() == com.statecraft.legislature.PolicyType.CUSTOM_LAW) {
+                    histFullText = entry.getValue();
+                    break;
+                }
+            }
+
             recentHistory.add(new SyncLegislatureDataPacket.BillSummary(
                 historyBill.getBillId().toString(),
                 historyBill.getBillNumber(),
                 historyBill.getTitle(),
+                historyBill.getDescription(),
                 historyBill.getAuthorName(),
                 historyBill.getStatus().name(),
                 historyBill.getYesVotes(),
                 historyBill.getNoVotes(),
-                0,
-                false,
-                false
+                0, // abstainVotes
+                0L, // timeRemaining
+                historyBill.getEnactedTime() > 0 ? historyBill.getEnactedTime() : historyBill.getVoteEndTime(), // enactedTime
+                false, // playerHasVoted
+                false, // needsLeaderAction
+                historyBill.isVetoProof(),
+                historyBill.isConstitutionalAmendment(),
+                histPolicyChanges,
+                histFullText
             ));
         }
 
@@ -4500,6 +4524,265 @@ public class ServerPacketHandler {
         });
         ctx.get().setPacketHandled(true);
     }
+
+    // ==================== Emergency Power Handlers ====================
+
+    public static void handleRequestEmergencyPowerData(RequestEmergencyPowerDataPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            sendEmergencyPowerData(player, packet.getNationName(), "");
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleInvokeEmergencyPower(InvokeEmergencyPowerPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            com.statecraft.core.Nation nation = ChunkClaimManager.getInstance().getNationByName(packet.getNationName());
+            if (nation == null) {
+                sendEmergencyPowerData(player, packet.getNationName(), "§cNation not found.");
+                return;
+            }
+
+            // Only the leader can invoke emergency powers
+            if (!nation.getLeaderId().equals(player.getUUID())) {
+                sendEmergencyPowerData(player, packet.getNationName(), "§cOnly the nation leader can use executive actions.");
+                return;
+            }
+
+            com.statecraft.legislature.EmergencyPower power;
+            try {
+                power = com.statecraft.legislature.EmergencyPower.valueOf(packet.getPowerName());
+            } catch (IllegalArgumentException e) {
+                sendEmergencyPowerData(player, packet.getNationName(), "§cInvalid emergency power.");
+                return;
+            }
+
+            String result;
+            var manager = com.statecraft.legislature.EmergencyPowerManager.getInstance();
+            if (packet.getAction() == InvokeEmergencyPowerPacket.Action.INVOKE) {
+                result = manager.activatePower(nation, power, packet.getTargetValue(), player.server);
+            } else {
+                result = manager.revokePower(nation, power, player.server);
+            }
+
+            // Save state
+            ServerLevel level = player.server.overworld();
+            NationSavedData.get(level).markForSave();
+
+            // Send updated data back
+            sendEmergencyPowerData(player, packet.getNationName(), result);
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    private static void sendEmergencyPowerData(ServerPlayer player, String nationName, String resultMessage) {
+        com.statecraft.core.Nation nation = ChunkClaimManager.getInstance().getNationByName(nationName);
+        if (nation == null) {
+            NetworkHandler.sendToPlayer(new SyncEmergencyPowerDataPacket(nationName, false, List.of(), "§cNation not found."), player);
+            return;
+        }
+
+        boolean isLeader = nation.getLeaderId().equals(player.getUUID());
+        var legislature = com.statecraft.legislature.LegislatureManager.getInstance().getOrCreateLegislature(nation.getId());
+
+        List<SyncEmergencyPowerDataPacket.PowerEntry> entries = new ArrayList<>();
+        for (com.statecraft.legislature.EmergencyPower power : com.statecraft.legislature.EmergencyPower.values()) {
+            SyncEmergencyPowerDataPacket.PowerStatus status;
+            long remainingMs = 0;
+
+            if (legislature.isEmergencyPowerActive(power)) {
+                status = SyncEmergencyPowerDataPacket.PowerStatus.ACTIVE;
+                // Get remaining time for duration-based powers
+                var activePowers = legislature.getActiveEmergencyPowers();
+                Long endTime = activePowers.get(power);
+                if (endTime != null && endTime > 0) {
+                    remainingMs = Math.max(0, endTime - System.currentTimeMillis());
+                }
+            } else if (legislature.isOnCooldown(power)) {
+                status = power.isPermanent() ?
+                    SyncEmergencyPowerDataPacket.PowerStatus.INSTANT_COOLDOWN :
+                    SyncEmergencyPowerDataPacket.PowerStatus.COOLDOWN;
+                remainingMs = legislature.getCooldownRemaining(power);
+            } else {
+                status = SyncEmergencyPowerDataPacket.PowerStatus.AVAILABLE;
+            }
+
+            boolean requiresTarget = (power == com.statecraft.legislature.EmergencyPower.DIPLOMATIC_CRISIS ||
+                                       power == com.statecraft.legislature.EmergencyPower.SUCCESSION_CRISIS);
+
+            entries.add(new SyncEmergencyPowerDataPacket.PowerEntry(
+                power.name(),
+                power.getDisplayName(),
+                power.getDescription(),
+                power.getDurationHours(),
+                power.getCooldownDays(),
+                status,
+                remainingMs,
+                requiresTarget
+            ));
+        }
+
+        NetworkHandler.sendToPlayer(new SyncEmergencyPowerDataPacket(nationName, isLeader, entries, resultMessage), player);
+    }
+
+    // ==================== Diplomacy Handlers ====================
+
+    public static void handleRequestDiplomacyData(RequestDiplomacyDataPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+            sendDiplomacyData(player, packet.getNationName(), "");
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleDiplomacyAction(DiplomacyActionPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            Nation playerNation = ChunkClaimManager.getInstance().getPlayerNation(player.getUUID());
+            if (playerNation == null) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "You are not in a nation!"), player);
+                return;
+            }
+
+            // Leader-only check for all diplomatic actions
+            if (!playerNation.getLeaderId().equals(player.getUUID())) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Only the nation leader can perform diplomatic actions!"), player);
+                return;
+            }
+
+            DiplomacyManager diplomacy = DiplomacyManager.getInstance();
+            String result;
+
+            switch (packet.getAction()) {
+                case DECLARE_WAR: {
+                    Nation target = ChunkClaimManager.getInstance().getNationByName(packet.getTargetNationName());
+                    if (target == null) {
+                        result = "§cNation not found: " + packet.getTargetNationName();
+                    } else {
+                        result = diplomacy.declareWar(playerNation, target, player.server, false);
+                    }
+                    break;
+                }
+                case PROPOSE_PEACE: {
+                    Nation target = ChunkClaimManager.getInstance().getNationByName(packet.getTargetNationName());
+                    if (target == null) {
+                        result = "§cNation not found: " + packet.getTargetNationName();
+                    } else {
+                        result = diplomacy.proposePeace(playerNation, target, player.server);
+                    }
+                    break;
+                }
+                case PROPOSE_ALLIANCE: {
+                    Nation target = ChunkClaimManager.getInstance().getNationByName(packet.getTargetNationName());
+                    if (target == null) {
+                        result = "§cNation not found: " + packet.getTargetNationName();
+                    } else {
+                        result = diplomacy.proposeAlliance(playerNation, target, player.server);
+                    }
+                    break;
+                }
+                case BREAK_ALLIANCE: {
+                    Nation target = ChunkClaimManager.getInstance().getNationByName(packet.getTargetNationName());
+                    if (target == null) {
+                        result = "§cNation not found: " + packet.getTargetNationName();
+                    } else {
+                        result = diplomacy.breakAlliance(playerNation, target, player.server);
+                    }
+                    break;
+                }
+                case ACCEPT_PROPOSAL: {
+                    try {
+                        UUID proposalId = UUID.fromString(packet.getProposalId());
+                        result = diplomacy.acceptProposal(proposalId, player.getUUID(), player.server);
+                    } catch (IllegalArgumentException e) {
+                        result = "§cInvalid proposal ID.";
+                    }
+                    break;
+                }
+                case REJECT_PROPOSAL: {
+                    try {
+                        UUID proposalId = UUID.fromString(packet.getProposalId());
+                        result = diplomacy.rejectProposal(proposalId, player.getUUID(), player.server);
+                    } catch (IllegalArgumentException e) {
+                        result = "§cInvalid proposal ID.";
+                    }
+                    break;
+                }
+                default:
+                    result = "§cUnknown diplomatic action.";
+            }
+
+            // Send updated diplomacy data back with the result message
+            sendDiplomacyData(player, playerNation.getName(), result);
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    private static void sendDiplomacyData(ServerPlayer player, String nationName, String resultMessage) {
+        Nation nation = ChunkClaimManager.getInstance().getNationByName(nationName);
+        if (nation == null) {
+            NetworkHandler.sendToPlayer(new SyncDiplomacyDataPacket(
+                nationName, false, List.of(), List.of(), List.of(), "§cNation not found."), player);
+            return;
+        }
+
+        boolean isLeader = nation.getLeaderId().equals(player.getUUID());
+        ChunkClaimManager manager = ChunkClaimManager.getInstance();
+        DiplomacyManager diplomacy = DiplomacyManager.getInstance();
+
+        // Build nation relations list
+        List<SyncDiplomacyDataPacket.NationRelation> relations = new ArrayList<>();
+        for (Nation other : manager.getAllNations()) {
+            if (other.getId().equals(nation.getId())) continue;
+
+            DiplomacyManager.DiplomaticStatus status = diplomacy.getStatus(nation.getId(), other.getId());
+            relations.add(new SyncDiplomacyDataPacket.NationRelation(
+                other.getName(), status.name()));
+        }
+
+        // Sort: AT_WAR first, then TRUCE, then ALLIED, then NEUTRAL
+        relations.sort((a, b) -> {
+            int order = statusOrder(a.status) - statusOrder(b.status);
+            if (order != 0) return order;
+            return a.nationName.compareToIgnoreCase(b.nationName);
+        });
+
+        // Build inbound proposals
+        List<SyncDiplomacyDataPacket.ProposalEntry> inbound = new ArrayList<>();
+        for (DiplomacyManager.DiplomacyProposal p : diplomacy.getPendingProposals(nation.getId())) {
+            Nation proposerNation = manager.getNation(p.proposerNationId);
+            String proposerName = proposerNation != null ? proposerNation.getName() : "Unknown";
+            inbound.add(new SyncDiplomacyDataPacket.ProposalEntry(
+                p.id.toString(), p.type.name(), proposerName, p.expiresAt));
+        }
+
+        // Build outbound proposals
+        List<SyncDiplomacyDataPacket.ProposalEntry> outbound = new ArrayList<>();
+        for (DiplomacyManager.DiplomacyProposal p : diplomacy.getOutboundProposals(nation.getId())) {
+            Nation targetNation = manager.getNation(p.targetNationId);
+            String targetName = targetNation != null ? targetNation.getName() : "Unknown";
+            outbound.add(new SyncDiplomacyDataPacket.ProposalEntry(
+                p.id.toString(), p.type.name(), targetName, p.expiresAt));
+        }
+
+        NetworkHandler.sendToPlayer(new SyncDiplomacyDataPacket(
+            nationName, isLeader, relations, inbound, outbound, resultMessage), player);
+    }
+
+    private static int statusOrder(String status) {
+        return switch (status) {
+            case "AT_WAR" -> 0;
+            case "TRUCE" -> 1;
+            case "ALLIED" -> 2;
+            default -> 3; // NEUTRAL
+        };
+    }
 }
-
-

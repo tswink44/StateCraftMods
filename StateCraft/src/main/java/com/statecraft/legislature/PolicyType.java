@@ -47,6 +47,8 @@ public enum PolicyType {
         "Fee cities must pay to claim each chunk"),
     EMINENT_DOMAIN("Eminent Domain", Category.ECONOMY, 0, 0, ValueType.CHUNK_TARGET,
         "Repossess a privately owned chunk. Owner receives 10x the tax valuation from nation treasury."),
+    LEADER_SPENDING_LIMIT("Leader Spending Limit", Category.ECONOMY, 0, 100000000, ValueType.CURRENCY,
+        "Daily spending limit for the nation leader on the nation treasury (0 = unlimited). Overrides server default."),
 
     // Constitutional policies (require constitutional amendment to change)
     LEADER_TERM_DURATION("Leader Term Duration", Category.CONSTITUTIONAL, 1, 365, ValueType.INTEGER,

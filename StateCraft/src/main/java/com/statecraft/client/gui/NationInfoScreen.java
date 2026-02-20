@@ -30,7 +30,7 @@ public class NationInfoScreen extends StateCraftScreen {
     private int cityCount = 0;
     private int chunkCount = 0;
     private int memberCount = 0;
-    private long balance = 0;
+    private double balance = 0;
     private boolean isOpen = false;
     private String description = "";
     private String leaderName = "Unknown";
@@ -215,13 +215,13 @@ public class NationInfoScreen extends StateCraftScreen {
         graphics.drawString(this.font, value, right - valueWidth - 6, y + 3, COLOR_TEXT);
     }
 
-    private String formatBalance(long balance) {
+    private String formatBalance(double balance) {
         if (balance >= 1000000) {
             return String.format("$%.1fM", balance / 1000000.0);
         } else if (balance >= 1000) {
             return String.format("$%.1fK", balance / 1000.0);
         }
-        return "$" + balance;
+        return String.format("$%.2f", balance);
     }
 
     private void openMembersScreen() {
@@ -279,7 +279,7 @@ public class NationInfoScreen extends StateCraftScreen {
 
     // Called by network handler when data is received
     public void updateData(int states, int maxStates, int cities, int chunks, int members,
-                           long balance, boolean open, String desc, String leader,
+                           double balance, boolean open, String desc, String leader,
                            boolean isLeader, boolean isAdmin, boolean isMember,
                            List<String> stateNames, List<String> allies, List<String> enemies,
                            String flagUrl) {
@@ -317,7 +317,7 @@ public class NationInfoScreen extends StateCraftScreen {
 
     // Overload for backward compatibility (without isMember)
     public void updateData(int states, int maxStates, int cities, int chunks, int members,
-                           long balance, boolean open, String desc, String leader,
+                           double balance, boolean open, String desc, String leader,
                            boolean isLeader, boolean isAdmin,
                            List<String> stateNames, List<String> allies, List<String> enemies,
                            String flagUrl) {
@@ -327,7 +327,7 @@ public class NationInfoScreen extends StateCraftScreen {
 
     // Overload for backward compatibility (without flagUrl)
     public void updateData(int states, int maxStates, int cities, int chunks, int members,
-                           long balance, boolean open, String desc, String leader,
+                           double balance, boolean open, String desc, String leader,
                            boolean isLeader, boolean isAdmin, boolean isMember,
                            List<String> stateNames, List<String> allies, List<String> enemies) {
         updateData(states, maxStates, cities, chunks, members, balance, open, desc, leader,
@@ -336,7 +336,7 @@ public class NationInfoScreen extends StateCraftScreen {
 
     // Overload for backward compatibility (without isMember or flagUrl)
     public void updateData(int states, int maxStates, int cities, int chunks, int members,
-                           long balance, boolean open, String desc, String leader,
+                           double balance, boolean open, String desc, String leader,
                            boolean isLeader, boolean isAdmin,
                            List<String> stateNames, List<String> allies, List<String> enemies) {
         updateData(states, maxStates, cities, chunks, members, balance, open, desc, leader,

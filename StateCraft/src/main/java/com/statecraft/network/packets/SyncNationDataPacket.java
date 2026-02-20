@@ -26,7 +26,7 @@ public class SyncNationDataPacket {
     private final int states;
     private final int maxStates;
     private final int cities;
-    private final long balance;
+    private final double balance;
     private final boolean open;
     private final String description;
     private final String leaderName;
@@ -85,7 +85,7 @@ public class SyncNationDataPacket {
 
     // Detailed data constructor
     public SyncNationDataPacket(String nationName, int states, int maxStates, int cities, int chunks,
-                                 int members, long balance, boolean open, String description,
+                                 int members, double balance, boolean open, String description,
                                  String leaderName, boolean isLeader, boolean isAdmin, boolean isMember,
                                  List<String> stateNames, List<String> allyNames, List<String> enemyNames) {
         this.inNation = true;
@@ -124,7 +124,7 @@ public class SyncNationDataPacket {
         this.states = buf.readInt();
         this.maxStates = buf.readInt();
         this.cities = buf.readInt();
-        this.balance = buf.readLong();
+        this.balance = buf.readDouble();
         this.open = buf.readBoolean();
         this.description = buf.readUtf(100);
         this.leaderName = buf.readUtf(16);
@@ -162,7 +162,7 @@ public class SyncNationDataPacket {
         buf.writeInt(states);
         buf.writeInt(maxStates);
         buf.writeInt(cities);
-        buf.writeLong(balance);
+        buf.writeDouble(balance);
         buf.writeBoolean(open);
         buf.writeUtf(description, 100);
         buf.writeUtf(leaderName, 16);
@@ -197,7 +197,7 @@ public class SyncNationDataPacket {
     public int getStates() { return states; }
     public int getMaxStates() { return maxStates; }
     public int getCities() { return cities; }
-    public long getBalance() { return balance; }
+    public double getBalance() { return balance; }
     public boolean isOpen() { return open; }
     public String getDescription() { return description; }
     public String getLeaderName() { return leaderName; }

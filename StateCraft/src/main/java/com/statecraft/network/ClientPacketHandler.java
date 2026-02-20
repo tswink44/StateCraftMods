@@ -607,5 +607,25 @@ public class ClientPacketHandler {
         });
         ctx.get().setPacketHandled(true);
     }
+
+    public static void handleSyncEmergencyPowerData(SyncEmergencyPowerDataPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof com.statecraft.client.gui.ExecutiveActionsScreen screen) {
+                screen.updateData(packet);
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncDiplomacyData(SyncDiplomacyDataPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof com.statecraft.client.gui.DiplomacyScreen screen) {
+                screen.updateData(packet);
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
 }
 

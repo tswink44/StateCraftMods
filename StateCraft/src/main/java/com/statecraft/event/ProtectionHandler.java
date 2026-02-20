@@ -134,13 +134,51 @@ public class ProtectionHandler {
         Entity target = event.getTarget();
         BlockPos pos = target.blockPosition();
 
-        // Allow PvP based on nation relationships (future enhancement)
-        // For now, protect non-player entities (animals, item frames, etc.)
-        if (!(target instanceof Player)) {
-            if (!canInteract(player, pos, Permission.INTERACT)) {
-                event.setCanceled(true);
-                sendDeniedMessage(player, "attack entities");
+        // PvP protection based on nation relationships
+        if (target instanceof ServerPlayer targetPlayer) {
+            // Bypass check
+            if (hasBypass(player.getUUID())) return;
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            Nation attackerNation = manager.getPlayerNation(player.getUUID());
+            Nation targetNation = manager.getPlayerNation(targetPlayer.getUUID());
+
+            // If both players are in nations, check relationships
+            if (attackerNation != null && targetNation != null) {
+                // Same nation: deny PvP (configurable)
+                if (attackerNation.getId().equals(targetNation.getId())) {
+                    if (com.statecraft.config.StateCraftConfig.PVP_PROTECT_SAME_NATION.get()) {
+                        event.setCanceled(true);
+                        player.displayClientMessage(
+                            net.minecraft.network.chat.Component.literal("§cYou cannot attack a fellow citizen!"), true);
+                        return;
+                    }
+                }
+
+                // At war: always allow PvP
+                if (attackerNation.isEnemy(targetNation.getId())) {
+                    return; // PvP allowed
+                }
+
+                // Allied nations: deny PvP (configurable)
+                if (attackerNation.isAlly(targetNation.getId())) {
+                    if (com.statecraft.config.StateCraftConfig.PVP_PROTECT_ALLIES.get()) {
+                        event.setCanceled(true);
+                        player.displayClientMessage(
+                            net.minecraft.network.chat.Component.literal("§cYou cannot attack a citizen of an allied nation!"), true);
+                        return;
+                    }
+                }
             }
+
+            // Neutral / nationless: allow PvP (vanilla behavior)
+            return;
+        }
+
+        // Non-player entities: protect based on chunk permissions
+        if (!canInteract(player, pos, Permission.INTERACT)) {
+            event.setCanceled(true);
+            sendDeniedMessage(player, "attack entities");
         }
     }
 
@@ -227,6 +265,11 @@ public class ProtectionHandler {
         // Player is a foreigner - check open borders policy
         Nation playerNation = manager.getPlayerNation(player.getUUID());
 
+        // MARTIAL LAW check: If martial law is active, ALL foreigners are blocked regardless of open borders
+        if (com.statecraft.legislature.EmergencyPowerManager.isMartialLawActive(chunkNation.getId())) {
+            return false;
+        }
+
         if (!chunkNation.canForeignerInteract(player.getUUID(), playerNation)) {
             // Foreigners not allowed due to closed borders or war
             return false;
@@ -292,7 +335,13 @@ public class ProtectionHandler {
 
             if (chunkNation != null && !chunkNation.isMember(player.getUUID())) {
                 // Player is a foreigner
-                if (playerNation != null && chunkNation.isEnemy(playerNation.getId())) {
+                if (com.statecraft.legislature.EmergencyPowerManager.isMartialLawActive(chunkNation.getId())) {
+                    // Martial law
+                    player.displayClientMessage(
+                        Component.literal("§c§l[MARTIAL LAW] §c" + chunkNation.getName() + " is under martial law. Foreign interaction blocked."),
+                        true
+                    );
+                } else if (playerNation != null && chunkNation.isEnemy(playerNation.getId())) {
                     // At war
                     player.displayClientMessage(
                         Component.literal("§cYour nation is at war with " + chunkNation.getName() + "! Cannot interact."),

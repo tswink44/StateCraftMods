@@ -525,6 +525,45 @@ public class NetworkHandler {
             .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncNationPrivateChunks(pkt, ctx), ctx))
             .add();
 
+        // Emergency power packets
+        CHANNEL.messageBuilder(RequestEmergencyPowerDataPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestEmergencyPowerDataPacket::encode)
+            .decoder(RequestEmergencyPowerDataPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestEmergencyPowerData)
+            .add();
+
+        CHANNEL.messageBuilder(InvokeEmergencyPowerPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(InvokeEmergencyPowerPacket::encode)
+            .decoder(InvokeEmergencyPowerPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleInvokeEmergencyPower)
+            .add();
+
+        CHANNEL.messageBuilder(SyncEmergencyPowerDataPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncEmergencyPowerDataPacket::encode)
+            .decoder(SyncEmergencyPowerDataPacket::new)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncEmergencyPowerData(pkt, ctx), ctx))
+            .add();
+
+        // Diplomacy packets (Client -> Server)
+        CHANNEL.messageBuilder(RequestDiplomacyDataPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestDiplomacyDataPacket::encode)
+            .decoder(RequestDiplomacyDataPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestDiplomacyData)
+            .add();
+
+        CHANNEL.messageBuilder(DiplomacyActionPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(DiplomacyActionPacket::encode)
+            .decoder(DiplomacyActionPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleDiplomacyAction)
+            .add();
+
+        // Diplomacy packets (Server -> Client)
+        CHANNEL.messageBuilder(SyncDiplomacyDataPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncDiplomacyDataPacket::encode)
+            .decoder(SyncDiplomacyDataPacket::new)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncDiplomacyData(pkt, ctx), ctx))
+            .add();
+
         StateCraft.LOGGER.info("StateCraft network packets registered");
     }
 

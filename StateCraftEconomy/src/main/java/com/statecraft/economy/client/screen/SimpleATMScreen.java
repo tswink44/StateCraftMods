@@ -2,6 +2,8 @@ package com.statecraft.economy.client.screen;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.statecraft.economy.StateCraftEconomy;
+import com.statecraft.economy.client.TransferFavoritesManager;
+import com.statecraft.economy.config.EconomyConfig;
 import com.statecraft.economy.core.Bank;
 import com.statecraft.economy.core.EconomyManager;
 import com.statecraft.economy.network.NetworkHandler;
@@ -324,11 +326,6 @@ public class SimpleATMScreen extends Screen {
             .bounds(centerX - buttonWidth/2, guiTop + guiHeight - 35, buttonWidth, 20)
             .build());
     }
-        addMenuButton(Button.builder(Component.literal("< Back"),
-            btn -> switchMode(ScreenMode.MAIN_MENU))
-            .bounds(centerX - buttonWidth/2, guiTop + guiHeight - 35, buttonWidth, 20)
-            .build());
-    }
 
     private void buildTransferInput() {
         int centerX = guiLeft + guiWidth / 2;
@@ -595,9 +592,26 @@ public class SimpleATMScreen extends Screen {
             return;
         }
 
+        TransferFavoritesManager favManager = TransferFavoritesManager.getInstance();
+        String typeKey = selectedTransferType.name();
+
         int itemHeight = 20;
         int maxVisible = Math.min(filteredRecipients.size(), 6); // Limit visible items
-        int totalHeight = maxVisible * itemHeight;
+
+        // Check if we need a divider between favorites and non-favorites
+        int favCount = 0;
+        for (int i = 0; i < maxVisible && i < filteredRecipients.size(); i++) {
+            if (favManager.isFavorite(typeKey, filteredRecipients.get(i).id())) {
+                favCount++;
+            } else {
+                break; // Favorites are sorted to the top, so once we hit a non-fav, we're done
+            }
+        }
+        boolean showDivider = favCount > 0 && favCount < maxVisible && favCount < filteredRecipients.size()
+            && !favManager.isFavorite(typeKey, filteredRecipients.get(favCount).id());
+        int dividerHeight = showDivider ? 7 : 0; // Extra space for divider line
+
+        int totalHeight = maxVisible * itemHeight + dividerHeight;
         int dropdownStartY = recipientDropdownY + 20; // Below search box
 
         // Push pose and translate to higher z-level to render on top of everything
@@ -617,9 +631,20 @@ public class SimpleATMScreen extends Screen {
         graphics.fill(recipientDropdownX, dropdownStartY + totalHeight - 1, recipientDropdownX + recipientDropdownWidth, dropdownStartY + totalHeight, COLOR_BORDER);
 
         // Render each recipient option
+        int yOffset = 0;
         for (int i = 0; i < maxVisible; i++) {
             SyncTransferRecipientsPacket.RecipientInfo recipient = filteredRecipients.get(i);
-            int optionY = dropdownStartY + (i * itemHeight);
+            int optionY = dropdownStartY + (i * itemHeight) + yOffset;
+
+            // Draw divider between favorites and non-favorites
+            if (showDivider && i == favCount) {
+                int divY = optionY + 1;
+                graphics.fill(recipientDropdownX + 5, divY, recipientDropdownX + recipientDropdownWidth - 5, divY + 1, COLOR_BORDER);
+                String divLabel = "§8───";
+                graphics.drawString(this.font, divLabel, recipientDropdownX + recipientDropdownWidth / 2 - this.font.width(divLabel) / 2, divY - 3, 0xFF666666);
+                yOffset += dividerHeight;
+                optionY += dividerHeight;
+            }
 
             // Hover highlight
             boolean hovered = mouseX >= recipientDropdownX && mouseX < recipientDropdownX + recipientDropdownWidth &&
@@ -634,15 +659,23 @@ public class SimpleATMScreen extends Screen {
                                  transferRecipients.get(selectedRecipientIndex).id().equals(recipient.id());
             String prefix = isSelected ? "§a✓ " : "  ";
 
+            // Favorite star (clickable area on the left side)
+            boolean isFav = favManager.isFavorite(typeKey, recipient.id());
+            String star = isFav ? "§e★" : "§7☆";
+            int starX = recipientDropdownX + 4;
+            graphics.drawString(this.font, star, starX, optionY + 6, COLOR_TEXT);
+
+            // Recipient name (shifted right to make room for star)
             String text = prefix + recipient.name();
-            graphics.drawString(this.font, text, recipientDropdownX + 5, optionY + 6, COLOR_TEXT);
+            graphics.drawString(this.font, text, recipientDropdownX + 16, optionY + 6, COLOR_TEXT);
         }
 
         // Show "more" indicator if there are more items
         if (filteredRecipients.size() > maxVisible) {
             int moreCount = filteredRecipients.size() - maxVisible;
             String moreText = "§7+" + moreCount + " more...";
-            graphics.drawString(this.font, moreText, recipientDropdownX + recipientDropdownWidth - font.width(moreText) - 5, dropdownStartY + totalHeight - itemHeight + 6, COLOR_TEXT);
+            int lastOptionY = dropdownStartY + (maxVisible - 1) * itemHeight + yOffset;
+            graphics.drawString(this.font, moreText, recipientDropdownX + recipientDropdownWidth - font.width(moreText) - 5, lastOptionY + 6, COLOR_TEXT);
         }
 
         // Re-enable depth test
@@ -772,24 +805,64 @@ public class SimpleATMScreen extends Screen {
         if (currentMode == ScreenMode.TRANSFER_INPUT && recipientInput.isFocused() && !filteredRecipients.isEmpty()) {
             int itemHeight = 20;
             int maxVisible = Math.min(filteredRecipients.size(), 6);
-            int totalHeight = maxVisible * itemHeight;
             int dropdownStartY = recipientDropdownY + 20;
+
+            TransferFavoritesManager favManager = TransferFavoritesManager.getInstance();
+            String typeKey = selectedTransferType.name();
+
+            // Calculate divider offset
+            int favCount = 0;
+            for (int i = 0; i < maxVisible && i < filteredRecipients.size(); i++) {
+                if (favManager.isFavorite(typeKey, filteredRecipients.get(i).id())) {
+                    favCount++;
+                } else {
+                    break;
+                }
+            }
+            boolean hasDivider = favCount > 0 && favCount < maxVisible && favCount < filteredRecipients.size()
+                && !favManager.isFavorite(typeKey, filteredRecipients.get(favCount).id());
+            int dividerHeight = hasDivider ? 7 : 0;
+            int totalHeight = maxVisible * itemHeight + dividerHeight;
 
             if (mouseX >= recipientDropdownX && mouseX < recipientDropdownX + recipientDropdownWidth &&
                 mouseY >= dropdownStartY && mouseY < dropdownStartY + totalHeight) {
 
-                int clickedIndex = (int) ((mouseY - dropdownStartY) / itemHeight);
+                // Determine which item was clicked, accounting for the divider
+                int clickedIndex = -1;
+                int yOffset = 0;
+                for (int i = 0; i < maxVisible; i++) {
+                    if (hasDivider && i == favCount) {
+                        yOffset += dividerHeight;
+                    }
+                    int optionY = dropdownStartY + (i * itemHeight) + yOffset;
+                    if (mouseY >= optionY && mouseY < optionY + itemHeight) {
+                        clickedIndex = i;
+                        break;
+                    }
+                }
+
                 if (clickedIndex >= 0 && clickedIndex < maxVisible && clickedIndex < filteredRecipients.size()) {
+                    SyncTransferRecipientsPacket.RecipientInfo clickedRecipient = filteredRecipients.get(clickedIndex);
+
+                    // Check if clicked on the star area (left 15 pixels)
+                    if (mouseX < recipientDropdownX + 15) {
+                        // Toggle favorite
+                        favManager.toggleFavorite(typeKey, clickedRecipient.id(), clickedRecipient.name());
+                        // Re-sort the filtered list
+                        updateFilteredRecipients();
+                        return true;
+                    }
+
+                    // Clicked on the name area — select this recipient
                     // Find this recipient in the full list to set the correct index
-                    SyncTransferRecipientsPacket.RecipientInfo selectedRecipient = filteredRecipients.get(clickedIndex);
                     for (int i = 0; i < transferRecipients.size(); i++) {
-                        if (transferRecipients.get(i).id().equals(selectedRecipient.id())) {
+                        if (transferRecipients.get(i).id().equals(clickedRecipient.id())) {
                             selectedRecipientIndex = i;
                             break;
                         }
                     }
                     // Update search box with selected name
-                    recipientInput.setValue(selectedRecipient.name());
+                    recipientInput.setValue(clickedRecipient.name());
                     recipientInput.setFocused(false);
                     return true;
                 }
@@ -831,6 +904,16 @@ public class SimpleATMScreen extends Screen {
                 }
             }
         }
+
+        // Sort favorites to the top while preserving relative order within each group
+        TransferFavoritesManager favManager = TransferFavoritesManager.getInstance();
+        String typeKey = selectedTransferType.name();
+        filteredRecipients.sort((a, b) -> {
+            boolean aFav = favManager.isFavorite(typeKey, a.id());
+            boolean bFav = favManager.isFavorite(typeKey, b.id());
+            if (aFav == bFav) return 0;
+            return aFav ? -1 : 1;
+        });
     }
 
     private String getSelectedRecipientName() {
@@ -909,6 +992,26 @@ public class SimpleATMScreen extends Screen {
                 return;
             }
 
+            // Check if confirmation is needed for large transactions
+            if (requiresConfirmation(amount)) {
+                String accountName = getSelectedAccountDisplayName();
+                showConfirmation("Deposit", amount, accountName, null, this::executeDeposit);
+                return;
+            }
+
+            executeDeposit();
+        } catch (NumberFormatException e) {
+            showStatus("§cInvalid amount", true);
+        }
+    }
+
+    /**
+     * Execute the deposit after validation (and optional confirmation).
+     */
+    private void executeDeposit() {
+        try {
+            double amount = Double.parseDouble(amountInput.getValue());
+
             // Get selected account info to tell server which account to deposit to
             SyncAccountsPacket.AccountInfo selectedAccount = getSelectedAccount();
             String accountTarget = "";
@@ -942,6 +1045,26 @@ public class SimpleATMScreen extends Screen {
                 return;
             }
 
+            // Check if confirmation is needed for large transactions
+            if (requiresConfirmation(amount)) {
+                String accountName = getSelectedAccountDisplayName();
+                showConfirmation("Withdrawal", amount, accountName, null, this::executeWithdraw);
+                return;
+            }
+
+            executeWithdraw();
+        } catch (NumberFormatException e) {
+            showStatus("§cInvalid amount", true);
+        }
+    }
+
+    /**
+     * Execute the withdrawal after validation (and optional confirmation).
+     */
+    private void executeWithdraw() {
+        try {
+            double amount = Double.parseDouble(amountInput.getValue());
+
             // Get selected account info to tell server which account to withdraw from
             SyncAccountsPacket.AccountInfo selectedAccount = getSelectedAccount();
             String accountTarget = "";
@@ -965,12 +1088,12 @@ public class SimpleATMScreen extends Screen {
 
     private void performTransfer() {
         // Validate recipient selection
-        if (selectedRecipientIndex < 0 || selectedRecipientIndex >= filteredRecipients.size()) {
+        if (selectedRecipientIndex < 0 || selectedRecipientIndex >= transferRecipients.size()) {
             showStatus("§cPlease select a recipient", true);
             return;
         }
 
-        SyncTransferRecipientsPacket.RecipientInfo recipient = filteredRecipients.get(selectedRecipientIndex);
+        SyncTransferRecipientsPacket.RecipientInfo recipient = transferRecipients.get(selectedRecipientIndex);
 
         try {
             double amount = Double.parseDouble(amountInput.getValue());
@@ -982,6 +1105,33 @@ public class SimpleATMScreen extends Screen {
                 showStatus("§cInsufficient funds", true);
                 return;
             }
+
+            // Check if confirmation is needed for large transactions
+            if (requiresConfirmation(amount)) {
+                String accountName = getSelectedAccountDisplayName();
+                showConfirmation("Transfer", amount, accountName, recipient.name(), this::executeTransfer);
+                return;
+            }
+
+            executeTransfer();
+        } catch (NumberFormatException e) {
+            showStatus("§cInvalid amount", true);
+        }
+    }
+
+    /**
+     * Execute the transfer after validation (and optional confirmation).
+     */
+    private void executeTransfer() {
+        if (selectedRecipientIndex < 0 || selectedRecipientIndex >= transferRecipients.size()) {
+            showStatus("§cPlease select a recipient", true);
+            return;
+        }
+
+        SyncTransferRecipientsPacket.RecipientInfo recipient = transferRecipients.get(selectedRecipientIndex);
+
+        try {
+            double amount = Double.parseDouble(amountInput.getValue());
 
             // Format recipient target as "type:id" for the server to parse
             String recipientTarget = selectedTransferType.name() + ":" + recipient.id();
@@ -1017,6 +1167,43 @@ public class SimpleATMScreen extends Screen {
 
         // Government account - return "TYPE:uuid" format
         return selectedAccount.type() + ":" + selectedAccount.id();
+    }
+
+    // ==================== Transaction Confirmation ====================
+
+    /**
+     * Check if a transaction amount exceeds the configured confirmation threshold.
+     */
+    private boolean requiresConfirmation(double amount) {
+        try {
+            double threshold = EconomyConfig.LARGE_TRANSACTION_THRESHOLD.get();
+            return threshold > 0 && amount >= threshold;
+        } catch (Exception e) {
+            return false; // Config not loaded — skip confirmation
+        }
+    }
+
+    /**
+     * Show the confirmation dialog for a large transaction.
+     * On confirm, the onConfirm runnable is executed and the user returns to this ATM screen.
+     */
+    private void showConfirmation(String actionType, double amount, String accountName,
+                                   String recipientName, Runnable onConfirm) {
+        String formattedAmount = String.format("$%,.2f", amount);
+        Minecraft.getInstance().setScreen(new ConfirmTransactionScreen(
+            actionType, formattedAmount, accountName, recipientName, onConfirm, this
+        ));
+    }
+
+    /**
+     * Get a display name for the currently selected account (for the confirmation dialog).
+     */
+    private String getSelectedAccountDisplayName() {
+        SyncAccountsPacket.AccountInfo account = getSelectedAccount();
+        if (account != null) {
+            return account.getDisplayName();
+        }
+        return "Personal Account";
     }
 
     private void showStatus(String message, boolean isError) {

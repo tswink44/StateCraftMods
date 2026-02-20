@@ -43,6 +43,11 @@ public class StateCraftConfig {
     public static final ForgeConfigSpec.IntValue LEGISLATURE_VETO_OVERRIDE_PERCENT;
     public static final ForgeConfigSpec.IntValue EMERGENCY_POWER_COOLDOWN_DAYS;
 
+    // Diplomacy Settings
+    public static final ForgeConfigSpec.BooleanValue PVP_PROTECT_SAME_NATION;
+    public static final ForgeConfigSpec.BooleanValue PVP_PROTECT_ALLIES;
+    public static final ForgeConfigSpec.IntValue MAX_DIPLOMACY_PROPOSALS;
+
     static {
         BUILDER.comment(
             "StateCraft Configuration",
@@ -146,6 +151,22 @@ public class StateCraftConfig {
 
         BUILDER.comment("Cooldown in days before an emergency power can be used again");
         EMERGENCY_POWER_COOLDOWN_DAYS = BUILDER.defineInRange("emergencyPowerCooldownDays", 30, 0, 365);
+
+        BUILDER.pop();
+
+        BUILDER.comment(
+            "Diplomacy Settings",
+            "Configure PvP protection and diplomatic proposal limits"
+        ).push("diplomacy");
+
+        BUILDER.comment("Prevent PvP between players in the same nation (default: true)");
+        PVP_PROTECT_SAME_NATION = BUILDER.define("pvpProtectSameNation", true);
+
+        BUILDER.comment("Prevent PvP between players in allied nations (default: true)");
+        PVP_PROTECT_ALLIES = BUILDER.define("pvpProtectAllies", true);
+
+        BUILDER.comment("Maximum number of outbound diplomatic proposals per nation (alliance + peace)");
+        MAX_DIPLOMACY_PROPOSALS = BUILDER.defineInRange("maxDiplomacyProposals", 5, 1, 50);
 
         BUILDER.pop();
 

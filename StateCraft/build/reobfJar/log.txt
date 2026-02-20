@@ -137,44 +137,44 @@ Processing entries
 Conflicting propagated mapping for com/statecraft/client/gui/StateCraftScreen/isPauseScreen()Z from net/minecraft/client/gui/screens/Screen/isPauseScreen()Z: isPauseScreen -> m_7043_
 Conflicting propagated mapping for com/statecraft/client/gui/StateCraftScreen/render(Lnet/minecraft/client/gui/GuiGraphics;IIF)V from net/minecraft/client/gui/screens/Screen/render(Lnet/minecraft/client/gui/GuiGraphics;IIF)V: render -> m_88315_
 Conflicting propagated mapping for com/statecraft/client/gui/StateCraftScreen/init()V from net/minecraft/client/gui/screens/Screen/init()V: init -> m_7856_
-Conflicting propagated mapping for com/statecraft/client/gui/CitiesListScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
-Conflicting propagated mapping for com/statecraft/client/gui/CitiesListScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
 Conflicting propagated mapping for com/statecraft/client/gui/CityChunksScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
-Conflicting propagated mapping for com/statecraft/client/gui/CitiesListScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
-Conflicting propagated mapping for com/statecraft/client/gui/ChunkInfoScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
+Conflicting propagated mapping for com/statecraft/client/gui/CityChunksScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
+Conflicting propagated mapping for com/statecraft/client/gui/CityChunksScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
 Conflicting propagated mapping for com/statecraft/client/gui/AppointScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
 Conflicting propagated mapping for com/statecraft/client/gui/AppointScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
-Conflicting propagated mapping for com/statecraft/client/gui/CityChunksScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
 Conflicting propagated mapping for com/statecraft/client/gui/ChunkPermitsScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
-Conflicting propagated mapping for com/statecraft/client/gui/ChunkInfoScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
-Conflicting propagated mapping for com/statecraft/client/gui/CitiesListScreen/mouseClicked(DDI)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseClicked(DDI)Z: mouseClicked -> m_6375_
-Conflicting propagated mapping for com/statecraft/client/gui/ChunkInfoScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
-Conflicting propagated mapping for com/statecraft/client/gui/CityChunksScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
-Conflicting propagated mapping for com/statecraft/client/gui/ChunkValuationScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
-Conflicting propagated mapping for com/statecraft/client/gui/ChunkPermitsScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
 Conflicting propagated mapping for com/statecraft/client/gui/CityChunksScreen/mouseClicked(DDI)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseClicked(DDI)Z: mouseClicked -> m_6375_
-Conflicting propagated mapping for com/statecraft/client/gui/ChunkValuationScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
-Conflicting propagated mapping for com/statecraft/client/gui/ChunkMapScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
-Conflicting propagated mapping for com/statecraft/client/gui/ChunkPermitsScreen/mouseClicked(DDI)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseClicked(DDI)Z: mouseClicked -> m_6375_
-Conflicting propagated mapping for com/statecraft/client/gui/ChunkMapScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
-Conflicting propagated mapping for com/statecraft/client/gui/ChunkPermitsScreen/tick()V from net/minecraft/client/gui/screens/Screen/tick()V: tick -> m_86600_
-Conflicting propagated mapping for com/statecraft/client/gui/ChunkMapScreen/mouseClicked(DDI)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseClicked(DDI)Z: mouseClicked -> m_6375_
-Conflicting propagated mapping for com/statecraft/client/gui/ChunkValuationScreen/tick()V from net/minecraft/client/gui/screens/Screen/tick()V: tick -> m_86600_
+Conflicting propagated mapping for com/statecraft/client/gui/CitiesListScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
+Conflicting propagated mapping for com/statecraft/client/gui/CitiesListScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
+Conflicting propagated mapping for com/statecraft/client/gui/ChunkInfoScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
 Conflicting propagated mapping for com/statecraft/client/gui/ChunkMarketplaceScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
+Conflicting propagated mapping for com/statecraft/client/gui/ChunkMapScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
+Conflicting propagated mapping for com/statecraft/client/gui/ChunkPermitsScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
+Conflicting propagated mapping for com/statecraft/client/gui/ChunkPermitsScreen/mouseClicked(DDI)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseClicked(DDI)Z: mouseClicked -> m_6375_
+Conflicting propagated mapping for com/statecraft/client/gui/ChunkPermitsScreen/tick()V from net/minecraft/client/gui/screens/Screen/tick()V: tick -> m_86600_
+Conflicting propagated mapping for com/statecraft/client/gui/ChunkMapScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
 Conflicting propagated mapping for com/statecraft/client/gui/ChunkMarketplaceScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
+Conflicting propagated mapping for com/statecraft/client/gui/ChunkMapScreen/mouseClicked(DDI)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseClicked(DDI)Z: mouseClicked -> m_6375_
+Conflicting propagated mapping for com/statecraft/client/gui/CitiesListScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
+Conflicting propagated mapping for com/statecraft/client/gui/CitiesListScreen/mouseClicked(DDI)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseClicked(DDI)Z: mouseClicked -> m_6375_
+Conflicting propagated mapping for com/statecraft/client/gui/ChunkInfoScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
+Conflicting propagated mapping for com/statecraft/client/gui/ChunkInfoScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
+Conflicting propagated mapping for com/statecraft/client/gui/ChunkValuationScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
 Conflicting propagated mapping for com/statecraft/client/gui/ChunkMarketplaceScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
+Conflicting propagated mapping for com/statecraft/client/gui/ChunkValuationScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
 Conflicting propagated mapping for com/statecraft/client/gui/ChunkMarketplaceScreen/mouseClicked(DDI)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseClicked(DDI)Z: mouseClicked -> m_6375_
+Conflicting propagated mapping for com/statecraft/client/gui/ChunkValuationScreen/tick()V from net/minecraft/client/gui/screens/Screen/tick()V: tick -> m_86600_
 Conflicting propagated mapping for com/statecraft/client/gui/CityInfoScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
 Conflicting propagated mapping for com/statecraft/client/gui/ClaimsManagementScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
 Conflicting propagated mapping for com/statecraft/client/gui/CitySettingsScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
 Conflicting propagated mapping for com/statecraft/client/gui/ClaimsManagementScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
 Conflicting propagated mapping for com/statecraft/client/gui/CityInfoScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
 Conflicting propagated mapping for com/statecraft/client/gui/ContractChunkSelectScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
-Conflicting propagated mapping for com/statecraft/client/gui/ContractDetailScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
 Conflicting propagated mapping for com/statecraft/client/gui/CitySettingsScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
+Conflicting propagated mapping for com/statecraft/client/gui/ContractDetailScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
+Conflicting propagated mapping for com/statecraft/client/gui/ContractChunkSelectScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
 Conflicting propagated mapping for com/statecraft/client/gui/ContractDetailScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
 Conflicting propagated mapping for com/statecraft/client/gui/ContractDetailScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
-Conflicting propagated mapping for com/statecraft/client/gui/ContractChunkSelectScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
 Conflicting propagated mapping for com/statecraft/client/gui/ContractChunkSelectScreen/mouseClicked(DDI)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseClicked(DDI)Z: mouseClicked -> m_6375_
 Conflicting propagated mapping for com/statecraft/client/gui/ContractDetailScreen/mouseClicked(DDI)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseClicked(DDI)Z: mouseClicked -> m_6375_
 Conflicting propagated mapping for com/statecraft/client/gui/ContractChunkSelectScreen/mouseDragged(DDIDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseDragged(DDIDD)Z: mouseDragged -> m_7979_
@@ -182,14 +182,14 @@ Conflicting propagated mapping for com/statecraft/client/gui/ContractChunkSelect
 Conflicting propagated mapping for com/statecraft/client/gui/GovMailboxScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
 Conflicting propagated mapping for com/statecraft/client/gui/GovMailboxScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
 Conflicting propagated mapping for com/statecraft/client/gui/GovMailboxScreen/mouseClicked(DDI)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseClicked(DDI)Z: mouseClicked -> m_6375_
-Conflicting propagated mapping for com/statecraft/client/gui/CreateCityScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
-Conflicting propagated mapping for com/statecraft/client/gui/CreateCityScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
 Conflicting propagated mapping for com/statecraft/client/gui/ContractsMainScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
 Conflicting propagated mapping for com/statecraft/client/gui/ContractsMainScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
 Conflicting propagated mapping for com/statecraft/client/gui/ContractsMainScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
+Conflicting propagated mapping for com/statecraft/client/gui/CreateCityScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
+Conflicting propagated mapping for com/statecraft/client/gui/CreateCityScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
+Conflicting propagated mapping for com/statecraft/client/gui/MainMenuScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
 Conflicting propagated mapping for com/statecraft/client/gui/StateInfoScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
 Conflicting propagated mapping for com/statecraft/client/gui/StateInfoScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
-Conflicting propagated mapping for com/statecraft/client/gui/MainMenuScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
 Conflicting propagated mapping for com/statecraft/client/gui/CountryManagementScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
 Conflicting propagated mapping for com/statecraft/client/gui/CountryManagementScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
 Conflicting propagated mapping for com/statecraft/client/gui/CreateContractScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
@@ -213,6 +213,11 @@ Conflicting propagated mapping for com/statecraft/client/gui/LegislatureScreen/m
 Conflicting propagated mapping for com/statecraft/client/gui/NationLawsScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
 Conflicting propagated mapping for com/statecraft/client/gui/NationLawsScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
 Conflicting propagated mapping for com/statecraft/client/gui/NationLawsScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
+Conflicting propagated mapping for com/statecraft/client/gui/ExecutiveActionsScreen/render(Lnet/minecraft/client/gui/GuiGraphics;IIF)V from com/statecraft/client/gui/StateCraftScreen/render(Lnet/minecraft/client/gui/GuiGraphics;IIF)V: render -> m_88315_
+Conflicting propagated mapping for com/statecraft/client/gui/ExecutiveActionsScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
+Conflicting propagated mapping for com/statecraft/client/gui/ExecutiveActionsScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
+Conflicting propagated mapping for com/statecraft/client/gui/ExecutiveActionsScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
+Conflicting propagated mapping for com/statecraft/client/gui/ExecutiveActionsScreen/mouseClicked(DDI)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseClicked(DDI)Z: mouseClicked -> m_6375_
 Conflicting propagated mapping for com/statecraft/client/gui/StatesListScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
 Conflicting propagated mapping for com/statecraft/client/gui/StatesListScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
 Conflicting propagated mapping for com/statecraft/client/gui/StatesListScreen/mouseClicked(DDI)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseClicked(DDI)Z: mouseClicked -> m_6375_
@@ -242,45 +247,45 @@ Conflicting propagated mapping for com/statecraft/client/gui/InvitePlayerScreen/
 Conflicting propagated mapping for com/statecraft/client/gui/LawDetailScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
 Conflicting propagated mapping for com/statecraft/client/gui/LawDetailScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
 Conflicting propagated mapping for com/statecraft/client/gui/LawDetailScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
+Conflicting propagated mapping for com/statecraft/client/gui/LongTextEditorScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
+Conflicting propagated mapping for com/statecraft/client/gui/LongTextEditorScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
+Conflicting propagated mapping for com/statecraft/client/gui/LongTextEditorScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
+Conflicting propagated mapping for net/minecraft/world/entity/LivingEntity/lambda$addAdditionalSaveData$3(Lnet/minecraft/nbt/CompoundTag;Lnet/minecraft/nbt/Tag;)V from net/minecraft/world/entity/player/Player/lambda$addAdditionalSaveData$3(Lnet/minecraft/nbt/CompoundTag;Lnet/minecraft/nbt/Tag;)V: lambda$addAdditionalSaveData$3 -> m_219754_
+Conflicting propagated mapping for com/statecraft/client/gui/MailComposeScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
+Conflicting propagated mapping for com/statecraft/client/gui/MailComposeScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
 Conflicting propagated mapping for com/statecraft/client/gui/MailInboxScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
 Conflicting propagated mapping for com/statecraft/client/gui/MailInboxScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
 Conflicting propagated mapping for com/statecraft/client/gui/MailInboxScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
 Conflicting propagated mapping for com/statecraft/client/gui/MailInboxScreen/mouseClicked(DDI)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseClicked(DDI)Z: mouseClicked -> m_6375_
-Conflicting propagated mapping for com/statecraft/client/gui/LongTextEditorScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
-Conflicting propagated mapping for com/statecraft/client/gui/LongTextEditorScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
-Conflicting propagated mapping for com/statecraft/client/gui/LongTextEditorScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
-Conflicting propagated mapping for com/statecraft/client/gui/MailComposeScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
-Conflicting propagated mapping for com/statecraft/client/gui/MailComposeScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
-Conflicting propagated mapping for net/minecraft/world/entity/LivingEntity/lambda$addAdditionalSaveData$3(Lnet/minecraft/nbt/CompoundTag;Lnet/minecraft/nbt/Tag;)V from net/minecraft/world/entity/player/Player/lambda$addAdditionalSaveData$3(Lnet/minecraft/nbt/CompoundTag;Lnet/minecraft/nbt/Tag;)V: lambda$addAdditionalSaveData$3 -> m_219754_
 Conflicting propagated mapping for com/statecraft/client/gui/MailViewScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
 Conflicting propagated mapping for com/statecraft/client/gui/MailViewScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
 Conflicting propagated mapping for com/statecraft/client/gui/MailViewScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
 Conflicting propagated mapping for com/statecraft/client/gui/MembersListScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
 Conflicting propagated mapping for com/statecraft/client/gui/MembersListScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
 Conflicting propagated mapping for com/statecraft/client/gui/MembersListScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
-Conflicting propagated mapping for com/statecraft/client/gui/ProposeBillScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
-Conflicting propagated mapping for com/statecraft/client/gui/ProposeBillScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
-Conflicting propagated mapping for com/statecraft/client/gui/ProposeBillScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
-Conflicting propagated mapping for com/statecraft/client/gui/ProposeBillScreen/mouseClicked(DDI)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseClicked(DDI)Z: mouseClicked -> m_6375_
-Conflicting propagated mapping for com/statecraft/client/gui/ProposeBillScreen/tick()V from net/minecraft/client/gui/screens/Screen/tick()V: tick -> m_86600_
 Conflicting propagated mapping for com/statecraft/client/gui/ProfileScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
 Conflicting propagated mapping for com/statecraft/client/gui/ProfileScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
 Conflicting propagated mapping for com/statecraft/client/gui/NationsListScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
 Conflicting propagated mapping for com/statecraft/client/gui/NationsListScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
 Conflicting propagated mapping for com/statecraft/client/gui/NationsListScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
 Conflicting propagated mapping for com/statecraft/client/gui/NationsListScreen/mouseClicked(DDI)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseClicked(DDI)Z: mouseClicked -> m_6375_
-Conflicting propagated mapping for com/statecraft/client/gui/MyCitiesScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
-Conflicting propagated mapping for com/statecraft/client/gui/MyCitiesScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
-Conflicting propagated mapping for com/statecraft/client/gui/MyCitiesScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
-Conflicting propagated mapping for com/statecraft/client/gui/MyCitiesScreen/mouseClicked(DDI)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseClicked(DDI)Z: mouseClicked -> m_6375_
 Conflicting propagated mapping for com/statecraft/client/gui/MyStatesScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
 Conflicting propagated mapping for com/statecraft/client/gui/MyStatesScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
 Conflicting propagated mapping for com/statecraft/client/gui/MyStatesScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
 Conflicting propagated mapping for com/statecraft/client/gui/MyStatesScreen/mouseClicked(DDI)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseClicked(DDI)Z: mouseClicked -> m_6375_
+Conflicting propagated mapping for com/statecraft/client/gui/MyCitiesScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
+Conflicting propagated mapping for com/statecraft/client/gui/MyCitiesScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
+Conflicting propagated mapping for com/statecraft/client/gui/MyCitiesScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
+Conflicting propagated mapping for com/statecraft/client/gui/MyCitiesScreen/mouseClicked(DDI)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseClicked(DDI)Z: mouseClicked -> m_6375_
 Conflicting propagated mapping for com/statecraft/client/gui/OfficerManagementScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
 Conflicting propagated mapping for com/statecraft/client/gui/OfficerManagementScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
 Conflicting propagated mapping for com/statecraft/client/gui/OfficerManagementScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
 Conflicting propagated mapping for com/statecraft/client/gui/OfficerManagementScreen/mouseClicked(DDI)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseClicked(DDI)Z: mouseClicked -> m_6375_
+Conflicting propagated mapping for com/statecraft/client/gui/ProposeBillScreen/mouseScrolled(DDD)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseScrolled(DDD)Z: mouseScrolled -> m_6050_
+Conflicting propagated mapping for com/statecraft/client/gui/ProposeBillScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
+Conflicting propagated mapping for com/statecraft/client/gui/ProposeBillScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
+Conflicting propagated mapping for com/statecraft/client/gui/ProposeBillScreen/mouseClicked(DDI)Z from net/minecraft/client/gui/components/events/ContainerEventHandler/mouseClicked(DDI)Z: mouseClicked -> m_6375_
+Conflicting propagated mapping for com/statecraft/client/gui/ProposeBillScreen/tick()V from net/minecraft/client/gui/screens/Screen/tick()V: tick -> m_86600_
 Conflicting propagated mapping for com/statecraft/client/gui/StateSettingsScreen/onClose()V from net/minecraft/client/gui/screens/Screen/onClose()V: onClose -> m_7379_
 Conflicting propagated mapping for com/statecraft/client/gui/StateSettingsScreen/init()V from com/statecraft/client/gui/StateCraftScreen/init()V: init -> m_7856_
 Conflicting propagated mapping for com/statecraft/data/NationSavedData/save(Lnet/minecraft/nbt/CompoundTag;)Lnet/minecraft/nbt/CompoundTag; from net/minecraft/world/level/saveddata/SavedData/save(Lnet/minecraft/nbt/CompoundTag;)Lnet/minecraft/nbt/CompoundTag;: save -> m_7176_
@@ -338,6 +343,8 @@ Writing Output: C:\Users\tswin\IdeaProjects\StateCraftMods\StateCraft\build\reob
   com/statecraft/client/gui/EminentDomainScreen.class
   com/statecraft/client/gui/EntitySettingsScreen$1.class
   com/statecraft/client/gui/EntitySettingsScreen.class
+  com/statecraft/client/gui/ExecutiveActionsScreen$1.class
+  com/statecraft/client/gui/ExecutiveActionsScreen.class
   com/statecraft/client/gui/GovMailViewScreen.class
   com/statecraft/client/gui/GovMailboxScreen$1.class
   com/statecraft/client/gui/GovMailboxScreen$EntityType.class
@@ -454,6 +461,8 @@ Writing Output: C:\Users\tswin\IdeaProjects\StateCraftMods\StateCraft\build\reob
   com/statecraft/legislature/Bill$Vote.class
   com/statecraft/legislature/Bill.class
   com/statecraft/legislature/EmergencyPower.class
+  com/statecraft/legislature/EmergencyPowerManager$1.class
+  com/statecraft/legislature/EmergencyPowerManager.class
   com/statecraft/legislature/Law$Type.class
   com/statecraft/legislature/Law.class
   com/statecraft/legislature/LawCodex$CodexStats.class
@@ -496,6 +505,8 @@ Writing Output: C:\Users\tswin\IdeaProjects\StateCraftMods\StateCraft\build\reob
   com/statecraft/network/packets/InvitationActionPacket.class
   com/statecraft/network/packets/InvitePlayerPacket$InviteType.class
   com/statecraft/network/packets/InvitePlayerPacket.class
+  com/statecraft/network/packets/InvokeEmergencyPowerPacket$Action.class
+  com/statecraft/network/packets/InvokeEmergencyPowerPacket.class
   com/statecraft/network/packets/JoinCitizenshipPacket$JoinType.class
   com/statecraft/network/packets/JoinCitizenshipPacket.class
   com/statecraft/network/packets/LeaderBillActionPacket$ActionType.class
@@ -521,6 +532,7 @@ Writing Output: C:\Users\tswin\IdeaProjects\StateCraftMods\StateCraft\build\reob
   com/statecraft/network/packets/RequestCitySettingsPacket.class
   com/statecraft/network/packets/RequestContractsPacket.class
   com/statecraft/network/packets/RequestElectionDataPacket.class
+  com/statecraft/network/packets/RequestEmergencyPowerDataPacket.class
   com/statecraft/network/packets/RequestGovMailDataPacket$Action.class
   com/statecraft/network/packets/RequestGovMailDataPacket$EntityType.class
   com/statecraft/network/packets/RequestGovMailDataPacket.class
@@ -564,6 +576,9 @@ Writing Output: C:\Users\tswin\IdeaProjects\StateCraftMods\StateCraft\build\reob
   com/statecraft/network/packets/SyncElectionDataPacket$CandidateInfo.class
   com/statecraft/network/packets/SyncElectionDataPacket$HistoryEntry.class
   com/statecraft/network/packets/SyncElectionDataPacket.class
+  com/statecraft/network/packets/SyncEmergencyPowerDataPacket$PowerEntry.class
+  com/statecraft/network/packets/SyncEmergencyPowerDataPacket$PowerStatus.class
+  com/statecraft/network/packets/SyncEmergencyPowerDataPacket.class
   com/statecraft/network/packets/SyncInvitationsPacket$InviteInfo.class
   com/statecraft/network/packets/SyncInvitationsPacket.class
   com/statecraft/network/packets/SyncLegislatureDataPacket$BillSummary.class

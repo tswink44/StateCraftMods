@@ -41,8 +41,6 @@ public class Nation {
     private int electionDurationDays = 1; // Default: 1 day election duration
     private int maxOfficers = 3;          // Default: max 3 officers (can be 0-3)
 
-    // Treasury (for future economy integration)
-    private long balance;
 
     public Nation(UUID id, String name, UUID leaderId) {
         this.id = id;
@@ -66,7 +64,6 @@ public class Nation {
         this.baseChunkValue = 100.0; // Default $100
         this.chunkClaimFee = 0.0; // Default: no fee
         this.salesTaxRate = 0.0; // Default: no nation sales tax (set via legislature)
-        this.balance = 0;
     }
 
     public UUID getId() {
@@ -340,25 +337,6 @@ public class Nation {
         return officers.size() < maxOfficers;
     }
 
-    public long getBalance() {
-        return balance;
-    }
-
-    public void setBalance(long balance) {
-        this.balance = balance;
-    }
-
-    public void deposit(long amount) {
-        this.balance += amount;
-    }
-
-    public boolean withdraw(long amount) {
-        if (this.balance >= amount) {
-            this.balance -= amount;
-            return true;
-        }
-        return false;
-    }
 
     // Diplomacy
     public Set<UUID> getAllies() {
@@ -513,7 +491,6 @@ public class Nation {
         tag.putBoolean("open", open);
         tag.putBoolean("openBorders", openBorders);
         tag.putString("flagUrl", flagUrl);
-        tag.putLong("balance", balance);
         tag.putDouble("statePassThroughRate", statePassThroughRate);
         tag.putDouble("baseChunkValue", baseChunkValue);
         tag.putDouble("chunkClaimFee", chunkClaimFee);
@@ -593,7 +570,7 @@ public class Nation {
         nation.open = tag.getBoolean("open");
         nation.openBorders = tag.contains("openBorders") ? tag.getBoolean("openBorders") : false;
         nation.flagUrl = tag.getString("flagUrl");
-        nation.balance = tag.getLong("balance");
+        // Note: "balance" key in old saves is ignored — treasury is managed by EconomyManager
         nation.statePassThroughRate = tag.contains("statePassThroughRate") ? tag.getDouble("statePassThroughRate") : 0.20;
         nation.baseChunkValue = tag.contains("baseChunkValue") ? tag.getDouble("baseChunkValue") : 100.0;
         nation.chunkClaimFee = tag.contains("chunkClaimFee") ? tag.getDouble("chunkClaimFee") : 0.0;

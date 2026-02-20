@@ -5,6 +5,7 @@ import com.statecraft.config.StateCraftConfig;
 import com.statecraft.core.ChunkClaimManager;
 import com.statecraft.core.City;
 import com.statecraft.core.ClaimedChunk;
+import com.statecraft.core.DiplomacyManager;
 import com.statecraft.core.Nation;
 import com.statecraft.core.OwnershipType;
 import com.statecraft.core.State;
@@ -88,6 +89,9 @@ public class LegislatureManager {
         for (Legislature legislature : legislatures.values()) {
             tickLegislature(legislature, now, server);
         }
+
+        // Tick diplomacy manager to expire proposals and truces
+        DiplomacyManager.getInstance().tick();
     }
 
     private void tickLegislature(Legislature legislature, long now, MinecraftServer server) {
@@ -208,6 +212,11 @@ public class LegislatureManager {
         // Check emergency power expirations
         for (Map.Entry<EmergencyPower, Long> entry : legislature.getActiveEmergencyPowers().entrySet()) {
             if (entry.getValue() > 0 && now >= entry.getValue()) {
+                // Reverse mechanical effects before deactivating
+                Nation expNation = ChunkClaimManager.getInstance().getNation(legislature.getNationId());
+                if (expNation != null) {
+                    EmergencyPowerManager.getInstance().onPowerExpired(expNation, entry.getKey(), server);
+                }
                 legislature.deactivateEmergencyPower(entry.getKey());
                 notifyLegislatureMembers(legislature, nation, server,
                     "§6[Emergency] §e" + entry.getKey().getDisplayName() + " has expired.");
@@ -340,52 +349,54 @@ public class LegislatureManager {
                     StateCraft.LOGGER.info("Policy change: Open borders set to {} for nation {}",
                         value, nation.getName());
                     break;
-                case DECLARE_WAR:
-                    // Add to enemies
-                    try {
-                        UUID enemyId = UUID.fromString(value);
-                        nation.addEnemy(enemyId);
-                    } catch (IllegalArgumentException e) {
-                        // Try to find nation by name
-                        Nation enemy = ChunkClaimManager.getInstance().getNationByName(value);
-                        if (enemy != null) {
-                            nation.addEnemy(enemy.getId());
-                        }
+                case DECLARE_WAR: {
+                    // Bilateral war declaration via DiplomacyManager
+                    Nation warTarget = resolveNation(value);
+                    if (warTarget != null && server != null) {
+                        String result = DiplomacyManager.getInstance().declareWar(nation, warTarget, server, false);
+                        StateCraft.LOGGER.info("Legislature DECLARE_WAR: {} -> {} : {}",
+                            nation.getName(), warTarget.getName(), result);
+                    } else if (warTarget == null) {
+                        StateCraft.LOGGER.warn("Legislature DECLARE_WAR: target nation not found: {}", value);
                     }
                     break;
-                case DECLARE_PEACE:
-                    try {
-                        UUID enemyId = UUID.fromString(value);
-                        nation.removeEnemy(enemyId);
-                    } catch (IllegalArgumentException e) {
-                        Nation enemy = ChunkClaimManager.getInstance().getNationByName(value);
-                        if (enemy != null) {
-                            nation.removeEnemy(enemy.getId());
-                        }
+                }
+                case DECLARE_PEACE: {
+                    // Creates a pending peace proposal via DiplomacyManager
+                    Nation peaceTarget = resolveNation(value);
+                    if (peaceTarget != null && server != null) {
+                        String result = DiplomacyManager.getInstance().proposePeace(nation, peaceTarget, server);
+                        StateCraft.LOGGER.info("Legislature DECLARE_PEACE: {} -> {} : {}",
+                            nation.getName(), peaceTarget.getName(), result);
+                    } else if (peaceTarget == null) {
+                        StateCraft.LOGGER.warn("Legislature DECLARE_PEACE: target nation not found: {}", value);
                     }
                     break;
-                case FORM_ALLIANCE:
-                    try {
-                        UUID allyId = UUID.fromString(value);
-                        nation.addAlly(allyId);
-                    } catch (IllegalArgumentException e) {
-                        Nation ally = ChunkClaimManager.getInstance().getNationByName(value);
-                        if (ally != null) {
-                            nation.addAlly(ally.getId());
-                        }
+                }
+                case FORM_ALLIANCE: {
+                    // Creates a pending alliance proposal via DiplomacyManager
+                    Nation allyTarget = resolveNation(value);
+                    if (allyTarget != null && server != null) {
+                        String result = DiplomacyManager.getInstance().proposeAlliance(nation, allyTarget, server);
+                        StateCraft.LOGGER.info("Legislature FORM_ALLIANCE: {} -> {} : {}",
+                            nation.getName(), allyTarget.getName(), result);
+                    } else if (allyTarget == null) {
+                        StateCraft.LOGGER.warn("Legislature FORM_ALLIANCE: target nation not found: {}", value);
                     }
                     break;
-                case BREAK_ALLIANCE:
-                    try {
-                        UUID allyId = UUID.fromString(value);
-                        nation.removeAlly(allyId);
-                    } catch (IllegalArgumentException e) {
-                        Nation ally = ChunkClaimManager.getInstance().getNationByName(value);
-                        if (ally != null) {
-                            nation.removeAlly(ally.getId());
-                        }
+                }
+                case BREAK_ALLIANCE: {
+                    // Bilateral alliance break via DiplomacyManager
+                    Nation breakTarget = resolveNation(value);
+                    if (breakTarget != null && server != null) {
+                        String result = DiplomacyManager.getInstance().breakAlliance(nation, breakTarget, server);
+                        StateCraft.LOGGER.info("Legislature BREAK_ALLIANCE: {} -> {} : {}",
+                            nation.getName(), breakTarget.getName(), result);
+                    } else if (breakTarget == null) {
+                        StateCraft.LOGGER.warn("Legislature BREAK_ALLIANCE: target nation not found: {}", value);
                     }
                     break;
+                }
                 case BASE_CHUNK_VALUE:
                     nation.setBaseChunkValue(Double.parseDouble(value));
                     StateCraft.LOGGER.info("Policy change: Base chunk value set to ${} for nation {}",
@@ -434,24 +445,26 @@ public class LegislatureManager {
                     if (com.statecraft.integration.IntegrationRegistry.hasEconomyIntegration()) {
                         chunkValuation = com.statecraft.integration.IntegrationRegistry.getChunkTotalValue(edChunkX, edChunkZ, edDimension);
                     }
+                    // Ensure a minimum compensation even if valuation is zero or unavailable
+                    if (chunkValuation <= 0) {
+                        chunkValuation = nation.getBaseChunkValue();
+                    }
                     double compensation = chunkValuation * 10;
 
-                    // Withdraw from nation treasury
-                    boolean withdrawn = false;
-                    if (compensation > 0 && com.statecraft.integration.IntegrationRegistry.hasEconomyIntegration()) {
-                        withdrawn = com.statecraft.integration.IntegrationRegistry.withdrawFromNation(
+                    // Always pay the previous owner — eminent domain requires compensation
+                    boolean nationPaid = false;
+                    if (com.statecraft.integration.IntegrationRegistry.hasEconomyIntegration()) {
+                        // Try to withdraw from nation treasury
+                        nationPaid = com.statecraft.integration.IntegrationRegistry.withdrawFromNation(
                             nation.getName(), compensation,
                             "Eminent domain compensation for chunk (" + edChunkX + ", " + edChunkZ + ")");
 
-                        if (!withdrawn) {
-                            StateCraft.LOGGER.warn("Eminent domain: Nation '{}' treasury has insufficient funds for compensation ${}",
-                                nation.getName(), compensation);
-                            // Still proceed — the law was enacted democratically
+                        if (!nationPaid) {
+                            StateCraft.LOGGER.warn("Eminent domain: Nation '{}' treasury has insufficient funds (${}) — compensation still owed to player",
+                                nation.getName(), String.format("%.2f", compensation));
                         }
-                    }
 
-                    // Deposit compensation to previous owner
-                    if (compensation > 0 && withdrawn && com.statecraft.integration.IntegrationRegistry.hasEconomyIntegration()) {
+                        // Always deposit compensation to the previous owner
                         com.statecraft.integration.IntegrationRegistry.depositToPlayer(
                             previousOwner, compensation,
                             "Eminent domain compensation for chunk (" + edChunkX + ", " + edChunkZ + ") in " + nation.getName());
@@ -464,13 +477,48 @@ public class LegislatureManager {
                     edChunk.setForSale(false);
                     ChunkClaimManager.getInstance().markDirty();
 
-                    StateCraft.LOGGER.info("Eminent domain enacted: Chunk ({}, {}) repossessed from player {} in nation {}. Compensation: ${}",
-                        edChunkX, edChunkZ, previousOwner, nation.getName(), compensation);
+                    // Send mail notification to the previous owner
+                    String edCompensationStr = com.statecraft.integration.IntegrationRegistry.formatCurrency(compensation);
+                    String edMailSubject = "Eminent Domain — Your Property Has Been Seized";
+                    String edMailBody = "The nation of " + nation.getName() + " has enacted eminent domain on your property at chunk (" +
+                        edChunkX + ", " + edChunkZ + ").\n\n" +
+                        "Chunk valuation: " + com.statecraft.integration.IntegrationRegistry.formatCurrency(chunkValuation) + "\n" +
+                        "Compensation (10x valuation): " + edCompensationStr + "\n" +
+                        (nationPaid ?
+                            "The compensation has been deposited to your account." :
+                            "NOTE: The nation treasury had insufficient funds. The compensation has still been credited to your account.") +
+                        "\n\nThe chunk has been returned to government ownership.";
+                    try {
+                        MailManager mailManager = MailManager.getInstance();
+                        mailManager.sendSystemMail(previousOwner, Mail.MailType.GOV_ANNOUNCEMENT, edMailSubject, edMailBody);
+                    } catch (Exception mailEx) {
+                        StateCraft.LOGGER.warn("Failed to send eminent domain notification mail: {}", mailEx.getMessage());
+                    }
+
+                    StateCraft.LOGGER.info("Eminent domain enacted: Chunk ({}, {}) repossessed from player {} in nation {}. Compensation: {}{}",
+                        edChunkX, edChunkZ, previousOwner, nation.getName(), edCompensationStr,
+                        nationPaid ? "" : " (nation treasury insufficient — player still compensated)");
                     break;
                 case NATION_SALES_TAX_RATE:
                     nation.setSalesTaxRate(Double.parseDouble(value));
                     StateCraft.LOGGER.info("Policy change: Nation sales tax rate set to {}% for nation {}",
                         Double.parseDouble(value) * 100, nation.getName());
+                    break;
+                case LEADER_SPENDING_LIMIT:
+                    double spendingLimit = Double.parseDouble(value);
+                    // Set via economy mod integration (soft dependency)
+                    try {
+                        Class<?> spendingLimitClass = Class.forName("com.statecraft.economy.core.SpendingLimitManager");
+                        Object spendingManager = spendingLimitClass.getMethod("getInstance").invoke(null);
+                        spendingLimitClass.getMethod("setNationLeaderLimit", UUID.class, double.class)
+                            .invoke(spendingManager, nation.getId(), spendingLimit);
+                        StateCraft.LOGGER.info("Policy change: Nation leader spending limit set to ${} for nation {}",
+                            value, nation.getName());
+                    } catch (ClassNotFoundException e) {
+                        StateCraft.LOGGER.warn("Economy mod not loaded — cannot set leader spending limit");
+                    } catch (Exception e) {
+                        StateCraft.LOGGER.warn("Error setting leader spending limit: {}", e.getMessage());
+                    }
                     break;
                 // Constitutional policies (require 2/3 majority, cannot be vetoed)
                 case LEADER_TERM_DURATION:
@@ -553,6 +601,18 @@ public class LegislatureManager {
         return "Leader";
     }
 
+    /**
+     * Resolve a nation from a value that may be a UUID string or a nation name.
+     */
+    private Nation resolveNation(String value) {
+        try {
+            UUID nationId = UUID.fromString(value);
+            return ChunkClaimManager.getInstance().getNation(nationId);
+        } catch (IllegalArgumentException e) {
+            return ChunkClaimManager.getInstance().getNationByName(value);
+        }
+    }
+
     public void markDirty() {
         this.dirty = true;
         // Also trigger world save to persist legislature data
@@ -602,6 +662,12 @@ public class LegislatureManager {
         }
         tag.put("legislatures", legislaturesList);
 
+        // Save EmergencyPowerManager state
+        tag.put("emergencyPowerManager", EmergencyPowerManager.getInstance().save());
+
+        // Save DiplomacyManager state
+        tag.put("diplomacyManager", DiplomacyManager.getInstance().save());
+
         return tag;
     }
 
@@ -612,6 +678,16 @@ public class LegislatureManager {
         for (int i = 0; i < legislaturesList.size(); i++) {
             Legislature legislature = Legislature.load(legislaturesList.getCompound(i));
             legislatures.put(legislature.getNationId(), legislature);
+        }
+
+        // Load EmergencyPowerManager state
+        if (tag.contains("emergencyPowerManager")) {
+            EmergencyPowerManager.getInstance().load(tag.getCompound("emergencyPowerManager"));
+        }
+
+        // Load DiplomacyManager state
+        if (tag.contains("diplomacyManager")) {
+            DiplomacyManager.getInstance().load(tag.getCompound("diplomacyManager"));
         }
     }
 }

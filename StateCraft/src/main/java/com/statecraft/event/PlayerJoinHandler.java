@@ -4,6 +4,7 @@ import com.statecraft.StateCraft;
 import com.statecraft.contract.Contract;
 import com.statecraft.contract.ContractManager;
 import com.statecraft.core.ChunkClaimManager;
+import com.statecraft.core.DiplomacyManager;
 import com.statecraft.core.ElectionManager;
 import com.statecraft.core.Nation;
 import net.minecraft.network.chat.Component;
@@ -37,6 +38,17 @@ public class PlayerJoinHandler {
 
             // Send contract notifications
             sendContractLoginNotifications(player, nation);
+
+            // Diplomacy proposal notifications (leader only)
+            if (player.getUUID().equals(nation.getLeaderId())) {
+                var pendingProposals = DiplomacyManager.getInstance().getPendingProposals(nation.getId());
+                if (!pendingProposals.isEmpty()) {
+                    player.sendSystemMessage(
+                        Component.literal("§d[Diplomacy] §f" + pendingProposals.size() +
+                            " pending diplomatic proposal(s) awaiting your review. Use /sc gui to access Diplomacy.")
+                    );
+                }
+            }
         }
 
         StateCraft.LOGGER.debug("Player {} logged in", player.getName().getString());

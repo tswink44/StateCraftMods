@@ -36,7 +36,8 @@ public class SyncAccountActivityPacket {
             long timestamp = buf.readLong();
             String initiatorName = buf.readUtf();
             boolean incoming = buf.readBoolean();
-            entries.add(new ActivityEntry(type, amount, description, timestamp, initiatorName, incoming));
+            double runningBalance = buf.readDouble();
+            entries.add(new ActivityEntry(type, amount, description, timestamp, initiatorName, incoming, runningBalance));
         }
     }
 
@@ -52,6 +53,7 @@ public class SyncAccountActivityPacket {
             buf.writeLong(entry.timestamp());
             buf.writeUtf(entry.initiatorName());
             buf.writeBoolean(entry.incoming());
+            buf.writeDouble(entry.runningBalance());
         }
     }
 
@@ -79,9 +81,10 @@ public class SyncAccountActivityPacket {
      * @param timestamp Unix timestamp of the transaction
      * @param initiatorName Display name of who initiated (empty if unknown/self)
      * @param incoming Whether this is money coming in (true) or going out (false)
+     * @param runningBalance The account balance after this transaction
      */
     public record ActivityEntry(String type, double amount, String description, long timestamp,
-                                String initiatorName, boolean incoming) {
+                                String initiatorName, boolean incoming, double runningBalance) {
     }
 }
 

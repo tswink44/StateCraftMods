@@ -3,7 +3,11 @@ package com.statecraft.economy.data;
 import com.statecraft.economy.StateCraftEconomy;
 import com.statecraft.economy.core.BankAccount;
 import com.statecraft.economy.core.EconomyManager;
+import com.statecraft.economy.core.SpendingLimitManager;
+import com.statecraft.economy.core.TaxationManager;
 import com.statecraft.economy.core.Transaction;
+import com.statecraft.economy.company.CompanyManager;
+import com.statecraft.economy.company.BankManager;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -27,6 +31,7 @@ public class EconomySavedData extends SavedData {
     private final Map<UUID, BankAccount> nationTreasuries = new HashMap<>();
     private final Map<UUID, BankAccount> stateTreasuries = new HashMap<>();
     private final Map<UUID, BankAccount> cityTreasuries = new HashMap<>();
+    private final Map<UUID, BankAccount> companyTreasuries = new HashMap<>();
 
     public EconomySavedData() {
         super();
@@ -90,8 +95,22 @@ public class EconomySavedData extends SavedData {
             data.cityTreasuries.put(id, account);
         }
 
-        StateCraftEconomy.LOGGER.info("Loaded economy data: {} player accounts, {} nation treasuries, {} state treasuries, {} city treasuries",
-            data.playerAccounts.size(), data.nationTreasuries.size(), data.stateTreasuries.size(), data.cityTreasuries.size());
+        // Load company treasuries
+        if (tag.contains("CompanyTreasuries")) {
+            ListTag companyList = tag.getList("CompanyTreasuries", Tag.TAG_COMPOUND);
+            for (int i = 0; i < companyList.size(); i++) {
+                CompoundTag accountTag = companyList.getCompound(i);
+                UUID id = accountTag.getUUID("Id");
+                double balance = accountTag.getDouble("Balance");
+                UUID bankId = accountTag.contains("BankId") ? accountTag.getUUID("BankId") : null;
+
+                BankAccount account = new BankAccount(id, BankAccount.AccountType.COMPANY, bankId, balance);
+                data.companyTreasuries.put(id, account);
+            }
+        }
+
+        StateCraftEconomy.LOGGER.info("Loaded economy data: {} player accounts, {} nation treasuries, {} state treasuries, {} city treasuries, {} company treasuries",
+            data.playerAccounts.size(), data.nationTreasuries.size(), data.stateTreasuries.size(), data.cityTreasuries.size(), data.companyTreasuries.size());
 
         // Load transaction history
         if (tag.contains("TransactionHistory")) {
@@ -117,6 +136,31 @@ public class EconomySavedData extends SavedData {
             }
             EconomyManager.getInstance().setTransactionHistory(history);
             StateCraftEconomy.LOGGER.info("Loaded transaction history for {} accounts", history.size());
+        }
+
+        // Load taxation manager state
+        if (tag.contains("TaxationManager")) {
+            TaxationManager.getInstance().load(tag.getCompound("TaxationManager"));
+        }
+
+        // Load spending limit manager state
+        if (tag.contains("SpendingLimitManager")) {
+            SpendingLimitManager.getInstance().load(tag.getCompound("SpendingLimitManager"));
+        }
+
+        // Load company manager state
+        if (tag.contains("CompanyManager")) {
+            CompanyManager.getInstance().load(tag.getCompound("CompanyManager"));
+        }
+
+        // Load bank manager state (must be after CompanyManager since it references companies)
+        if (tag.contains("BankManager")) {
+            BankManager.getInstance().load(tag.getCompound("BankManager"));
+        }
+
+        // Load marketplace manager state
+        if (tag.contains("MarketplaceManager")) {
+            com.statecraft.economy.marketplace.MarketplaceManager.getInstance().load(tag.getCompound("MarketplaceManager"));
         }
 
         return data;
@@ -183,6 +227,19 @@ public class EconomySavedData extends SavedData {
         }
         tag.put("CityTreasuries", cityList);
 
+        // Save company treasuries
+        ListTag companyList = new ListTag();
+        for (Map.Entry<UUID, BankAccount> entry : manager.getCompanyTreasuries().entrySet()) {
+            CompoundTag accountTag = new CompoundTag();
+            accountTag.putUUID("Id", entry.getKey());
+            accountTag.putDouble("Balance", entry.getValue().getBalance());
+            if (entry.getValue().getBankId() != null) {
+                accountTag.putUUID("BankId", entry.getValue().getBankId());
+            }
+            companyList.add(accountTag);
+        }
+        tag.put("CompanyTreasuries", companyList);
+
         // Save transaction history
         ListTag historyList = new ListTag();
         Map<UUID, List<Transaction>> transactionHistory = manager.getTransactionHistoryMap();
@@ -212,6 +269,26 @@ public class EconomySavedData extends SavedData {
         }
         tag.put("TransactionHistory", historyList);
 
+        // Save taxation manager state
+        tag.put("TaxationManager", TaxationManager.getInstance().save());
+        TaxationManager.getInstance().clearDirty();
+
+        // Save spending limit manager state
+        tag.put("SpendingLimitManager", SpendingLimitManager.getInstance().save());
+        SpendingLimitManager.getInstance().clearDirty();
+
+        // Save company manager state
+        tag.put("CompanyManager", CompanyManager.getInstance().save());
+        CompanyManager.getInstance().clearDirty();
+
+        // Save bank manager state
+        tag.put("BankManager", BankManager.getInstance().save());
+        BankManager.getInstance().clearDirty();
+
+        // Save marketplace manager state
+        tag.put("MarketplaceManager", com.statecraft.economy.marketplace.MarketplaceManager.getInstance().save());
+        com.statecraft.economy.marketplace.MarketplaceManager.getInstance().clearDirty();
+
         manager.clearDirty();
         return tag;
     }
@@ -235,6 +312,10 @@ public class EconomySavedData extends SavedData {
 
     public Map<UUID, BankAccount> getCityTreasuries() {
         return cityTreasuries;
+    }
+
+    public Map<UUID, BankAccount> getCompanyTreasuries() {
+        return companyTreasuries;
     }
 
     public void markForSave() {

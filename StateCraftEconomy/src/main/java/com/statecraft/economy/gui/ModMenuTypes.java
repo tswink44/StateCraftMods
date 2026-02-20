@@ -25,6 +25,9 @@ public class ModMenuTypes {
     public static final RegistryObject<MenuType<TradingHubMenu>> TRADING_HUB = MENUS.register("trading_hub",
         () -> IForgeMenuType.create(TradingHubMenu::new));
 
+    public static final RegistryObject<MenuType<CompanyVaultMenu>> COMPANY_VAULT = MENUS.register("company_vault",
+        () -> IForgeMenuType.create(CompanyVaultMenu::new));
+
     public static void register(IEventBus eventBus) {
         MENUS.register(eventBus);
     }

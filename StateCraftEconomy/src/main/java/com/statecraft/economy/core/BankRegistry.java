@@ -19,9 +19,9 @@ public class BankRegistry {
     private UUID defaultBankId = DEFAULT_BANK_ID;
 
     public BankRegistry() {
-        // Create the default bank
+        // Create the default bank — no interest paid; interest is a player-bank feature only
         Bank defaultBank = new Bank(DEFAULT_BANK_ID, "default", "Central Bank");
-        defaultBank.setInterestRate(0.02); // 2% annual interest
+        defaultBank.setInterestRate(0.0); // Default bank pays no interest
         defaultBank.setColor(0x2196F3); // Blue color
         banks.put(DEFAULT_BANK_ID, defaultBank);
     }
@@ -126,6 +126,7 @@ public class BankRegistry {
         // Ensure default bank exists
         if (!banks.containsKey(DEFAULT_BANK_ID)) {
             Bank defaultBank = new Bank(DEFAULT_BANK_ID, "default", "Central Bank");
+            defaultBank.setInterestRate(0.0); // Default bank pays no interest
             defaultBank.setColor(0x2196F3);
             banks.put(DEFAULT_BANK_ID, defaultBank);
         }

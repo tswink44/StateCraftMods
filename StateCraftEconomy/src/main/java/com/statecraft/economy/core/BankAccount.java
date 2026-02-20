@@ -3,7 +3,7 @@ package com.statecraft.economy.core;
 import java.util.UUID;
 
 /**
- * Represents a bank account (player, nation, state, or city)
+ * Represents a bank account (player, nation, state, city, or company)
  */
 public class BankAccount {
 
@@ -11,7 +11,8 @@ public class BankAccount {
         PLAYER,
         NATION,
         STATE,
-        CITY
+        CITY,
+        COMPANY
     }
 
     private final UUID ownerId;

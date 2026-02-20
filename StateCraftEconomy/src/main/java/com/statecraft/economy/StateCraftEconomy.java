@@ -93,6 +93,7 @@ public class StateCraftEconomy {
         if (event.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) {
             event.accept(ModBlocks.ATM_ITEM);
             event.accept(ModBlocks.TRADING_HUB_ITEM);
+            event.accept(ModBlocks.MARKETPLACE_ITEM);
         }
 
         // Add currency bills to Tools & Utilities creative tab
@@ -139,6 +140,15 @@ public class StateCraftEconomy {
         if (stateCraftLoaded) {
             TaxationManager.getInstance().tick(event.getServer());
         }
+
+        // Run company dividend tick
+        com.statecraft.economy.company.CompanyManager.getInstance().tick(event.getServer());
+
+        // Run bank interest and loan tick
+        com.statecraft.economy.company.BankManager.getInstance().tick(event.getServer());
+
+        // Run marketplace listing expiration tick
+        com.statecraft.economy.marketplace.MarketplaceManager.getInstance().tick(event.getServer());
 
         // Run valuation cache tick
         ChunkValuationManager.getInstance().tick(event.getServer());

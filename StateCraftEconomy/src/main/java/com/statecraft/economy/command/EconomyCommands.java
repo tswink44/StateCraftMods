@@ -7,6 +7,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.statecraft.economy.StateCraftEconomy;
 import com.statecraft.economy.core.EconomyManager;
+import com.statecraft.economy.core.SpendingLimitManager;
 import com.statecraft.economy.core.TaxationManager;
 import com.statecraft.economy.core.TransactionResult;
 import com.statecraft.economy.integration.StateCraftIntegration;
@@ -65,7 +66,10 @@ public class EconomyCommands {
                     .executes(ctx -> setTaxEnabled(ctx, false)))
                 .then(Commands.literal("period")
                     .then(Commands.argument("ticks", LongArgumentType.longArg(1200))
-                        .executes(EconomyCommands::setTaxPeriod))));
+                        .executes(EconomyCommands::setTaxPeriod))))
+            .then(CompanyCommands.buildCompanyCommand())
+            .then(BankCommands.buildBankCommand())
+            .then(MarketplaceCommands.buildMarketCommand());
 
         // Nation treasury commands (only if StateCraft is loaded)
         if (StateCraftEconomy.isStateCraftLoaded()) {
@@ -299,10 +303,23 @@ public class EconomyCommands {
                 return 0;
             }
 
+            // Check daily spending limit
+            SpendingLimitManager spendingMgr = SpendingLimitManager.getInstance();
+            SpendingLimitManager.GovernmentRole role =
+                StateCraftIntegration.getPlayerGovernmentRole(player, "NATION", nationId);
+            String limitError = spendingMgr.checkSpendingLimit(
+                player.getUUID(), "NATION", nationId, amount, role, nationId);
+            if (limitError != null) {
+                context.getSource().sendFailure(Component.literal("§c" + limitError));
+                return 0;
+            }
+
             EconomyManager manager = EconomyManager.getInstance();
             TransactionResult result = manager.withdrawFromNation(nationId, player.getUUID(), amount, "Nation withdrawal");
 
             if (result.isSuccess()) {
+                // Record spending against daily limit
+                spendingMgr.recordSpending(player.getUUID(), "NATION", nationId, amount);
                 context.getSource().sendSuccess(() -> Component.literal("§a" + result.getMessage()), false);
             } else {
                 context.getSource().sendFailure(Component.literal("§c" + result.getMessage()));

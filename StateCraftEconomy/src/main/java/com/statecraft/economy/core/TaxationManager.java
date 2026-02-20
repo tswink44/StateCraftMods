@@ -2,6 +2,9 @@ package com.statecraft.economy.core;
 
 import com.statecraft.economy.StateCraftEconomy;
 import com.statecraft.economy.integration.StateCraftIntegration;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -49,6 +52,9 @@ public class TaxationManager {
     // Tax collection enabled flag
     private boolean enabled = true;
 
+    // Dirty flag for persistence
+    private boolean dirty = false;
+
     private TaxationManager() {}
 
     public static TaxationManager getInstance() {
@@ -69,6 +75,7 @@ public class TaxationManager {
         if (currentTime - lastTaxCollection >= taxPeriodTicks) {
             collectAllTaxes(server);
             lastTaxCollection = currentTime;
+            dirty = true;
         }
     }
 
@@ -259,6 +266,13 @@ public class TaxationManager {
         }
 
         logTaxCollectionResult(result);
+
+        // Collect corporate taxes from companies
+        try {
+            com.statecraft.economy.company.CompanyManager.getInstance().collectCompanyTaxes(server);
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.error("Error during corporate tax collection", e);
+        }
     }
 
     // Helper class to track per-player tax totals
@@ -356,11 +370,13 @@ public class TaxationManager {
         String key = getChunkOwnerKey(chunk);
         int count = negativeBalanceCounts.getOrDefault(key, 0) + 1;
         negativeBalanceCounts.put(key, count);
+        dirty = true;
         return count;
     }
 
     private void resetNegativeCount(ChunkTaxInfo chunk) {
         negativeBalanceCounts.remove(getChunkOwnerKey(chunk));
+        dirty = true;
     }
 
     /**
@@ -533,6 +549,7 @@ public class TaxationManager {
     // Configuration methods
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+        this.dirty = true;
     }
 
     public boolean isEnabled() {
@@ -541,6 +558,7 @@ public class TaxationManager {
 
     public void setTaxPeriodTicks(long ticks) {
         this.taxPeriodTicks = ticks;
+        this.dirty = true;
     }
 
     public long getTaxPeriodTicks() {
@@ -550,6 +568,7 @@ public class TaxationManager {
     public void forceCollectNow(MinecraftServer server) {
         collectAllTaxes(server);
         lastTaxCollection = server.overworld().getGameTime();
+        dirty = true;
     }
 
     /**
@@ -567,6 +586,69 @@ public class TaxationManager {
     public int getNegativeBalanceCount(UUID ownerId, int chunkX, int chunkZ, String dimension) {
         String key = ownerId + ":" + chunkX + ":" + chunkZ + ":" + dimension;
         return negativeBalanceCounts.getOrDefault(key, 0);
+    }
+
+    // ==================== Persistence ====================
+
+    public boolean isDirty() {
+        return dirty;
+    }
+
+    public void clearDirty() {
+        dirty = false;
+    }
+
+    /**
+     * Save taxation manager state to NBT
+     */
+    public CompoundTag save() {
+        CompoundTag tag = new CompoundTag();
+        tag.putLong("LastTaxCollection", lastTaxCollection);
+        tag.putLong("TaxPeriodTicks", taxPeriodTicks);
+        tag.putBoolean("Enabled", enabled);
+
+        // Save negative balance counts
+        ListTag negativeCountsList = new ListTag();
+        for (Map.Entry<String, Integer> entry : negativeBalanceCounts.entrySet()) {
+            CompoundTag entryTag = new CompoundTag();
+            entryTag.putString("Key", entry.getKey());
+            entryTag.putInt("Count", entry.getValue());
+            negativeCountsList.add(entryTag);
+        }
+        tag.put("NegativeBalanceCounts", negativeCountsList);
+
+        return tag;
+    }
+
+    /**
+     * Load taxation manager state from NBT
+     */
+    public void load(CompoundTag tag) {
+        if (tag.contains("LastTaxCollection")) {
+            lastTaxCollection = tag.getLong("LastTaxCollection");
+        }
+        if (tag.contains("TaxPeriodTicks")) {
+            taxPeriodTicks = tag.getLong("TaxPeriodTicks");
+        }
+        if (tag.contains("Enabled")) {
+            enabled = tag.getBoolean("Enabled");
+        }
+
+        // Load negative balance counts
+        negativeBalanceCounts.clear();
+        if (tag.contains("NegativeBalanceCounts")) {
+            ListTag negativeCountsList = tag.getList("NegativeBalanceCounts", Tag.TAG_COMPOUND);
+            for (int i = 0; i < negativeCountsList.size(); i++) {
+                CompoundTag entryTag = negativeCountsList.getCompound(i);
+                String key = entryTag.getString("Key");
+                int count = entryTag.getInt("Count");
+                negativeBalanceCounts.put(key, count);
+            }
+        }
+
+        dirty = false;
+        StateCraftEconomy.LOGGER.info("Loaded taxation state: enabled={}, period={} ticks, lastCollection={}, {} negative balance entries",
+            enabled, taxPeriodTicks, lastTaxCollection, negativeBalanceCounts.size());
     }
 
     // Inner classes for results

@@ -19,7 +19,13 @@ public class Transaction {
         CITY_WITHDRAWAL,
         PURCHASE,
         SALE,
-        TAX
+        TAX,
+        DIVIDEND,
+        INTEREST,
+        LOAN_REPAYMENT,
+        MARKETPLACE_PURCHASE,
+        MARKETPLACE_SALE,
+        IMPORT_TARIFF
     }
 
     private final Type type;
@@ -81,13 +87,16 @@ public class Transaction {
 
     public boolean isIncoming() {
         return type == Type.DEPOSIT || type == Type.TRANSFER_IN ||
-               type == Type.NATION_WITHDRAWAL || type == Type.SALE;
+               type == Type.NATION_WITHDRAWAL || type == Type.SALE ||
+               type == Type.INTEREST || type == Type.LOAN_REPAYMENT ||
+               type == Type.MARKETPLACE_SALE;
     }
 
     public boolean isOutgoing() {
         return type == Type.WITHDRAWAL || type == Type.TRANSFER_OUT ||
                type == Type.NATION_DEPOSIT || type == Type.FEE ||
-               type == Type.PURCHASE || type == Type.TAX;
+               type == Type.PURCHASE || type == Type.TAX ||
+               type == Type.MARKETPLACE_PURCHASE || type == Type.IMPORT_TARIFF;
     }
 }
 
