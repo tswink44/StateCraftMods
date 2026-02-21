@@ -171,18 +171,25 @@ public class ClaimedChunk {
     }
 
     public boolean hasPermission(UUID playerId, Permission permission, PermissionLevel roleLevel) {
-        // Check player-specific overrides first
+        // Check if player is the chunk owner — owner always has all permissions
+        if (ownershipType == OwnershipType.PLAYER && playerId.equals(playerOwner)) {
+            return true;
+        }
+
+        // Check player-specific overrides (building permits)
         Set<Permission> playerPerms = playerPermissions.get(playerId);
         if (playerPerms != null && playerPerms.contains(permission)) {
             return true;
         }
 
-        // Check if player is the chunk owner
-        if (ownershipType == OwnershipType.PLAYER && playerId.equals(playerOwner)) {
-            return true; // Owner has all permissions on their chunk
+        // For privately owned chunks, non-owners without permits are treated as OUTSIDER
+        // Only the owner and explicit permit holders get access
+        if (ownershipType == OwnershipType.PLAYER) {
+            Set<Permission> outsiderPerms = rolePermissions.get(PermissionLevel.OUTSIDER);
+            return outsiderPerms != null && outsiderPerms.contains(permission);
         }
 
-        // Check role-based permissions
+        // Government-owned chunks: check role-based permissions as normal
         Set<Permission> rolePerms = rolePermissions.get(roleLevel);
         return rolePerms != null && rolePerms.contains(permission);
     }

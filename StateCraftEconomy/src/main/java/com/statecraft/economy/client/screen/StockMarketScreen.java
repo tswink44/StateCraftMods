@@ -76,9 +76,11 @@ public class StockMarketScreen extends Screen {
     @Override
     protected void init() {
         super.init();
+        guiWidth = Math.min(420, width - 20);
+        guiHeight = Math.min(280, height - 20);
         guiLeft = (width - guiWidth) / 2;
         guiTop = (height - guiHeight) / 2;
-        tabY = guiTop + 20;
+        tabY = guiTop + 18;
 
         contentTop = tabY + TAB_HEIGHT + 4;
         contentBottom = guiTop + guiHeight - 8;
@@ -166,6 +168,12 @@ public class StockMarketScreen extends Screen {
                 initWidgets();
             }).bounds(dialogX + 118, dialogY + 40, 42, 14).build());
         }
+
+        // Close button
+        addRenderableWidget(Button.builder(Component.literal("×"),
+            btn -> onClose())
+            .bounds(guiLeft + guiWidth - 16, guiTop + 2, 14, 14)
+            .build());
     }
 
     private void switchTab(Tab tab) {
@@ -497,26 +505,59 @@ public class StockMarketScreen extends Screen {
     }
 
     private void createSellListing() {
-        if (selectedCompanyIndex < 0 || selectedCompanyIndex >= playerShares.size()) return;
+        if (selectedCompanyIndex < 0 || selectedCompanyIndex >= playerShares.size()) {
+            if (minecraft != null && minecraft.player != null) {
+                minecraft.player.sendSystemMessage(Component.literal("§cSelect a company first."));
+            }
+            return;
+        }
 
         SyncStockListingsPacket.CompanyShareInfo info = playerShares.get(selectedCompanyIndex);
 
+        double price;
+        int quantity;
         try {
-            double price = Double.parseDouble(priceBox.getValue());
-            int quantity = Integer.parseInt(quantityBox.getValue());
-
-            if (price <= 0 || quantity <= 0) return;
-            if (quantity > info.getAvailableToList()) return;
-
-            NetworkHandler.sendToServer(new StockMarketActionPacket(
-                info.getCompanyId(), quantity, price));
-
-            // Clear fields
-            priceBox.setValue("");
-            quantityBox.setValue("");
+            price = Double.parseDouble(priceBox.getValue());
         } catch (NumberFormatException e) {
-            // Invalid input, ignore
+            if (minecraft != null && minecraft.player != null) {
+                minecraft.player.sendSystemMessage(Component.literal("§cEnter a valid price per share."));
+            }
+            return;
         }
+        try {
+            quantity = Integer.parseInt(quantityBox.getValue());
+        } catch (NumberFormatException e) {
+            if (minecraft != null && minecraft.player != null) {
+                minecraft.player.sendSystemMessage(Component.literal("§cEnter a valid share quantity."));
+            }
+            return;
+        }
+
+        if (price <= 0) {
+            if (minecraft != null && minecraft.player != null) {
+                minecraft.player.sendSystemMessage(Component.literal("§cPrice must be greater than zero."));
+            }
+            return;
+        }
+        if (quantity <= 0) {
+            if (minecraft != null && minecraft.player != null) {
+                minecraft.player.sendSystemMessage(Component.literal("§cQuantity must be greater than zero."));
+            }
+            return;
+        }
+        if (quantity > info.getAvailableToList()) {
+            if (minecraft != null && minecraft.player != null) {
+                minecraft.player.sendSystemMessage(Component.literal("§cYou only have " + info.getAvailableToList() + " unlisted shares available."));
+            }
+            return;
+        }
+
+        NetworkHandler.sendToServer(new StockMarketActionPacket(
+            info.getCompanyId(), quantity, price));
+
+        // Clear fields
+        priceBox.setValue("");
+        quantityBox.setValue("");
     }
 
     private void executeBuy() {
@@ -546,4 +587,7 @@ public class StockMarketScreen extends Screen {
         return s.length() > maxLen ? s.substring(0, maxLen - 1) + "…" : s;
     }
 }
+
+
+
 

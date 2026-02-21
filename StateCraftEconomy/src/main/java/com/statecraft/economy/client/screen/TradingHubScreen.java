@@ -123,8 +123,31 @@ public class TradingHubScreen extends AbstractContainerScreen<TradingHubMenu> {
         graphics.blit(CONTAINER_BACKGROUND, leftPos, topPos, 0, 0, imageWidth, 71);
 
         // Draw info bar area (custom fill between container and player inv)
-        graphics.fill(leftPos, topPos + 71, leftPos + imageWidth, topPos + 85, 0xFFC6C6C6);
-        graphics.fill(leftPos + 7, topPos + 73, leftPos + 169, topPos + 84, 0xFF4A4A4A);
+        // Match vanilla bevel: outer border is the panel background, inner has inset bevel
+        int barLeft = leftPos;
+        int barRight = leftPos + imageWidth;
+        int barTop = topPos + 71;
+        int barBottom = topPos + 85;
+
+        // Panel background (matches vanilla container gray)
+        graphics.fill(barLeft, barTop, barRight, barBottom, 0xFFC6C6C6);
+
+        // Outer border edges (same as vanilla container frame)
+        graphics.fill(barLeft, barTop, barLeft + 1, barBottom, 0xFFFFFFFF);       // left highlight
+        graphics.fill(barRight - 1, barTop, barRight, barBottom, 0xFF555555);     // right shadow
+        graphics.fill(barLeft, barTop, barRight, barTop + 1, 0xFFFFFFFF);         // top highlight
+        graphics.fill(barLeft, barBottom - 1, barRight, barBottom, 0xFF555555);   // bottom shadow
+
+        // Inset slot area with bevel (dark top-left, light bottom-right like vanilla slots)
+        int slotLeft = barLeft + 7;
+        int slotRight = barRight - 7;
+        int slotTop = barTop + 2;
+        int slotBottom = barBottom - 1;
+        graphics.fill(slotLeft, slotTop, slotRight, slotBottom, 0xFF373737);       // dark slot bg
+        graphics.fill(slotLeft, slotTop, slotRight, slotTop + 1, 0xFF373737);     // top shadow
+        graphics.fill(slotLeft, slotTop, slotLeft + 1, slotBottom, 0xFF373737);   // left shadow
+        graphics.fill(slotLeft + 1, slotBottom - 1, slotRight, slotBottom, 0xFF8B8B8B); // bottom highlight
+        graphics.fill(slotRight - 1, slotTop + 1, slotRight, slotBottom, 0xFF8B8B8B);  // right highlight
 
         // Draw player inventory section (from texture Y=125, which is 97 pixels tall)
         graphics.blit(CONTAINER_BACKGROUND, leftPos, topPos + 85, 0, 125, imageWidth, 97);

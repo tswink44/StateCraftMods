@@ -94,6 +94,7 @@ public class StateCraftEconomy {
             event.accept(ModBlocks.ATM_ITEM);
             event.accept(ModBlocks.TRADING_HUB_ITEM);
             event.accept(ModBlocks.MARKETPLACE_ITEM);
+            event.accept(ModBlocks.STOCK_MARKET_ITEM);
         }
 
         // Add currency bills to Tools & Utilities creative tab

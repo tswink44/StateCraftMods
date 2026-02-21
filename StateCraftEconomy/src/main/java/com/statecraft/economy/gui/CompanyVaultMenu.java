@@ -113,6 +113,13 @@ public class CompanyVaultMenu extends AbstractContainerMenu {
 
     @Override
     public boolean stillValid(Player player) {
+        // Officer check — ensure player is still an officer of the company
+        if (blockEntity.getCompanyId() != null) {
+            var company = com.statecraft.company.CompanyManager.getInstance().getCompany(blockEntity.getCompanyId());
+            if (company == null || !company.isOfficer(player.getUUID())) {
+                return false;
+            }
+        }
         return access.evaluate((level, pos) -> player.distanceToSqr(
             pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5) <= 64.0, true);
     }

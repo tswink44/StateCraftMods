@@ -1106,8 +1106,34 @@ public class ServerPacketHandler {
                 enemies.size(), enemyNames.length() > 0 ? enemyNames.toString() : "None"
             ));
 
+            // Build enacted laws from the codex
+            List<SyncNationLawsPacket.EnactedLawInfo> enactedLaws = new ArrayList<>();
+            com.statecraft.legislature.LegislatureManager legManager = com.statecraft.legislature.LegislatureManager.getInstance();
+            com.statecraft.legislature.Legislature legislature = legManager.getOrCreateLegislature(nation.getId());
+            for (com.statecraft.legislature.Law law : legislature.getCodex().getAllLaws()) {
+                java.util.Map<String, String> policyChanges = new java.util.HashMap<>();
+                for (java.util.Map.Entry<com.statecraft.legislature.PolicyType, String> entry : law.getPolicyChanges().entrySet()) {
+                    policyChanges.put(entry.getKey().getDisplayName(), entry.getValue());
+                }
+                // Get full text from custom law entries
+                String fullText = "";
+                for (java.util.Map.Entry<com.statecraft.legislature.PolicyType, String> entry : law.getPolicyChanges().entrySet()) {
+                    if (entry.getKey().getCategory() == com.statecraft.legislature.PolicyType.Category.CUSTOM) {
+                        fullText = entry.getValue();
+                        break;
+                    }
+                }
+                enactedLaws.add(new SyncNationLawsPacket.EnactedLawInfo(
+                    law.getLawNumber(), law.getTitle(), law.getDescription(), law.getAuthorName(),
+                    law.getEnactedTime(), law.getYesVotes(), law.getNoVotes(), law.getAbstainVotes(),
+                    law.wasVetoProof(), law.getPolicyChanges().values().stream()
+                        .anyMatch(v -> false), // isConstitutionalAmendment - check type
+                    law.isRepealed(), policyChanges, fullText
+                ));
+            }
+
             // Send to client
-            NetworkHandler.sendToPlayer(new SyncNationLawsPacket(nation.getName(), policies), player);
+            NetworkHandler.sendToPlayer(new SyncNationLawsPacket(nation.getName(), policies, enactedLaws), player);
         });
         ctx.get().setPacketHandled(true);
     }

@@ -156,24 +156,25 @@ public class MarketplaceScreen extends Screen {
     }
 
     private void initSellTab(int startY) {
-        int labelW = 50;
         int fieldW = 80;
         int centerX = guiLeft + guiWidth / 2;
 
-        int y = startY + 50; // Leave room for inventory display
+        // Inventory grid: title (14px) + 3 rows*18 + 4px gap + 1 row*18 = 14+54+4+18 = 90
+        // Selected item info: +6 + 11 + 11 = 28
+        int y = startY + 90 + 28 + 4; // Below inventory grid + selected item info
 
         priceBox = new EditBox(this.font, centerX - fieldW / 2, y, fieldW, 14, Component.literal("Price"));
         priceBox.setMaxLength(12);
         priceBox.setHint(Component.literal("Price/ea"));
         this.addRenderableWidget(priceBox);
 
-        y += 20;
+        y += 18;
         quantityBox = new EditBox(this.font, centerX - fieldW / 2, y, fieldW, 14, Component.literal("Qty"));
         quantityBox.setMaxLength(6);
         quantityBox.setHint(Component.literal("Quantity"));
         this.addRenderableWidget(quantityBox);
 
-        y += 22;
+        y += 18;
         this.addRenderableWidget(Button.builder(Component.literal("List Item"),
             btn -> performList())
             .bounds(centerX - 40, y, 80, 18)

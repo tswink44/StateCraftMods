@@ -1,0 +1,20 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "statecraft_economy:block/company_vault"
+    },
+    "facing=south": {
+      "model": "statecraft_economy:block/company_vault",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "statecraft_economy:block/company_vault",
+      "y": 270
+    },
+    "facing=east": {
+      "model": "statecraft_economy:block/company_vault",
+      "y": 90
+    }
+  }
+}
+

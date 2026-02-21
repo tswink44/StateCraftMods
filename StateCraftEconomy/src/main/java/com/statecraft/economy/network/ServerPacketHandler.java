@@ -699,6 +699,8 @@ public class ServerPacketHandler {
 
             com.statecraft.economy.stockmarket.StockMarketManager stockManager =
                 com.statecraft.economy.stockmarket.StockMarketManager.getInstance();
+            com.statecraft.company.CompanyManager companyManager =
+                com.statecraft.company.CompanyManager.getInstance();
             String result;
 
             switch (packet.getAction()) {
@@ -730,10 +732,33 @@ public class ServerPacketHandler {
             // Send result message
             player.sendSystemMessage(net.minecraft.network.chat.Component.literal(result));
 
-            // Refresh listings for the player
-            handleRequestStockListings(
-                new RequestStockListingsPacket(false, ""),
-                ctx);
+            // Refresh listings for the player (inline instead of nested handler call)
+            UUID playerId = player.getUUID();
+            java.util.List<com.statecraft.economy.stockmarket.ShareListing> listings = stockManager.getActiveListings(null);
+            java.util.List<SyncStockListingsPacket.ListingEntry> entries = new java.util.ArrayList<>();
+            for (com.statecraft.economy.stockmarket.ShareListing l : listings) {
+                entries.add(new SyncStockListingsPacket.ListingEntry(
+                    l.getId().toString(), l.getSellerName(), l.getCompanyName(),
+                    l.getCompanyId().toString(), l.getQuantity(), l.getPricePerShare(),
+                    l.getListedTime(), l.getStatus().name(), l.getSellerId().equals(playerId)));
+            }
+
+            java.util.List<SyncStockListingsPacket.CompanyShareInfo> playerShares = new java.util.ArrayList<>();
+            for (com.statecraft.company.Company company : companyManager.getAllCompanies()) {
+                int owned = company.getShareCount(playerId);
+                if (owned > 0) {
+                    int listed = stockManager.getActiveListingsForSeller(playerId).stream()
+                        .filter(l -> l.getCompanyId().equals(company.getId()))
+                        .mapToInt(com.statecraft.economy.stockmarket.ShareListing::getQuantity)
+                        .sum();
+                    playerShares.add(new SyncStockListingsPacket.CompanyShareInfo(
+                        company.getId().toString(), company.getName(),
+                        owned, company.getTotalShares(), listed));
+                }
+            }
+
+            NetworkHandler.sendToPlayer(
+                new SyncStockListingsPacket(entries, false, playerShares), player);
         });
         ctx.get().setPacketHandled(true);
     }

@@ -304,7 +304,9 @@ public class ProtectionHandler {
                blockName.contains("anvil") ||
                blockName.contains("enchanting") ||
                blockName.contains("beacon") ||
-               blockName.contains("lectern");
+               blockName.contains("lectern") ||
+               blockName.contains("vault") ||
+               blockName.contains("trading_hub");
     }
 
     /**

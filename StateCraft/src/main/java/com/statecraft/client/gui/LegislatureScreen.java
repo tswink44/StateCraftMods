@@ -203,17 +203,9 @@ public class LegislatureScreen extends StateCraftScreen {
             return;
         }
 
-        if (!isLegislatureMember && !isNationLeader) {
-            graphics.drawCenteredString(this.font, "§cYou are not a legislature member",
-                this.width / 2, guiTop + 80, COLOR_WARNING);
-            graphics.drawCenteredString(this.font, "§7Only governors and officers can access this.",
-                this.width / 2, guiTop + 95, 0xFFAAAAAA);
-            return;
-        }
-
-        // Draw role indicator
+        // Draw role indicator — citizens can view but only members/leader can propose/vote
         String roleText = isNationLeader ? "§6★ Nation Leader" :
-            (isLegislatureMember ? "§b✦ Voting Member" : "§7Observer");
+            (isLegislatureMember ? "§b✦ Voting Member" : "§7☉ Citizen Observer");
         graphics.drawString(this.font, roleText, guiLeft + guiWidth - font.width(roleText.replaceAll("§.", "")) - 15, guiTop + 8, 0xFFFFFFFF);
 
         // Draw tab indicator

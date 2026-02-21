@@ -388,7 +388,17 @@ public class ClientPacketHandler {
                         info.textValue
                     ));
                 }
-                screen.updatePolicies(entries);
+                // Build enacted law entries
+                List<NationLawsScreen.EnactedLawEntry> enactedLaws = new ArrayList<>();
+                for (SyncNationLawsPacket.EnactedLawInfo law : packet.getEnactedLaws()) {
+                    enactedLaws.add(new NationLawsScreen.EnactedLawEntry(
+                        law.lawNumber, law.title, law.description, law.authorName,
+                        law.enactedTime, law.yesVotes, law.noVotes, law.abstainVotes,
+                        law.wasVetoProof, law.isConstitutionalAmendment, law.isRepealed,
+                        law.policyChanges, law.fullText
+                    ));
+                }
+                screen.updatePolicies(entries, enactedLaws);
             }
         });
         ctx.get().setPacketHandled(true);
