@@ -61,9 +61,6 @@
 	#Fee to register a new company (paid to the state treasury where HQ is located, 0 = free)
 	#Range: 0.0 ~ 1.7976931348623157E308
 	registrationFee = 1000.0
-	#Maximum number of companies a single player can found (0 = unlimited)
-	#Range: 0 ~ 100
-	maxCompaniesPerPlayer = 3
 	#Corporate tax rate — percentage of company balance collected each tax period (0.0 = no tax, 0.05 = 5%)
 	#Range: 0.0 ~ 1.0
 	companyTaxRate = 0.02

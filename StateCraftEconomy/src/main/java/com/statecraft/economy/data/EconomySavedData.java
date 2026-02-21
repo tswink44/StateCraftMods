@@ -163,7 +163,7 @@ public class EconomySavedData extends SavedData {
             }
         }
 
-        // Load bank manager state (must be after CompanyManager since it references companies)
+        // Load bank manager state (must be after CompanyManager since it bank is a type of company)
         if (tag.contains("BankManager")) {
             BankManager.getInstance().load(tag.getCompound("BankManager"));
         }
@@ -171,6 +171,11 @@ public class EconomySavedData extends SavedData {
         // Load marketplace manager state
         if (tag.contains("MarketplaceManager")) {
             com.statecraft.economy.marketplace.MarketplaceManager.getInstance().load(tag.getCompound("MarketplaceManager"));
+        }
+
+        // Load stock market manager state
+        if (tag.contains("StockMarketManager")) {
+            com.statecraft.economy.stockmarket.StockMarketManager.getInstance().load(tag.getCompound("StockMarketManager"));
         }
 
         return data;
@@ -302,6 +307,10 @@ public class EconomySavedData extends SavedData {
         // Save marketplace manager state
         tag.put("MarketplaceManager", com.statecraft.economy.marketplace.MarketplaceManager.getInstance().save());
         com.statecraft.economy.marketplace.MarketplaceManager.getInstance().clearDirty();
+
+        // Save stock market manager state
+        tag.put("StockMarketManager", com.statecraft.economy.stockmarket.StockMarketManager.getInstance().save());
+        com.statecraft.economy.stockmarket.StockMarketManager.getInstance().clearDirty();
 
         manager.clearDirty();
         return tag;

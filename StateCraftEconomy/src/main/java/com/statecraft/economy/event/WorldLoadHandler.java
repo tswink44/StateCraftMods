@@ -8,6 +8,7 @@ import com.statecraft.company.CompanyManager;
 import com.statecraft.economy.company.CompanyEconomyManager;
 import com.statecraft.economy.company.BankManager;
 import com.statecraft.economy.marketplace.MarketplaceManager;
+import com.statecraft.economy.stockmarket.StockMarketManager;
 import com.statecraft.economy.data.EconomySavedData;
 import com.statecraft.economy.integration.StateCraftIntegration;
 import net.minecraft.server.level.ServerLevel;
@@ -46,7 +47,8 @@ public class WorldLoadHandler {
                 CompanyEconomyManager companyEcoMgr = CompanyEconomyManager.getInstance();
                 BankManager bankMgr = BankManager.getInstance();
                 MarketplaceManager marketMgr = MarketplaceManager.getInstance();
-                if (manager.isDirty() || taxManager.isDirty() || spendingMgr.isDirty() || companyMgr.isDirty() || companyEcoMgr.isDirty() || bankMgr.isDirty() || marketMgr.isDirty()) {
+                StockMarketManager stockMgr = StockMarketManager.getInstance();
+                if (manager.isDirty() || taxManager.isDirty() || spendingMgr.isDirty() || companyMgr.isDirty() || companyEcoMgr.isDirty() || bankMgr.isDirty() || marketMgr.isDirty() || stockMgr.isDirty()) {
                     EconomySavedData data = EconomySavedData.get(serverLevel);
                     data.markForSave();
                     StateCraftEconomy.LOGGER.debug("Economy data saved");

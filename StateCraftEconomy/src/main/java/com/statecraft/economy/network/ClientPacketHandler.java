@@ -246,5 +246,23 @@ public class ClientPacketHandler {
     public static List<SyncTransferRecipientsPacket.RecipientInfo> getCachedRecipients() {
         return cachedRecipients;
     }
+
+    public static void handleOpenStockMarketScreen(OpenStockMarketScreenPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            mc.setScreen(new com.statecraft.economy.client.screen.StockMarketScreen());
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncStockListings(SyncStockListingsPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof com.statecraft.economy.client.screen.StockMarketScreen stockScreen) {
+                stockScreen.updateListings(packet.getEntries(), packet.isMyListingsView(), packet.getPlayerShares());
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
 }
 

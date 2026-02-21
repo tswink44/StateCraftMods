@@ -48,6 +48,13 @@ public class ModBlocks {
             .strength(3.0F, 6.0F)
             .noOcclusion()));
 
+    // Stock Market Block
+    public static final RegistryObject<Block> STOCK_MARKET = BLOCKS.register("stock_market",
+        () -> new StockMarketBlock(BlockBehaviour.Properties.of()
+            .mapColor(MapColor.COLOR_GREEN)
+            .strength(3.0F, 6.0F)
+            .noOcclusion()));
+
     // Register block items
     public static final RegistryObject<Item> ATM_ITEM = ModItems.ITEMS.register("atm",
         () -> new BlockItem(ATM.get(), new Item.Properties()));
@@ -60,6 +67,9 @@ public class ModBlocks {
 
     public static final RegistryObject<Item> MARKETPLACE_ITEM = ModItems.ITEMS.register("marketplace",
         () -> new BlockItem(MARKETPLACE.get(), new Item.Properties()));
+
+    public static final RegistryObject<Item> STOCK_MARKET_ITEM = ModItems.ITEMS.register("stock_market",
+        () -> new BlockItem(STOCK_MARKET.get(), new Item.Properties()));
 
     public static void register(IEventBus eventBus) {
         BLOCKS.register(eventBus);

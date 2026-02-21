@@ -1,116 +1,125 @@
-[20Feb2026 22:11:42.125] [main/INFO] [cpw.mods.modlauncher.Launcher/MODLAUNCHER]: ModLauncher running: args [--launchTarget, forgeserveruserdev, --gameDir, ., --fml.forgeVersion, 47.2.0, --fml.mcVersion, 1.20.1, --fml.forgeGroup, net.minecraftforge, --fml.mcpVersion, 20230612.114412, --nogui]
-[20Feb2026 22:11:42.143] [main/INFO] [cpw.mods.modlauncher.Launcher/MODLAUNCHER]: ModLauncher 10.0.9+10.0.9+main.dcd20f30 starting: java version 17.0.12 by Oracle Corporation; OS Windows 11 arch amd64 version 10.0
-[20Feb2026 22:11:42.332] [main/INFO] [net.minecraftforge.fml.loading.ImmediateWindowHandler/]: ImmediateWindowProvider not loading because launch target is forgeserveruserdev
-[20Feb2026 22:11:42.416] [main/INFO] [mixin/]: SpongePowered MIXIN Subsystem Version=0.8.5 Source=union:/C:/Users/tswin/.gradle/caches/modules-2/files-2.1/org.spongepowered/mixin/0.8.5/9d1c0c3a304ae6697ecd477218fa61b850bf57fc/mixin-0.8.5.jar%23128!/ Service=ModLauncher Env=SERVER
-[20Feb2026 22:11:43.029] [main/WARN] [net.minecraftforge.fml.loading.moddiscovery.ModFileParser/LOADING]: Mod file C:\Users\tswin\.gradle\caches\modules-2\files-2.1\net.minecraftforge\javafmllanguage\1.20.1-47.2.0\7f9181f85acc66547685a72020713fc8cbde98\javafmllanguage-1.20.1-47.2.0.jar is missing mods.toml file
-[20Feb2026 22:11:43.034] [main/WARN] [net.minecraftforge.fml.loading.moddiscovery.ModFileParser/LOADING]: Mod file C:\Users\tswin\.gradle\caches\modules-2\files-2.1\net.minecraftforge\lowcodelanguage\1.20.1-47.2.0\7872f5205685fdd26fae39b1be79b0e60ca5b7bd\lowcodelanguage-1.20.1-47.2.0.jar is missing mods.toml file
-[20Feb2026 22:11:43.037] [main/WARN] [net.minecraftforge.fml.loading.moddiscovery.ModFileParser/LOADING]: Mod file C:\Users\tswin\.gradle\caches\modules-2\files-2.1\net.minecraftforge\mclanguage\1.20.1-47.2.0\d501d161cabed08b3c139a2c6217b02a39f3c3e9\mclanguage-1.20.1-47.2.0.jar is missing mods.toml file
-[20Feb2026 22:11:43.040] [main/WARN] [net.minecraftforge.fml.loading.moddiscovery.ModFileParser/LOADING]: Mod file C:\Users\tswin\.gradle\caches\modules-2\files-2.1\net.minecraftforge\fmlcore\1.20.1-47.2.0\ffd3c6debac0a388c9e33ac43c9f5eafb91cb466\fmlcore-1.20.1-47.2.0.jar is missing mods.toml file
-[20Feb2026 22:11:43.114] [main/INFO] [net.minecraftforge.fml.loading.moddiscovery.JarInJarDependencyLocator/]: No dependencies to load found. Skipping!
-[20Feb2026 22:11:46.034] [main/INFO] [cpw.mods.modlauncher.LaunchServiceHandler/MODLAUNCHER]: Launching target 'forgeserveruserdev' with arguments [--gameDir, ., --nogui]
-[20Feb2026 22:11:56.666] [modloading-worker-0/INFO] [net.minecraftforge.common.ForgeMod/FORGEMOD]: Forge mod loading, version 47.2.0, for MC 1.20.1 with MCP 20230612.114412
-[20Feb2026 22:11:56.672] [modloading-worker-0/INFO] [net.minecraftforge.common.MinecraftForge/FORGE]: MinecraftForge v47.2.0 Initialized
-[20Feb2026 22:11:56.707] [modloading-worker-0/INFO] [statecraft/]: StateCraft initializing...
-[20Feb2026 22:11:56.913] [modloading-worker-0/INFO] [statecraft_economy/]: StateCraft Economy initializing...
-[20Feb2026 22:11:57.666] [main/WARN] [net.minecraftforge.common.ForgeConfigSpec/CORE]: Configuration file C:\Users\tswin\IdeaProjects\StateCraftMods\StateCraft\run\config\statecraft-economy.toml is not correct. Correcting
-[20Feb2026 22:11:57.891] [main/INFO] [statecraft_economy/]: StateCraft Economy network packets registered
-[20Feb2026 22:11:57.891] [main/INFO] [statecraft_economy/]: StateCraft detected! Enabling nation treasury integration.
-[20Feb2026 22:11:57.916] [main/INFO] [statecraft/]: Economy integration registered: jdk.proxy3.$Proxy27
-[20Feb2026 22:11:57.916] [main/INFO] [statecraft_economy/]: Economy integration handler registered with StateCraft
-[20Feb2026 22:11:57.916] [main/INFO] [statecraft_economy/]: StateCraft integration initialized successfully
-[20Feb2026 22:11:58.342] [main/INFO] [statecraft/]: StateCraft network packets registered
-[20Feb2026 22:11:58.343] [main/INFO] [statecraft/]: StateCraft network handler registered
-[20Feb2026 22:11:58.510] [Forge Version Check/INFO] [net.minecraftforge.fml.VersionChecker/]: [forge] Starting version check at https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json
-[20Feb2026 22:12:00.871] [Forge Version Check/INFO] [net.minecraftforge.fml.VersionChecker/]: [forge] Found status: OUTDATED Current: 47.2.0 Target: 47.4.10
-[20Feb2026 22:12:01.013] [main/INFO] [com.mojang.authlib.yggdrasil.YggdrasilAuthenticationService/]: Environment: authHost='https://authserver.mojang.com', accountsHost='https://api.mojang.com', sessionHost='https://sessionserver.mojang.com', servicesHost='https://api.minecraftservices.com', name='PROD'
-[20Feb2026 22:12:01.174] [main/INFO] [net.minecraftforge.registries.GameData/REGISTRIES]: Injecting existing registry data into this CLIENT instance
-[20Feb2026 22:12:02.358] [main/WARN] [net.minecraft.server.packs.VanillaPackResourcesBuilder/]: Assets URL 'union:/C:/Users/tswin/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.2.0_mapped_official_1.20.1/forge-1.20.1-47.2.0_mapped_official_1.20.1.jar%23191!/assets/.mcassetsroot' uses unexpected schema
-[20Feb2026 22:12:02.358] [main/WARN] [net.minecraft.server.packs.VanillaPackResourcesBuilder/]: Assets URL 'union:/C:/Users/tswin/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.2.0_mapped_official_1.20.1/forge-1.20.1-47.2.0_mapped_official_1.20.1.jar%23191!/data/.mcassetsroot' uses unexpected schema
-[20Feb2026 22:12:03.384] [Thread-1/WARN] [net.minecraftforge.fml.config.ConfigFileTypeHandler/CONFIG]: Configuration file C:\Users\tswin\IdeaProjects\StateCraftMods\StateCraft\run\config\statecraft-economy.toml is not correct. Correcting
-[20Feb2026 22:12:04.041] [main/INFO] [statecraft/]: StateCraft commands registered
-[20Feb2026 22:12:04.053] [main/INFO] [statecraft_economy/]: StateCraft Economy commands registered
-[20Feb2026 22:12:04.749] [main/INFO] [net.minecraft.world.item.crafting.RecipeManager/]: Loaded 7 recipes
-[20Feb2026 22:12:04.963] [main/INFO] [net.minecraft.advancements.AdvancementList/]: Loaded 1271 advancements
-[20Feb2026 22:12:05.692] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer/]: Starting minecraft server version 1.20.1
-[20Feb2026 22:12:05.692] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer/]: Loading properties
-[20Feb2026 22:12:05.692] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer/]: Default game type: CREATIVE
-[20Feb2026 22:12:05.692] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: Generating keypair
-[20Feb2026 22:12:05.745] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer/]: Starting Minecraft server on *:25565
-[20Feb2026 22:12:05.759] [Server thread/INFO] [net.minecraft.server.network.ServerConnectionListener/]: Using default channel type
-[20Feb2026 22:12:06.060] [Server thread/WARN] [net.minecraft.server.dedicated.DedicatedServer/]: **** SERVER IS RUNNING IN OFFLINE/INSECURE MODE!
-[20Feb2026 22:12:06.060] [Server thread/WARN] [net.minecraft.server.dedicated.DedicatedServer/]: The server will make no attempt to authenticate usernames. Beware.
-[20Feb2026 22:12:06.060] [Server thread/WARN] [net.minecraft.server.dedicated.DedicatedServer/]: While this makes the game possible to play without internet access, it also opens up the ability for hackers to connect with any username they choose.
-[20Feb2026 22:12:06.060] [Server thread/WARN] [net.minecraft.server.dedicated.DedicatedServer/]: To change this, set "online-mode" to "true" in the server.properties file.
-[20Feb2026 22:12:06.116] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer/]: Preparing level "world"
-[20Feb2026 22:12:06.374] [Server thread/INFO] [statecraft/]: Loading StateCraft nation data...
-[20Feb2026 22:12:06.401] [Server thread/INFO] [statecraft/]: Loaded EmergencyPowerManager state: 0 succession entries, 0 tax collection entries
-[20Feb2026 22:12:06.402] [Server thread/INFO] [statecraft/]: Loaded DiplomacyManager: 0 proposals, 0 truces
-[20Feb2026 22:12:06.402] [Server thread/INFO] [statecraft/]: Loaded legislature data
-[20Feb2026 22:12:06.407] [Server thread/INFO] [statecraft/]: Loaded contract data
-[20Feb2026 22:12:06.407] [Server thread/INFO] [statecraft/]: Loaded 1 nations with 24 total claimed chunks
-[20Feb2026 22:12:06.503] [Server thread/INFO] [statecraft/]: Loaded mail data: 2 player, 1 city, 1 state, 1 nation mailboxes
-[20Feb2026 22:12:06.510] [Server thread/INFO] [statecraft_economy/]: Loaded 7 currency types
-[20Feb2026 22:12:06.511] [Server thread/INFO] [statecraft_economy/]: Loaded economy data: 2 player accounts, 1 nation treasuries, 1 state treasuries, 1 city treasuries, 0 company treasuries
-[20Feb2026 22:12:06.512] [Server thread/INFO] [statecraft_economy/]: Loaded transaction history for 5 accounts
-[20Feb2026 22:12:06.514] [Server thread/INFO] [statecraft_economy/]: Loaded taxation state: enabled=true, period=72000 ticks, lastCollection=2121896, 0 negative balance entries
-[20Feb2026 22:12:06.514] [Server thread/INFO] [statecraft_economy/]: Loaded spending limit data: 0 spending entries, 0 nation leader overrides
-[20Feb2026 22:12:06.516] [Server thread/INFO] [statecraft_economy/]: Loaded 0 companies
-[20Feb2026 22:12:06.517] [Server thread/INFO] [statecraft_economy/]: Loaded 0 bank companies
-[20Feb2026 22:12:06.518] [Server thread/INFO] [statecraft_economy/]: Loaded 0 marketplace listings
-[20Feb2026 22:12:06.518] [Server thread/INFO] [statecraft_economy/]: Loaded 2 player accounts, 1 nation treasuries, 1 state treasuries, 1 city treasuries, 0 company treasuries
-[20Feb2026 22:12:06.518] [Server thread/INFO] [statecraft_economy/]: Economy data loaded
-[20Feb2026 22:12:06.519] [Server thread/INFO] [statecraft_economy/]: Ensured treasury accounts for 1 nations, 1 states, 1 cities
-[20Feb2026 22:12:07.277] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: Preparing start region for dimension minecraft:overworld
-[20Feb2026 22:12:08.603] [Worker-Main-6/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Preparing spawn area: 0%
-[20Feb2026 22:12:08.648] [Worker-Main-13/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Preparing spawn area: 0%
-[20Feb2026 22:12:08.658] [Worker-Main-8/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Preparing spawn area: 0%
-[20Feb2026 22:12:08.793] [Worker-Main-2/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Preparing spawn area: 0%
-[20Feb2026 22:12:09.278] [Worker-Main-14/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Preparing spawn area: 0%
-[20Feb2026 22:12:09.758] [Server thread/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Time elapsed: 2480 ms
-[20Feb2026 22:12:09.758] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer/]: Done (3.677s)! For help, type "help"
-[20Feb2026 22:12:09.773] [Server thread/INFO] [net.minecraftforge.gametest.ForgeGameTestHooks/]: Enabled Gametest Namespaces: [statecraft]
-[20Feb2026 22:12:09.777] [Server thread/INFO] [net.minecraftforge.server.permission.PermissionAPI/]: Successfully initialized permission handler forge:default_handler
-[20Feb2026 22:12:09.822] [Server thread/INFO] [statecraft_economy/]: Loaded 19 chunk valuations from cache (marked for recalculation)
-[20Feb2026 22:12:09.822] [Server thread/INFO] [statecraft_economy/]: ChunkValuationManager initialized
-[20Feb2026 22:12:09.822] [Server thread/INFO] [statecraft_economy/]: No improvement data found, starting fresh
-[20Feb2026 22:12:09.822] [Server thread/INFO] [statecraft_economy/]: Chunk valuation system initialized
-[20Feb2026 22:12:09.904] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (-1, -4) in minecraft:overworld: improvement score = 38
-[20Feb2026 22:12:09.914] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (0, -2) in minecraft:overworld: improvement score = 12
-[20Feb2026 22:12:09.918] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (-3, -1) in minecraft:overworld: improvement score = 32
-[20Feb2026 22:12:09.921] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (1, -2) in minecraft:overworld: improvement score = 44
-[20Feb2026 22:12:09.923] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (2, -2) in minecraft:overworld: improvement score = 94
-[20Feb2026 22:12:09.926] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (-2, -4) in minecraft:overworld: improvement score = 53
-[20Feb2026 22:12:09.929] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (1, -1) in minecraft:overworld: improvement score = 61
-[20Feb2026 22:12:09.931] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (-3, -4) in minecraft:overworld: improvement score = 45
-[20Feb2026 22:12:09.933] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (-2, -3) in minecraft:overworld: improvement score = 52
-[20Feb2026 22:12:09.935] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (0, -1) in minecraft:overworld: improvement score = 31
-[20Feb2026 22:12:09.937] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (-1, -3) in minecraft:overworld: improvement score = 44
-[20Feb2026 22:12:09.939] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (-1, -2) in minecraft:overworld: improvement score = 50
-[20Feb2026 22:12:09.942] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (1, -3) in minecraft:overworld: improvement score = 60
-[20Feb2026 22:12:09.947] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (0, -3) in minecraft:overworld: improvement score = 244
-[20Feb2026 22:12:09.947] [Server thread/WARN] [statecraft_economy/]: Could not find level for dimension: ResourceKey[minecraft:dimension / minecraft:overworld]
-[20Feb2026 22:12:09.950] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (-1, -1) in minecraft:overworld: improvement score = 29
-[20Feb2026 22:12:09.953] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (-1, -5) in minecraft:overworld: improvement score = 36
-[20Feb[20Feb2026 22:12:30.822] [Render thread/INFO] [net.minecraft.client.gui.screens.ConnectScreen/]: Connecting to localhost, 25565
-[20Feb2026 22:12:31.851] [Render thread/INFO] [net.minecraftforge.registries.GameData/REGISTRIES]: Injecting existing registry data into this CLIENT instance
-[20Feb2026 22:12:32.368] [Netty Client IO #1/INFO] [net.minecraftforge.network.NetworkHooks/]: Connected to a modded server.
-[20Feb2026 22:12:34.106] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Welcome back to Nation1!
-[20Feb2026 22:12:34.110] [Render thread/INFO] [net.minecraft.advancements.AdvancementList/]: Loaded 141 advancements
-[20Feb2026 22:12:35.290] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Dev3 joined the game
-[20Feb2026 22:13:17.608] [Render thread/INFO] [statecraft_economy/]: Loaded 7 currency types
-[20Feb2026 22:36:50.704] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] This chunk is already claimed!
-[20Feb2026 22:37:09.888] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Mail] New mail: Property Tax Summary
-nning tax collection cycle...
-[20Feb2026 22:37:09.833] [Server thread/INFO] [statecraft_economy/]: Processing city e60e5243-4f1a-4d4e-a2f2-a38d581090f4 with tax rate: 0.1 (10.0%)
-[20Feb2026 22:37:09.833] [Server thread/INFO] [statecraft_economy/]: Tax calculation for chunk (0, -2) dim='minecraft:overworld': base=10000.0, loc=1.4968, biome=1.2, demand=1.5, gov=1.0, imp=1.12x (score=12), total=30175.488, rate=0.1, tax=3017.5488000000005
-[20Feb2026 22:37:09.836] [Server thread/INFO] [statecraft_economy/]: Tax calculation for chunk (2, -2) dim='minecraft:overworld': base=10000.0, loc=1.4954745166004062, biome=1.2, demand=1.5, gov=1.0, imp=1.94x (score=94), total=52221.97011968618, rate=0.1, tax=5222.197011968618
-[20Feb2026 22:37:09.836] [Server thread/INFO] [statecraft_economy/]: Tax calculation for chunk (1, -1) dim='minecraft:overworld': base=10000.0, loc=1.497737258300203, biome=1.2, demand=1.5, gov=1.0, imp=1.6099999999999999x (score=61), total=43404.42574553988, rate=0.1, tax=4340.4425745539875
-[20Feb2026 22:37:09.836] [Server thread/INFO] [statecraft_economy/]: Tax calculation for chunk (0, -1) dim='minecraft:overworld': base=10000.0, loc=1.4984, biome=1.2, demand=1.5, gov=1.0, imp=1.31x (score=31), total=35332.272, rate=0.1, tax=3533.2272
-[20Feb2026 22:37:09.837] [Server thread/INFO] [statecraft_economy/]: Processing 1 cities for tax revenue mail
-[20Feb2026 22:37:09.837] [Server thread/INFO] [statecraft_economy/]: City e60e5243-4f1a-4d4e-a2f2-a38d581090f4 has revenue: $16113.415586522608
-[20Feb2026 22:37:09.837] [Server thread/INFO] [statecraft_economy/]: City keeps: $12890.732469218086, passes to state: $3222.6831173045216
-[20Feb2026 22:37:09.837] [Server thread/INFO] [statecraft_economy/]: Sending tax revenue mail to city: City1 (ID: e60e5243-4f1a-4d4e-a2f2-a38d581090f4)
-[20Feb2026 22:37:09.837] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to city City1 - collected: $16113.415586522608, kept: $12890.732469218086
-[20Feb2026 22:37:09.839] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to state State1 - received: $3222.6831173045216, kept: $2578.1464938436175
-[20Feb2026 22:37:09.839] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to nation Nation1 - received: $644.5366234609044
-[20Feb2026 22:37:09.840] [Server thread/INFO] [statecraft_economy/]: Tax collection complete: 4 chunks processed, $16113.42 collected, 0 negative balances, 0 repossessed
+[21Feb2026 12:00:42.443] [main/INFO] [cpw.mods.modlauncher.Launcher/MODLAUNCHER]: ModLauncher running: args [--launchTarget, forgeserveruserdev, --gameDir, ., --fml.forgeVersion, 47.2.0, --fml.mcVersion, 1.20.1, --fml.forgeGroup, net.minecraftforge, --fml.mcpVersion, 20230612.114412, --nogui]
+[21Feb2026 12:00:42.453] [main/INFO] [cpw.mods.modlauncher.Launcher/MODLAUNCHER]: ModLauncher 10.0.9+10.0.9+main.dcd20f30 starting: java version 17.0.12 by Oracle Corporation; OS Windows 11 arch amd64 version 10.0
+[21Feb2026 12:00:42.598] [main/INFO] [net.minecraftforge.fml.loading.ImmediateWindowHandler/]: ImmediateWindowProvider not loading because launch target is forgeserveruserdev
+[21Feb2026 12:00:42.676] [main/INFO] [mixin/]: SpongePowered MIXIN Subsystem Version=0.8.5 Source=union:/C:/Users/tswin/.gradle/caches/modules-2/files-2.1/org.spongepowered/mixin/0.8.5/9d1c0c3a304ae6697ecd477218fa61b850bf57fc/mixin-0.8.5.jar%23128!/ Service=ModLauncher Env=SERVER
+[21Feb2026 12:00:42.952] [main/WARN] [net.minecraftforge.fml.loading.moddiscovery.ModFileParser/LOADING]: Mod file C:\Users\tswin\.gradle\caches\modules-2\files-2.1\net.minecraftforge\javafmllanguage\1.20.1-47.2.0\7f9181f85acc66547685a72020713fc8cbde98\javafmllanguage-1.20.1-47.2.0.jar is missing mods.toml file
+[21Feb2026 12:00:42.957] [main/WARN] [net.minecraftforge.fml.loading.moddiscovery.ModFileParser/LOADING]: Mod file C:\Users\tswin\.gradle\caches\modules-2\files-2.1\net.minecraftforge\lowcodelanguage\1.20.1-47.2.0\7872f5205685fdd26fae39b1be79b0e60ca5b7bd\lowcodelanguage-1.20.1-47.2.0.jar is missing mods.toml file
+[21Feb2026 12:00:42.963] [main/WARN] [net.minecraftforge.fml.loading.moddiscovery.ModFileParser/LOADING]: Mod file C:\Users\tswin\.gradle\caches\modules-2\files-2.1\net.minecraftforge\mclanguage\1.20.1-47.2.0\d501d161cabed08b3c139a2c6217b02a39f3c3e9\mclanguage-1.20.1-47.2.0.jar is missing mods.toml file
+[21Feb2026 12:00:42.967] [main/WARN] [net.minecraftforge.fml.loading.moddiscovery.ModFileParser/LOADING]: Mod file C:\Users\tswin\.gradle\caches\modules-2\files-2.1\net.minecraftforge\fmlcore\1.20.1-47.2.0\ffd3c6debac0a388c9e33ac43c9f5eafb91cb466\fmlcore-1.20.1-47.2.0.jar is missing mods.toml file
+[21Feb2026 12:00:43.037] [main/INFO] [net.minecraftforge.fml.loading.moddiscovery.JarInJarDependencyLocator/]: No dependencies to load found. Skipping!
+[21Feb2026 12:00:45.019] [main/INFO] [cpw.mods.modlauncher.LaunchServiceHandler/MODLAUNCHER]: Launching target 'forgeserveruserdev' with arguments [--gameDir, ., --nogui]
+[21Feb2026 12:00:53.196] [modloading-worker-0/INFO] [net.minecraftforge.common.ForgeMod/FORGEMOD]: Forge mod loading, version 47.2.0, for MC 1.20.1 with MCP 20230612.114412
+[21Feb2026 12:00:53.202] [modloading-worker-0/INFO] [net.minecraftforge.common.MinecraftForge/FORGE]: MinecraftForge v47.2.0 Initialized
+[21Feb2026 12:00:53.251] [modloading-worker-0/INFO] [statecraft/]: StateCraft initializing...
+[21Feb2026 12:00:53.297] [modloading-worker-0/INFO] [statecraft_economy/]: StateCraft Economy initializing...
+[21Feb2026 12:00:53.858] [main/WARN] [net.minecraftforge.common.ForgeConfigSpec/CORE]: Configuration file C:\Users\tswin\IdeaProjects\StateCraftMods\StateCraft\run\config\statecraft.toml is not correct. Correcting
+[21Feb2026 12:00:53.864] [main/WARN] [net.minecraftforge.common.ForgeConfigSpec/CORE]: Incorrect key companies was corrected from null to its default, SimpleCommentedConfig:{}. 
+[21Feb2026 12:00:53.865] [main/WARN] [net.minecraftforge.common.ForgeConfigSpec/CORE]: Incorrect key companies.maxCompaniesPerPlayer was corrected from null to its default, 3. 
+[21Feb2026 12:00:53.873] [main/WARN] [net.minecraftforge.common.ForgeConfigSpec/CORE]: Configuration file C:\Users\tswin\IdeaProjects\StateCraftMods\StateCraft\run\config\statecraft-economy.toml is not correct. Correcting
+[21Feb2026 12:00:53.874] [main/WARN] [net.minecraftforge.common.ForgeConfigSpec/CORE]: Incorrect key companies.maxCompaniesPerPlayer was corrected from 3 to its default, null. 
+[21Feb2026 12:00:54.210] [main/INFO] [statecraft/]: StateCraft network packets registered
+[21Feb2026 12:00:54.210] [main/INFO] [statecraft/]: StateCraft network handler registered
+[21Feb2026 12:00:54.263] [Forge Version Check/INFO] [net.minecraftforge.fml.VersionChecker/]: [forge] Starting version check at https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json
+[21Feb2026 12:00:54.323] [main/INFO] [statecraft_economy/]: StateCraft Economy network packets registered
+[21Feb2026 12:00:54.324] [main/INFO] [statecraft_economy/]: StateCraft detected! Enabling nation treasury integration.
+[21Feb2026 12:00:54.345] [main/INFO] [statecraft/]: Economy integration registered: jdk.proxy3.$Proxy27
+[21Feb2026 12:00:54.345] [main/INFO] [statecraft_economy/]: Economy integration handler registered with StateCraft
+[21Feb2026 12:00:54.345] [main/INFO] [statecraft_economy/]: StateCraft integration initialized successfully
+[21Feb2026 12:00:54.846] [Forge Version Check/INFO] [net.minecraftforge.fml.VersionChecker/]: [forge] Found status: OUTDATED Current: 47.2.0 Target: 47.4.10
+[21Feb2026 12:00:55.393] [main/INFO] [com.mojang.authlib.yggdrasil.YggdrasilAuthenticationService/]: Environment: authHost='https://authserver.mojang.com', accountsHost='https://api.mojang.com', sessionHost='https://sessionserver.mojang.com', servicesHost='https://api.minecraftservices.com', name='PROD'
+[21Feb2026 12:00:55.496] [main/INFO] [net.minecraftforge.registries.GameData/REGISTRIE[21Feb2026 12:00:55.760] [Render thread/WARN] [net.minecraft.ser[21Feb2026 12:00:56.247] [main/WARN] [net.minecraft.server.packs.VanillaPackResourcesBuilder/]: Assets URL 'union:/C:/Users/tswin/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.2.0_mapped_official_1.20.1/forge-1.20.1-47.2.0_mapped_official_1.20.1.jar%23191!/assets/.mcassetsroot' uses unexpected schema
+[21Feb2026 12:00:56.247] [main/WARN] [net.minecraft.server.packs.VanillaPackResourcesBuilder/]: Assets URL 'union:/C:/Users/tswin/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/1.20.1-47.2.0_mapped_official_1.20.1/forge-1.20.1-47.2.0_mapped_official_1.20.1.jar%23191!/data/.mcassetsroot' uses unexpected schema
+[21Feb2026 12:00:57.383] [main/INFO] [statecraft/]: StateCraft commands registered
+[21Feb2026 12:00:57.396] [main/INFO] [statecraft_economy/]: StateCraft Economy commands registered
+[21Feb2026 12:00:58.176] [main/INFO] [net.minecraft.world.item.crafting.RecipeManager/]: Loaded 7 recipes
+[21Feb2026 12:00:58.342] [main/INFO] [net.minecraft.advancements.AdvancementList/]: Loaded 1271 advancements
+[21Feb2026 12:00:59.146] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer/]: Starting minecraft server version 1.20.1
+[21Feb2026 12:00:59.147] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer/]: Loading properties
+[21Feb2026 12:00:59.148] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer/]: Default game type: CREATIVE
+[21Feb2026 12:00:59.148] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: Generating keypair
+[21Feb2026 12:00:59.199] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer/]: Starting Minecraft server on *:25565
+[21Feb2026 12:00:59.220] [Server thread/INFO] [net.minecraft.server.network.ServerConnectionListener/]: Using default channel type
+[21Feb2026 12:00:59.711] [Server thread/WARN] [net.minecraft.server.dedicated.DedicatedServer/]: **** SERVER IS RUNNING IN OFFLINE/INSECURE MODE!
+[21Feb2026 12:00:59.712] [Server thread/WARN] [net.minecraft.server.dedicated.DedicatedServer/]: The server will make no attempt to authenticate usernames. Beware.
+[21Feb2026 12:00:59.713] [Server thread/WARN] [net.minecraft.server.dedicated.DedicatedServer/]: While this makes the game possible to play without internet access, it also opens up the ability for hackers to connect with any username they choose.
+[21Feb2026 12:00:59.714] [Server thread/WARN] [net.minecraft.server.dedicated.DedicatedServer/]: To change this, set "online-mode" to "true" in the server.properties file.
+[21Feb2026 12:00:59.762] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer/]: Preparing level "world"
+[21Feb2026 12:00:59.966] [Server thread/INFO] [statecraft/]: Loading StateCraft nation data...
+[21Feb2026 12:00:59.995] [Server thread/INFO] [statecraft/]: Loaded EmergencyPowerManager state: 0 succession entries, 0 tax collection entries
+[21Feb2026 12:00:59.996] [Server thread/INFO] [statecraft/]: Loaded DiplomacyManager: 0 proposals, 0 truces
+[21Feb2026 12:00:59.996] [Server thread/INFO] [statecraft/]: Loaded legislature data
+[21Feb2026 12:01:00.001] [Server thread/INFO] [statecraft/]: Loaded contract data
+[21Feb2026 12:01:00.001] [Server thread/INFO] [statecraft/]: Loaded 1 nations with 24 total claimed chunks
+[21Feb2026 12:01:00.046] [Server thread/INFO] [statecraft/]: Loaded mail data: 2 player, 1 city, 1 state, 1 nation mailboxes
+[21Feb2026 12:01:00.052] [Server thread/INFO] [statecraft_economy/]: Loaded 7 currency types
+[21Feb2026 12:01:00.054] [Server thread/INFO] [statecraft_economy/]: Loaded economy data: 2 player accounts, 1 nation treasuries, 1 state treasuries, 1 city treasuries, 0 company treasuries
+[21Feb2026 12:01:00.056] [Server thread/INFO] [statecraft_economy/]: Loaded transaction history for 5 accounts
+[21Feb2026 12:01:00.058] [Server thread/INFO] [statecraft_economy/]: Loaded taxation state: enabled=true, period=72000 ticks, lastCollection=2841896, 0 negative balance entries
+[21Feb2026 12:01:00.059] [Server thread/INFO] [statecraft_economy/]: Loaded spending limit data: 0 spending entries, 0 nation leader overrides
+[21Feb2026 12:01:00.060] [Server thread/INFO] [statecraft/]: Loaded 0 companies
+[21Feb2026 12:01:00.063] [Server thread/INFO] [statecraft_economy/]: Loaded 0 bank companies
+[21Feb2026 12:01:00.066] [Server thread/INFO] [statecraft_economy/]: Loaded 0 marketplace listings
+[21Feb2026 12:01:00.067] [Server thread/INFO] [statecraft_economy/]: Loaded 2 player accounts, 1 nation treasuries, 1 state treasuries, 1 city treasuries, 0 company treasuries
+[21Feb2026 12:01:00.067] [Server thread/INFO] [statecraft_economy/]: Economy data loaded
+[21Feb2026 12:01:00.070] [Server thread/INFO] [statecraft_economy/]: Ensured treasury accounts for 1 nations, 1 states, 1 cities
+[21Feb2026 12:01:00.647] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: Preparing start region for dimension minecraft:overworld
+[21Feb2026 12:01:01.801] [Worker-Main-3/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Preparing spawn area: 0%
+[21Feb2026 12:01:01.984] [Worker-Main-6/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Preparing spawn area: 0%
+[21Feb2026 12:01:01.994] [Worker-Main-11/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Preparing spawn area: 0%
+[21Feb2026 12:01:02.148] [Worker-Main-12/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Preparing spawn area: 0%
+[21Feb2026 12:01:02.651] [Worker-Main-3/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Preparing spawn area: 0%
+[21Feb2026 12:01:03.127] [Server thread/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Time elapsed: 2480 ms
+[21Feb2026 12:01:03.128] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer/]: Done (3.393s)! For help, type "help"
+[21Feb2026 12:01:03.140] [Server thread/INFO] [net.minecraftforge.gametest.ForgeGameTestHooks/]: Enabled Gametest Namespaces: [statecraft]
+[21Feb2026 12:01:03.145] [Server thread/INFO] [net.minecraftforge.server.permission.PermissionAPI/]: Successfully initialized permission handler forge:default_handler
+[21Feb2026 12:01:03.148] [Server thread/INFO] [statecraft_economy/]: Loaded 19 chunk valuations from cache (marked for recalculation)
+[21Feb2026 12:01:03.148] [Server thread/INFO] [statecraft_economy/]: ChunkValuationManager initialized
+[21Feb2026 12:01:03.148] [Server thread/INFO] [statecraft_economy/]: No improvement data found, starting fresh
+[21Feb2026 12:01:03.148] [Server thread/INFO] [statecraft_economy/]: Chunk valuation system initialized
+[21Feb2026 12:01:03.221] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (-1, -4) in minecraft:overworld: improvement score = 38
+[21Feb2026 12:01:03.224] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (0, -2) in minecraft:overworld: improvement score = 12
+[21Feb2026 12:01:03.228] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (-3, -1) in minecraft:overworld: improvement score = 32
+[21Feb2026 12:01:03.231] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (1, -2) in minecraft:overworld: improvement score = 44
+[21Feb2026 12:01:03.234] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (2, -2) in minecraft:overworld: improvement score = 94
+[21Feb2026 12:01:03.235] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (-2, -4) in minecraft:overworld: improvement score = 53
+[21Feb2026 12:01:03.238] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (1, -1) in minecraft:overworld: improvement score = 61
+[21Feb2026 12:01:03.239] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (-3, -4) in minecraft:overworld: improvement score = 45
+[21Feb2026 12:01:03.241] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (-2, -3) in minecraft:overworld: improvement score = 52
+[21Feb2026 12:01:03.244] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (0, -1) in minecraft:overworld: improvement score = 31
+[21Feb2026 12:01:03.246] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (-1, -3) in minecraft:overworld: improvement score = 44
+[21Feb2026 12:01:03.248] [Server thread/INFO] [statecraft_economy/]: Scanned chunk (-1, -2) in minecraft:overworld: improvement score = 50
+[21Feb2026 12:01:03.250] [Server thread/INFO] [state[21Feb2026 12:01:23.768] [MCO Compatability Checker #1/INFO] [com.mojang.realmsclient.client.RealmsClient/]: Could not authorize you against Realms server: java.lang.RuntimeException: Failed to parse into SignedJWT: 0
+[21Feb2026 12:01:23.769] [MCO Compatability Checker #1/ERROR] [com.mojang.realmsclient.RealmsMainScreen/]: Couldn't connect to realms
+com.mojang.realmsclient.exception.RealmsServiceException: Realms service error (401) java.lang.RuntimeException: Failed to parse into SignedJWT: 0
+	at com.mojang.realmsclient.client.RealmsClient.execute(RealmsClient.java:465) ~[forge-1.20.1-47.2.0_mapped_official_1.20.1.jar%23191!/:?]
+	at com.mojang.realmsclient.client.RealmsClient.clientCompatible(RealmsClient.java:245) ~[forge-1.20.1-47.2.0_mapped_official_1.20.1.jar%23191!/:?]
+	at com.mojang.realmsclient.RealmsMainScreen$1.run(RealmsMainScreen.java:633) ~[forge-1.20.1-47.2.0_mapped_official_1.20.1.jar%23191!/:?]
+[21Feb2026 12:01:25.688] [Render thread/INFO] [net.minecraft.client.gui.screens.ConnectScreen/]: Connecting to localhost, 25565
+[21Feb2026 12:01:26.710] [Render thread/INFO] [net.minecraftforge.registries.GameData/REGISTRIES]: Injecting existing registry data into this CLIENT instance
+[21Feb2026 12:01:27.056] [Ne[21Feb2026 12:01:27.061] [Server thread/INFO] [net.minecraft.server.players.PlayerList/]: Dev[/[::[21Feb2026 12:01:27.880] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Welcome back to Nation1!
+[21Feb2026 12:01:27.885] [Render thread/INFO] [net.min[21Feb2026 12:01:31.306] [Server thread/INFO] [net.minecraft.ser[21Feb2026 12:01:31.316] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Dev3 joined the game
+[21Feb2026 12:02:44.806] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [Not Secure] [CHAT] <Dev2> fsadf
+[21Feb2026 12:02:49.243] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [Not Secure] [CHAT] <Dev> afs
+[21Feb2026 12:08:45.511] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Moriarty Enterprises] Dividend payout deferred — insufficient funds. Balance: $0.00, Required: $0[21Feb2026 12:17:05.424] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: [Not Secure] <Dev2> asf
+[21Feb2026 12:26:03.151] [Server thread/INFO] [statecraft_economy/]: Beginning tax collection cycle...
+[21Feb2026 12:26:03.154] [Server thread/INFO] [statecraft_economy/]: Processing city e60e5243-4f1a-4d4e-a2f2-a38d581090f4 with tax rate: 0.1 (10.0%)
+[21Feb2026 12:26:03.154] [Server thread/INFO] [statecraft_economy/]: Tax calculation for chunk (0, -2) dim='minecraft:overworld': base=10000.0, loc=1.4968, biome=1.2, demand=1.5, gov=1.0, imp=1.43x (score=43), total=38527.632, rate=0.1, tax=3852.7632
+[21Feb2026 12:26:03.156] [Server thread/INFO] [statecraft_economy/]: Tax calculation for chunk (2, -2) dim='minecraft:overworld': base=10000.0, loc=1.4954745166004062, biome=1.2, demand=1.5, gov=1.0, imp=1.94x (score=94), total=52221.97011968618, rate=0.1, tax=5222.197011968618
+[21Feb2026 12:26:03.156] [Server thread/INFO] [statecraft_economy/]: Tax calculation for chunk (1,[21Feb2026 12:26:03.160] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Mail] New mail: Property Tax Summary
+[21Feb2026 12:29:41.510] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Dev2 left the game
+[21Feb2026 12:29:42.307] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Dev3 left the game
+[21Feb2026 12:29:43.907] [Render thread/INFO] [net.minecraft.client.Minecraft/]: Stopping!
+ocessing 1 cities for tax revenue mail
+[21Feb2026 12:26:03.157] [Server thread/INFO] [statecraft_economy/]: City e60e5243-4f1a-4d4e-a2f2-a38d581090f4 has revenue: $16948.629986522606
+[21Feb2026 12:26:03.157] [Server thread/INFO] [statecraft_economy/]: City keeps: $13558.903989218084, passes to state: $3389.7259973045216
+[21Feb2026 12:26:03.157] [Server thread/INFO] [statecraft_economy/]: Sending tax revenue mail to city: City1 (ID: e60e5243-4f1a-4d4e-a2f2-a38d581090f4)
+[21Feb2026 12:26:03.157] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to city City1 - collected: $16948.629986522606, kept: $13558.903989218084
+[21Feb2026 12:26:03.158] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to state State1 - received: $3389.7259973045216, kept: $2711.780797843617
+[21Feb2026 12:26:03.158] [Server thread/INFO] [statecraft_economy/]: Sent tax revenue report to nation Nation1 - received: $677.9451994609044
+[21Feb2026 12:26:03.159] [Server thread/INFO] [statecraft_economy/]: Tax collection complete: 4 chunks processed, $16948.63 collected, 0 negative balances, 0 repossessed
+[21Feb2026 12:29:41.503] [Server thread/INFO] [net.minecraft.server.network.ServerGamePacketListenerImpl/]: Dev2 lost connection: Disconnected
+[21Feb2026 12:29:41.503] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: Dev2 left the game
+[21Feb2026 12:29:42.303] [Server thread/INFO] [net.minecraft.server.network.ServerGamePacketListenerImpl/]: Dev3 lost connection: Disconnected
+[21Feb2026 12:29:42.303] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: Dev3 left the game
+[21Feb2026 12:29:43.954] [Server thread/INFO] [net.minecraft.server.network.ServerGamePacketListenerImpl/]: Dev lost connection: Disconnected
+[21Feb2026 12:29:43.954] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: Dev left the game

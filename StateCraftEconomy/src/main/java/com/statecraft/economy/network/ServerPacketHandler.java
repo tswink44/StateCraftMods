@@ -611,5 +611,131 @@ public class ServerPacketHandler {
         });
         ctx.get().setPacketHandled(true);
     }
+
+    // ==================== Stock Market Handlers ====================
+
+    /**
+     * Handle request for stock market listings
+     */
+    public static void handleRequestStockListings(RequestStockListingsPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            com.statecraft.economy.stockmarket.StockMarketManager stockManager =
+                com.statecraft.economy.stockmarket.StockMarketManager.getInstance();
+            com.statecraft.company.CompanyManager companyManager =
+                com.statecraft.company.CompanyManager.getInstance();
+
+            UUID playerId = player.getUUID();
+
+            // Get listings based on filter
+            java.util.List<com.statecraft.economy.stockmarket.ShareListing> listings;
+            if (packet.isMyListingsOnly()) {
+                listings = stockManager.getAllListingsForSeller(playerId);
+            } else {
+                // Filter by company name if provided
+                String filter = packet.getCompanyFilter();
+                java.util.List<com.statecraft.economy.stockmarket.ShareListing> all = stockManager.getActiveListings(null);
+                if (filter != null && !filter.isEmpty()) {
+                    String lowerFilter = filter.toLowerCase();
+                    listings = all.stream()
+                        .filter(l -> l.getCompanyName().toLowerCase().contains(lowerFilter))
+                        .collect(java.util.stream.Collectors.toList());
+                } else {
+                    listings = all;
+                }
+            }
+
+            // Convert to packet entries
+            java.util.List<SyncStockListingsPacket.ListingEntry> entries = new java.util.ArrayList<>();
+            for (com.statecraft.economy.stockmarket.ShareListing listing : listings) {
+                entries.add(new SyncStockListingsPacket.ListingEntry(
+                    listing.getId().toString(),
+                    listing.getSellerName(),
+                    listing.getCompanyName(),
+                    listing.getCompanyId().toString(),
+                    listing.getQuantity(),
+                    listing.getPricePerShare(),
+                    listing.getListedTime(),
+                    listing.getStatus().name(),
+                    listing.getSellerId().equals(playerId)
+                ));
+            }
+
+            // Build player's share info for the Sell tab
+            java.util.List<SyncStockListingsPacket.CompanyShareInfo> playerShares = new java.util.ArrayList<>();
+            for (com.statecraft.company.Company company : companyManager.getAllCompanies()) {
+                int owned = company.getShareCount(playerId);
+                if (owned > 0) {
+                    int listed = stockManager.getActiveListingsForSeller(playerId).stream()
+                        .filter(l -> l.getCompanyId().equals(company.getId()))
+                        .mapToInt(com.statecraft.economy.stockmarket.ShareListing::getQuantity)
+                        .sum();
+                    playerShares.add(new SyncStockListingsPacket.CompanyShareInfo(
+                        company.getId().toString(),
+                        company.getName(),
+                        owned,
+                        company.getTotalShares(),
+                        listed
+                    ));
+                }
+            }
+
+            NetworkHandler.sendToPlayer(
+                new SyncStockListingsPacket(entries, packet.isMyListingsOnly(), playerShares),
+                player);
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    /**
+     * Handle stock market actions (buy, sell, cancel)
+     */
+    public static void handleStockMarketAction(StockMarketActionPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            com.statecraft.economy.stockmarket.StockMarketManager stockManager =
+                com.statecraft.economy.stockmarket.StockMarketManager.getInstance();
+            String result;
+
+            switch (packet.getAction()) {
+                case BUY -> {
+                    UUID listingId = UUID.fromString(packet.getListingId());
+                    result = stockManager.purchaseShares(
+                        listingId, player.getUUID(), player.getName().getString(),
+                        packet.getQuantity(), player.server);
+                }
+                case SELL -> {
+                    UUID companyId = UUID.fromString(packet.getCompanyId());
+                    com.statecraft.economy.stockmarket.ShareListing listing = stockManager.createListing(
+                        player.getUUID(), player.getName().getString(),
+                        companyId, packet.getQuantity(), packet.getPrice());
+                    if (listing != null) {
+                        result = "§aListed " + packet.getQuantity() + " shares at $" +
+                                 String.format("%.2f", packet.getPrice()) + " per share.";
+                    } else {
+                        result = "§cFailed to create listing. Check you own enough unlisted shares.";
+                    }
+                }
+                case CANCEL -> {
+                    UUID listingId = UUID.fromString(packet.getListingId());
+                    result = stockManager.cancelListing(listingId, player.getUUID());
+                }
+                default -> result = "§cUnknown action.";
+            }
+
+            // Send result message
+            player.sendSystemMessage(net.minecraft.network.chat.Component.literal(result));
+
+            // Refresh listings for the player
+            handleRequestStockListings(
+                new RequestStockListingsPacket(false, ""),
+                ctx);
+        });
+        ctx.get().setPacketHandled(true);
+    }
 }
 
