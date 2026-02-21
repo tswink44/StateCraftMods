@@ -1093,15 +1093,17 @@ java.lang.IllegalAccessException: class io.netty.util.internal.PlatformDependent
 [20Feb2026 22:37:09.888] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Mail] New mail: Property Tax Summary
 [20Feb2026 22:41:04.845] [Render thread/DEBUG] [net.minecraftforge.coremod.transformer.CoreModBaseTransformer/COREMOD]: Transforming net/minecraft/world/entity/raid/Raid
 [20Feb2026 22:41:04.879] [Render thread/DEBUG] [io.netty.util.internal.ThreadLocalRandom/]: -Dio.netty.initialSeedUniquifier: 0x2bb0b934452d5195
-twork.HandshakeHandler/FMLHANDSHAKE]: Received acknowledgement from client
-[20Feb2026 22:12:33.981] [Server thread/DEBUG] [net.minecraftforge.network.HandshakeHandler/FMLHANDSHAKE]: Sending ticking packet info 'Registry minecraft:villager_profession' to 'fml:handshake' sequence 6
-[20Feb2026 22:12:33.983] [Netty Server IO #6/DEBUG] [net.minecraftforge.network.LoginWrapper/FMLHANDSHAKE]: Recieved login wrapper packet event for channel fml:handshake with index 6
-[20Feb2026 22:12:33.983] [Netty Server IO #6/DEBUG] [net.minecraftforge.network.HandshakeHandler/FMLHANDSHAKE]: Received client indexed reply 6 of type net.minecraftforge.network.HandshakeMessages$C2SAcknowledge
-[20Feb2026 22:12:33.983] [Netty Server IO #6/DEBUG] [net.minecraftforge.network.HandshakeHandler/FMLHANDSHAKE]: Received acknowledgement from client
-[20Feb2026 22:12:34.028] [Server thread/DEBUG] [net.minecraftforge.network.HandshakeHandler/FMLHANDSHAKE]: Sending ticking packet info 'Registry minecraft:item' to 'fml:handshake' sequence 7
-[20Feb2026 22:12:34.031] [Netty Server IO #6/DEBUG] [net.minecraftforge.network.LoginWrapper/FMLHANDSHAKE]: Recieved login wrapper packet event for channel fml:handshake with index 7
-[20Feb2026 22:12:34.031] [Netty Server IO #6/DEBUG] [net.minecraftforge.network.HandshakeHandler/FMLHANDSHAKE]: Received client indexed reply 7 of type net.minecraftforge.network.HandshakeMessages$C2SAcknowledge
-[20Feb2026 22:12:34.031] [Netty Server IO #6/DEBUG] [net.minecraftforge.network.HandshakeHandler/FMLHANDSHAKE]: Received acknowledgement from client
+[20Feb2026 23:30:47.235] [IO-Worker-4/INFO] [net.minecraft.client.sounds.SoundEngine/]: System default audio device has changed!
+[20Feb2026 23:30:47.284] [Render thread/WARN] [net.minecraft.client.sounds.SoundEngine/]: Missing sound for event: minecraft:item.goat_horn.play
+[20Feb2026 23:30:47.284] [Render thread/WARN] [net.minecraft.client.sounds.SoundEngine/]: Missing sound for event: minecraft:entity.goat.screaming.horn_break
+[20Feb2026 23:30:47.299] [Render thread/INFO] [com.mojang.blaze3d.audio.Library/]: OpenAL initialized on device OpenAL Soft on Speakers (Steam Streaming Microphone)
+[20Feb2026 23:30:47.299] [Render thread/INFO] [net.minecraft.client.sounds.SoundEngine/SOUNDS]: Sound engine started
+[20Feb2026 23:30:48.235] [IO-Worker-4/INFO] [net.minecraft.client.sounds.SoundEngine/]: System default audio device has changed!
+[20Feb2026 23:30:48.283] [Render thread/WARN] [net.minecraft.client.sounds.SoundEngine/]: Missing sound for event: minecraft:item.goat_horn.play
+[20Feb2026 23:30:48.283] [Render thread/WARN] [net.minecraft.client.sounds.SoundEngine/]: Missing sound for event: minecraft:entity.goat.screaming.horn_break
+[20Feb2026 23:30:48.306] [Render thread/INFO] [com.mojang.blaze3d.audio.Library/]: OpenAL initialized on device OpenAL Soft on Headphones ([Samsung] R3)
+[20Feb2026 23:30:48.307] [Render thread/INFO] [net.minecraft.client.sounds.SoundEngine/SOUNDS]: Sound engine started
+026 22:12:34.031] [Netty Server IO #6/DEBUG] [net.minecraftforge.network.HandshakeHandler/FMLHANDSHAKE]: Received acknowledgement from client
 [20Feb2026 22:12:34.091] [Server thread/DEBUG] [net.minecraftforge.network.HandshakeHandler/FMLHANDSHAKE]: Sending ticking packet info 'Registry minecraft:potion' to 'fml:handshake' sequence 8
 [20Feb2026 22:12:34.093] [Netty Server IO #6/DEBUG] [net.minecraftforge.network.LoginWrapper/FMLHANDSHAKE]: Recieved login wrapper packet event for channel fml:handshake with index 8
 [20Feb2026 22:12:34.093] [Netty Server IO #6/DEBUG] [net.minecraftforge.network.HandshakeHandler/FMLHANDSHAKE]: Received client indexed reply 8 of type net.minecraftforge.network.HandshakeMessages$C2SAcknowledge
@@ -1247,3 +1249,9 @@ twork.HandshakeHandler/FMLHANDSHAKE]: Received acknowledgement from client
 [20Feb2026 23:22:09.793] [Server thread/DEBUG] [net.minecraftforge.common.ForgeHooks/WP]: Gathering id map for writing to world save world
 [20Feb2026 23:22:09.795] [Server thread/DEBUG] [net.minecraftforge.common.ForgeHooks/WP]: ID Map collection complete world
 [20Feb2026 23:22:09.826] [Server thread/DEBUG] [statecraft_economy/]: Saved 19 chunk valuations to cache
+[20Feb2026 23:27:09.794] [Server thread/DEBUG] [net.minecraftforge.common.ForgeHooks/WP]: Gathering id map for writing to world save world
+[20Feb2026 23:27:09.795] [Server thread/DEBUG] [net.minecraftforge.common.ForgeHooks/WP]: ID Map collection complete world
+[20Feb2026 23:27:09.826] [Server thread/DEBUG] [statecraft_economy/]: Saved 19 chunk valuations to cache
+[20Feb2026 23:32:09.789] [Server thread/DEBUG] [net.minecraftforge.common.ForgeHooks/WP]: Gathering id map for writing to world save world
+[20Feb2026 23:32:09.792] [Server thread/DEBUG] [net.minecraftforge.common.ForgeHooks/WP]: ID Map collection complete world
+[20Feb2026 23:32:09.826] [Server thread/DEBUG] [statecraft_economy/]: Saved 19 chunk valuations to cache
