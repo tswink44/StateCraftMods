@@ -295,6 +295,22 @@ Force delete an entire nation.
 - Removes all claims, states, cities, members
 
 ```
+/sc admin deletestate <nation> <state>
+```
+Force delete a state within a nation.
+- Removes all cities and chunks belonging to the state
+- Does not remove players from the nation
+- Lists available states if the name is wrong
+
+```
+/sc admin deletecity <nation> <state> <city>
+```
+Force delete a city within a state.
+- Unclaims all chunks belonging to the city
+- Does not remove players from the nation
+- Lists available cities if the name is wrong
+
+```
 /sc admin info
 ```
 Show detailed admin info about current chunk.
@@ -304,6 +320,29 @@ Show detailed admin info about current chunk.
 /sc admin setowner <player>
 ```
 Set a player as the owner of the current chunk.
+
+```
+/sc admin setleader <nation> <player>
+```
+Set a player as the leader of a nation.
+- Player must be a member of the nation
+- Notifies both old and new leader
+
+```
+/sc admin setgovernor <nation> <state> <player>
+```
+Set a player as the governor of a state.
+- Player must be a member of the nation
+- Automatically adds them as a state citizen
+- Notifies both old and new governor
+
+```
+/sc admin setmayor <nation> <state> <city> <player>
+```
+Set a player as the mayor of a city.
+- Player must be a member of the nation
+- Automatically adds them as a city resident and state citizen
+- Notifies both old and new mayor
 
 ```
 /sc admin reload

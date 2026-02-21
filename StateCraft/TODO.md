@@ -74,17 +74,38 @@ Elections only exist for nation leadership. There is no election system for:
 
 The `ElectionManager` only handles `nationId`-keyed elections.
 
-### 10. No State/City Disband Commands
-`/sc nation disband` exists, but there are no commands or GUI buttons to disband a state or city. `State.removeCity()` exists as a method but is never called from any command or GUI handler. This means orphaned cities/states can never be cleaned up by players.
+### ~~10. No State/City Disband Commands~~ ✅ FIXED
+~~`/sc nation disband` exists, but there are no commands or GUI buttons to disband a state or city. `State.removeCity()` exists as a method but is never called from any command or GUI handler. This means orphaned cities/states can never be cleaned up by players.~~
 
-### 11. No Leadership Transfer Commands
-A nation leader cannot transfer leadership to another player (they can only disband or wait for an election). Similarly, governors and mayors have no transfer mechanism. The only way to change a governor/mayor is through the `/sc admin` commands or officer appointment screens.
+**Fixed:** Added OP-only admin commands for disbanding states and cities:
+- `/sc admin deletestate <nation> <state>` — Force deletes a state, unclaiming all chunks in all its cities, removing cities from indexes, and notifying economy integration. Lists available states on name mismatch.
+- `/sc admin deletecity <nation> <state> <city>` — Force deletes a city, unclaiming all its chunks and notifying economy integration. Lists available cities on name mismatch.
+- Both commands require OP level 2+ (same as all admin commands). Players are NOT removed from the nation — only territory is cleaned up.
+- Added `ChunkClaimManager.disbandState()` and `ChunkClaimManager.disbandCity()` methods that handle chunk index cleanup, city/state index cleanup, and economy integration notifications.
 
-### 12. PvP Not Controlled by Nation Relationships
-`ProtectionHandler.onAttackEntity()` has a comment `"// Allow PvP based on nation relationships (future enhancement)"` but currently allows all player-vs-player combat in claimed chunks regardless of war/peace status. There's no PvP protection in allied/own territory.
+### ~~11. No Leadership Transfer Commands~~ ✅ FIXED
+~~A nation leader cannot transfer leadership to another player (they can only disband or wait for an election). Similarly, governors and mayors have no transfer mechanism. The only way to change a governor/mayor is through the `/sc admin` commands or officer appointment screens.~~
 
-### 13. No Unread Mail Count / Notification on Login
-When a player logs in, they see contract and election notifications but are **never** notified about unread mail. The `MailManager` has mailboxes but `PlayerJoinHandler` doesn't check for unread messages.
+**Fixed:** Added OP-only admin commands for transferring all leadership roles:
+- `/sc admin setleader <nation> <player>` — Set nation leader. Notifies both old and new leader.
+- `/sc admin setgovernor <nation> <state> <player>` — Set state governor. Automatically adds as state citizen. Notifies both old and new governor.
+- `/sc admin setmayor <nation> <state> <city> <player>` — Set city mayor. Automatically adds as city resident and state citizen. Notifies both old and new mayor.
+- All require OP level 2+ and target must be a member of the nation.
+
+### ~~12. PvP Not Controlled by Nation Relationships~~ ✅ FIXED
+~~`ProtectionHandler.onAttackEntity()` has a comment `"// Allow PvP based on nation relationships (future enhancement)"` but currently allows all player-vs-player combat in claimed chunks regardless of war/peace status. There's no PvP protection in allied/own territory.~~
+
+**Fixed:** `ProtectionHandler.onAttackEntity()` now fully implements PvP protection based on nation relationships:
+- **Same nation** — PvP blocked (configurable via `pvpProtectSameNation`, default `true`)
+- **At war (enemies)** — PvP always allowed
+- **Allied nations** — PvP blocked (configurable via `pvpProtectAllies`, default `true`)
+- **Neutral / nationless** — Vanilla behavior (PvP allowed)
+- Admin bypass respected. Config values defined in `StateCraftConfig` under the `diplomacy` section.
+
+### ~~13. No Unread Mail Count / Notification on Login~~ ✅ FIXED
+~~When a player logs in, they see contract and election notifications but are **never** notified about unread mail. The `MailManager` has mailboxes but `PlayerJoinHandler` doesn't check for unread messages.~~
+
+**Fixed:** `PlayerJoinHandler.onPlayerJoin()` now checks `MailManager.getInstance().getPlayerMailbox()` for unread messages and notifies the player on login (e.g., "§e[Mail] §fYou have §e3§f unread messages. Use §e/sc gui§f to read your mail."). Runs for all players, not just nation members.
 
 ### 14. Container Detection Is String-Based and Fragile
 `ProtectionHandler.isContainer()` uses `getDescriptionId().toLowerCase().contains(...)` to detect containers. This misses:
@@ -223,12 +244,14 @@ Currently, only nation name can be changed via constitutional amendment. Add:
 - `/sc city rename <newname>` (mayor)
 - `/sc state rename <newname>` (governor)
 
-#### 33. City/State Disband Commands
-Add `/sc city disband` (mayor) and `/sc state disband` (governor or nation admin). Should handle:
-- Unclaim all chunks
-- Remove all residents
-- Notify affected players
-- Clean up economy treasury accounts
+#### ~~33. City/State Disband Commands~~ ✅ IMPLEMENTED
+~~Add `/sc city disband` (mayor) and `/sc state disband` (governor or nation admin). Should handle:~~
+~~- Unclaim all chunks~~
+~~- Remove all residents~~
+~~- Notify affected players~~
+~~- Clean up economy treasury accounts~~
+
+**Implemented** as OP-only admin commands (`/sc admin deletestate` and `/sc admin deletecity`) rather than player-facing commands. Handles chunk unclaiming, index cleanup, and economy integration notifications.
 
 #### 34. Invitation Expiry Display
 When viewing pending invitations, show the remaining time before they expire. The `Invitation` class tracks expiry but the GUI doesn't display it.
@@ -261,11 +284,11 @@ Add admin commands for debugging:
 3. ~~**Bug #7** — EmergencyPowerManager state not persisted~~ ✅ FIXED (save/load NBT integrated into LegislatureManager flow)
 4. ~~**Bug #1** — Diplomacy one-sided~~ ✅ FIXED (full DiplomacyManager with bilateral effects, proposals, truces, GUI)
 5. **Bug #3** — Import tariff no handler (Medium — fails silently)
-6. **Feature #33** — City/State disband commands (High — no way to clean up)
-7. **Feature #11** — Leadership transfer (High — leader locked in position)
+6. ~~**Feature #33** — City/State disband commands~~ ✅ FIXED (OP-only `/sc admin deletestate` and `/sc admin deletecity`)
+7. ~~**Feature #11** — Leadership transfer~~ ✅ FIXED (OP-only `/sc admin setleader`, `setgovernor`, `setmayor`)
 8. ~~**Feature #22** — Bilateral diplomacy~~ ✅ IMPLEMENTED (DiplomacyManager + DiplomacyScreen + persistence)
-9. **Feature #12** — PvP protection (Medium — war has no combat mechanics)
-10. **Feature #13** — Unread mail notification (Medium — easy QoL win)
+9. ~~**Feature #12** — PvP protection~~ ✅ FIXED (already implemented with diplomacy — configurable same-nation/ally PvP blocking, war allows PvP)
+10. ~~**Feature #13** — Unread mail notification~~ ✅ FIXED (PlayerJoinHandler now checks mailbox on login)
 11. **Feature #9** — State/City elections (Medium — governance gap)
 12. **Feature #14** — Container detection fix (Medium — protection bypass risk)
 13. **Feature #38** — Legislature override of emergency powers (Medium — democratic check on executive power)

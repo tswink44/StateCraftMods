@@ -276,6 +276,62 @@ public class ChunkClaimManager {
         return true;
     }
 
+    /**
+     * Disband a state - unclaim all chunks, remove all cities, clean up indexes
+     * Does NOT remove players from the nation.
+     */
+    public boolean disbandState(UUID nationId, UUID stateId) {
+        Nation nation = nations.get(nationId);
+        if (nation == null) return false;
+
+        State state = nation.getState(stateId);
+        if (state == null) return false;
+
+        // Remove all cities and their chunks
+        for (City city : new ArrayList<>(state.getAllCities())) {
+            for (ClaimedChunk chunk : city.getAllChunks()) {
+                removeChunkFromIndex(chunk);
+            }
+            cityIndex.remove(city.getId());
+            IntegrationRegistry.notifyCityDisbanded(city.getId());
+        }
+
+        // Remove state from nation and index
+        nation.removeState(stateId);
+        stateIndex.remove(stateId);
+        IntegrationRegistry.notifyStateDisbanded(stateId);
+
+        markDirty();
+        StateCraft.LOGGER.info("State '{}' disbanded from nation '{}'", state.getName(), nation.getName());
+        return true;
+    }
+
+    /**
+     * Disband a city - unclaim all chunks, remove residents from city, clean up indexes
+     * Does NOT remove players from the nation.
+     */
+    public boolean disbandCity(UUID stateId, UUID cityId) {
+        State state = stateIndex.get(stateId);
+        if (state == null) return false;
+
+        City city = state.getCity(cityId);
+        if (city == null) return false;
+
+        // Remove all chunks from index
+        for (ClaimedChunk chunk : city.getAllChunks()) {
+            removeChunkFromIndex(chunk);
+        }
+
+        // Remove city from state and index
+        state.removeCity(cityId);
+        cityIndex.remove(cityId);
+        IntegrationRegistry.notifyCityDisbanded(cityId);
+
+        markDirty();
+        StateCraft.LOGGER.info("City '{}' disbanded from state '{}'", city.getName(), state.getName());
+        return true;
+    }
+
     @Nullable
     public Nation getNation(UUID nationId) {
         return nations.get(nationId);
