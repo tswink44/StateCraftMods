@@ -231,12 +231,13 @@ public class ClaimedChunk {
     }
 
     /**
-     * Grant a building permit to a player (gives BUILD and BREAK permissions)
+     * Grant a building permit to a player (gives BUILD, BREAK, and INTERACT permissions)
      */
     public void grantBuildingPermit(UUID playerId) {
         Set<Permission> perms = playerPermissions.computeIfAbsent(playerId, k -> EnumSet.noneOf(Permission.class));
         perms.add(Permission.BUILD);
         perms.add(Permission.BREAK);
+        perms.add(Permission.INTERACT);
     }
 
     /**
@@ -247,6 +248,7 @@ public class ClaimedChunk {
         if (perms != null) {
             perms.remove(Permission.BUILD);
             perms.remove(Permission.BREAK);
+            perms.remove(Permission.INTERACT);
             // Remove the player entry if they have no permissions left
             if (perms.isEmpty()) {
                 playerPermissions.remove(playerId);
@@ -259,7 +261,7 @@ public class ClaimedChunk {
      */
     public boolean hasBuildingPermit(UUID playerId) {
         Set<Permission> perms = playerPermissions.get(playerId);
-        return perms != null && perms.contains(Permission.BUILD) && perms.contains(Permission.BREAK);
+        return perms != null && perms.contains(Permission.BUILD) && perms.contains(Permission.BREAK) && perms.contains(Permission.INTERACT);
     }
 
     /**

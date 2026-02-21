@@ -2,8 +2,10 @@ package com.statecraft.economy.block;
 
 import com.statecraft.economy.block.entity.ModBlockEntities;
 import com.statecraft.economy.block.entity.TradingHubBlockEntity;
+import com.statecraft.economy.config.EconomyConfig;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -71,6 +73,12 @@ public class TradingHubBlock extends Block implements EntityBlock {
             BlockEntity be = level.getBlockEntity(pos);
             if (be instanceof TradingHubBlockEntity tradingHub) {
                 tradingHub.setOwner(player);
+
+                // Enforce city placement requirement
+                if (EconomyConfig.REQUIRE_CITY_PLACEMENT.get() && !tradingHub.isInCity()) {
+                    level.destroyBlock(pos, true);
+                    player.sendSystemMessage(Component.literal("§cTrading Hub blocks must be placed in a claimed city!"));
+                }
             }
         }
     }

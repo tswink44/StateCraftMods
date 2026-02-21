@@ -150,23 +150,25 @@ public class StockMarketScreen extends Screen {
 
         // Buy dialog
         if (showBuyDialog && buyTarget != null) {
-            int dialogX = guiLeft + guiWidth / 2 - 80;
-            int dialogY = guiTop + guiHeight / 2 - 40;
+            int dialogW = 240;
+            int dialogH = 80;
+            int dialogX = guiLeft + guiWidth / 2 - dialogW / 2;
+            int dialogY = guiTop + guiHeight / 2 - dialogH / 2;
 
-            buyQuantityBox = new EditBox(font, dialogX + 10, dialogY + 40, 60, 14, Component.literal("Qty"));
+            buyQuantityBox = new EditBox(font, dialogX + 10, dialogY + 50, 100, 14, Component.literal("Qty"));
             buyQuantityBox.setMaxLength(8);
             buyQuantityBox.setValue(String.valueOf(buyTarget.getQuantity()));
             addRenderableWidget(buyQuantityBox);
 
             addRenderableWidget(Button.builder(Component.literal("Buy"), b -> {
                 executeBuy();
-            }).bounds(dialogX + 80, dialogY + 40, 35, 14).build());
+            }).bounds(dialogX + 120, dialogY + 50, 50, 14).build());
 
             addRenderableWidget(Button.builder(Component.literal("Cancel"), b -> {
                 showBuyDialog = false;
                 buyTarget = null;
                 initWidgets();
-            }).bounds(dialogX + 118, dialogY + 40, 42, 14).build());
+            }).bounds(dialogX + 175, dialogY + 50, 55, 14).build());
         }
 
         // Close button
@@ -400,10 +402,10 @@ public class StockMarketScreen extends Screen {
         // Darken background
         graphics.fill(guiLeft, guiTop, guiLeft + guiWidth, guiTop + guiHeight, 0x80000000);
 
-        int dialogX = guiLeft + guiWidth / 2 - 80;
-        int dialogY = guiTop + guiHeight / 2 - 40;
-        int dialogW = 170;
-        int dialogH = 70;
+        int dialogW = 240;
+        int dialogH = 80;
+        int dialogX = guiLeft + guiWidth / 2 - dialogW / 2;
+        int dialogY = guiTop + guiHeight / 2 - dialogH / 2;
 
         // Dialog panel
         graphics.fill(dialogX - 1, dialogY - 1, dialogX + dialogW + 1, dialogY + dialogH + 1, COLOR_BORDER);
@@ -412,7 +414,13 @@ public class StockMarketScreen extends Screen {
         graphics.drawCenteredString(font, "§lBuy Shares", dialogX + dialogW / 2, dialogY + 4, COLOR_GOLD);
 
         if (buyTarget != null) {
-            graphics.drawString(font, "§7" + buyTarget.getCompanyName() + " §f@ $" +
+            // Company name and price on separate lines to avoid overflow
+            String companyName = buyTarget.getCompanyName();
+            int maxNameWidth = dialogW - 12;
+            if (font.width(companyName) > maxNameWidth) {
+                companyName = truncate(companyName, 20);
+            }
+            graphics.drawString(font, "§7" + companyName + " §f@ §e$" +
                 String.format("%.2f", buyTarget.getPricePerShare()) + "/share",
                 dialogX + 6, dialogY + 18, COLOR_TEXT);
 

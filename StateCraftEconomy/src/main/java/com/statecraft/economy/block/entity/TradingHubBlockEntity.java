@@ -19,6 +19,7 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import com.statecraft.economy.StateCraftEconomy;
 import net.minecraftforge.common.capabilities.Capability;
 import net.minecraftforge.common.capabilities.ForgeCapabilities;
 import net.minecraftforge.common.util.LazyOptional;
@@ -62,6 +63,7 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
     // Owner tracking
     private UUID ownerUUID;
     private String ownerName = "";
+    private UUID cityId;
 
     // Settings
     private boolean depositToATM = true; // true = deposit to bank, false = leave as currency items
@@ -123,11 +125,46 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
         this.ownerUUID = player.getUUID();
         this.ownerName = player.getName().getString();
 
+        // Resolve the city this block is placed in
+        if (level != null && !level.isClientSide) {
+            this.cityId = resolveCityId();
+        }
+
         // Default profit share: 100% to owner
         profitShares.clear();
         profitShares.add(new ProfitShare(ownerUUID, ownerName, 1.0));
 
         setChanged();
+    }
+
+    /**
+     * Resolve the city ID for this block's position via StateCraft integration.
+     */
+    private UUID resolveCityId() {
+        if (level == null) return null;
+        try {
+            var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
+            var getInstance = managerClass.getMethod("getInstance");
+            var manager = getInstance.invoke(null);
+
+            ChunkPos chunkPos = new ChunkPos(worldPosition);
+            var getChunk = managerClass.getMethod("getClaimedChunk",
+                ChunkPos.class, level.dimension().getClass());
+            Object chunk = getChunk.invoke(manager, chunkPos, level.dimension());
+            if (chunk != null) {
+                return (UUID) chunk.getClass().getMethod("getCityId").invoke(chunk);
+            }
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.debug("Could not resolve city for trading hub block: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Check if this block is placed in a claimed city chunk.
+     */
+    public boolean isInCity() {
+        return cityId != null;
     }
 
     /**
@@ -799,6 +836,9 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
             tag.putUUID("owner", ownerUUID);
             tag.putString("ownerName", ownerName);
         }
+        if (cityId != null) {
+            tag.putUUID("cityId", cityId);
+        }
 
         // Save settings
         tag.putBoolean("depositToATM", depositToATM);
@@ -842,6 +882,9 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
         if (tag.hasUUID("owner")) {
             ownerUUID = tag.getUUID("owner");
             ownerName = tag.getString("ownerName");
+        }
+        if (tag.contains("cityId")) {
+            cityId = tag.getUUID("cityId");
         }
 
         // Load settings

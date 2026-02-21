@@ -93,6 +93,7 @@ public class StateCraftEconomy {
         if (event.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) {
             event.accept(ModBlocks.ATM_ITEM);
             event.accept(ModBlocks.TRADING_HUB_ITEM);
+            event.accept(ModBlocks.COMPANY_VAULT_ITEM);
             event.accept(ModBlocks.MARKETPLACE_ITEM);
             event.accept(ModBlocks.STOCK_MARKET_ITEM);
         }

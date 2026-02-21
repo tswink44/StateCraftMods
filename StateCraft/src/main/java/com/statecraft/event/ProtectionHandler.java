@@ -104,7 +104,22 @@ public class ProtectionHandler {
         }
 
         // Check for general interaction (buttons, levers, doors, etc.)
-        if (!canInteract(player, event.getPos(), Permission.INTERACT)) {
+        // Only block if the target is an interactable block AND player lacks INTERACT permission
+        if (isInteractable(event)) {
+            if (!canInteract(player, event.getPos(), Permission.INTERACT)) {
+                event.setCanceled(true);
+                event.setUseBlock(Event.Result.DENY);
+                sendDeniedMessage(player, "interact here");
+                return;
+            }
+        }
+
+        // For non-interactable blocks (e.g., placing blocks against a surface),
+        // allow if the player has BUILD permission. The EntityPlaceEvent will do
+        // the actual BUILD permission check for block placement.
+        // Only deny if the player has neither BUILD nor INTERACT permission
+        if (!canInteract(player, event.getPos(), Permission.BUILD) &&
+            !canInteract(player, event.getPos(), Permission.INTERACT)) {
             event.setCanceled(true);
             event.setUseBlock(Event.Result.DENY);
             sendDeniedMessage(player, "interact here");
@@ -307,6 +322,40 @@ public class ProtectionHandler {
                blockName.contains("lectern") ||
                blockName.contains("vault") ||
                blockName.contains("trading_hub");
+    }
+
+    /**
+     * Check if the interaction is with an interactable block (doors, buttons, levers, etc.)
+     * These are blocks that have a use action when right-clicked, as opposed to
+     * blocks that are just surfaces for placing other blocks against.
+     */
+    private static boolean isInteractable(PlayerInteractEvent.RightClickBlock event) {
+        if (event.getLevel().isClientSide()) return false;
+
+        var state = event.getLevel().getBlockState(event.getPos());
+        var block = state.getBlock();
+        String blockName = block.getDescriptionId().toLowerCase();
+
+        return blockName.contains("door") ||
+               blockName.contains("button") ||
+               blockName.contains("lever") ||
+               blockName.contains("gate") ||
+               blockName.contains("trapdoor") ||
+               blockName.contains("bell") ||
+               blockName.contains("daylight") ||
+               blockName.contains("comparator") ||
+               blockName.contains("repeater") ||
+               blockName.contains("note_block") ||
+               blockName.contains("jukebox") ||
+               blockName.contains("cake") ||
+               blockName.contains("candle_cake") ||
+               blockName.contains("flower_pot") ||
+               blockName.contains("campfire") ||
+               blockName.contains("respawn_anchor") ||
+               blockName.contains("dragon_egg") ||
+               blockName.contains("command_block") ||
+               blockName.contains("structure_block") ||
+               blockName.contains("bed");
     }
 
     /**

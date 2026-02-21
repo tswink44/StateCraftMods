@@ -2,6 +2,7 @@ package com.statecraft.economy.block;
 
 import com.statecraft.economy.block.entity.StockMarketBlockEntity;
 import com.statecraft.economy.block.entity.ModBlockEntities;
+import com.statecraft.economy.config.EconomyConfig;
 import com.statecraft.economy.network.NetworkHandler;
 import com.statecraft.economy.network.packets.OpenStockMarketScreenPacket;
 import net.minecraft.core.BlockPos;
@@ -65,6 +66,12 @@ public class StockMarketBlock extends Block implements EntityBlock {
             BlockEntity be = level.getBlockEntity(pos);
             if (be instanceof StockMarketBlockEntity stockMarket) {
                 stockMarket.setOwner(player);
+
+                // Enforce city placement requirement
+                if (EconomyConfig.REQUIRE_CITY_PLACEMENT.get() && !stockMarket.isInCity()) {
+                    level.destroyBlock(pos, true);
+                    player.sendSystemMessage(Component.literal("§cStock Market blocks must be placed in a claimed city!"));
+                }
             }
         }
     }
