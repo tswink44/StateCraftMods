@@ -18,7 +18,7 @@ public class SyncNationDataPacket {
     private final int chunks;
     private final int members;
     private final boolean isLeader;
-    private final boolean isAdmin;
+    private final boolean isOfficer; // Was "isAdmin" — now represents officer status
     private final boolean isMember; // Is the player a member of THIS nation
 
     // Detailed data
@@ -43,7 +43,7 @@ public class SyncNationDataPacket {
         this.chunks = 0;
         this.members = 0;
         this.isLeader = false;
-        this.isAdmin = false;
+        this.isOfficer = false;
         this.isMember = false;
         this.detailedData = false;
         this.states = 0;
@@ -60,7 +60,7 @@ public class SyncNationDataPacket {
 
     // Basic data constructor
     public SyncNationDataPacket(String nationName, String stateName, String cityName,
-                                 int chunks, int members, boolean isLeader, boolean isAdmin) {
+                                 int chunks, int members, boolean isLeader, boolean isOfficer) {
         this.inNation = true;
         this.nationName = nationName;
         this.stateName = stateName;
@@ -68,7 +68,7 @@ public class SyncNationDataPacket {
         this.chunks = chunks;
         this.members = members;
         this.isLeader = isLeader;
-        this.isAdmin = isAdmin;
+        this.isOfficer = isOfficer;
         this.isMember = true; // Basic constructor implies membership
         this.detailedData = false;
         this.states = 0;
@@ -86,7 +86,7 @@ public class SyncNationDataPacket {
     // Detailed data constructor
     public SyncNationDataPacket(String nationName, int states, int maxStates, int cities, int chunks,
                                  int members, double balance, boolean open, String description,
-                                 String leaderName, boolean isLeader, boolean isAdmin, boolean isMember,
+                                 String leaderName, boolean isLeader, boolean isOfficer, boolean isMember,
                                  List<String> stateNames, List<String> allyNames, List<String> enemyNames) {
         this.inNation = true;
         this.nationName = nationName;
@@ -95,7 +95,7 @@ public class SyncNationDataPacket {
         this.chunks = chunks;
         this.members = members;
         this.isLeader = isLeader;
-        this.isAdmin = isAdmin;
+        this.isOfficer = isOfficer;
         this.isMember = isMember;
         this.detailedData = true;
         this.states = states;
@@ -118,7 +118,7 @@ public class SyncNationDataPacket {
         this.chunks = buf.readInt();
         this.members = buf.readInt();
         this.isLeader = buf.readBoolean();
-        this.isAdmin = buf.readBoolean();
+        this.isOfficer = buf.readBoolean();
         this.isMember = buf.readBoolean();
         this.detailedData = buf.readBoolean();
         this.states = buf.readInt();
@@ -156,7 +156,7 @@ public class SyncNationDataPacket {
         buf.writeInt(chunks);
         buf.writeInt(members);
         buf.writeBoolean(isLeader);
-        buf.writeBoolean(isAdmin);
+        buf.writeBoolean(isOfficer);
         buf.writeBoolean(isMember);
         buf.writeBoolean(detailedData);
         buf.writeInt(states);
@@ -191,7 +191,7 @@ public class SyncNationDataPacket {
     public int getChunks() { return chunks; }
     public int getMembers() { return members; }
     public boolean isLeader() { return isLeader; }
-    public boolean isAdmin() { return isAdmin; }
+    public boolean isOfficer() { return isOfficer; }
     public boolean isMember() { return isMember; }
     public boolean isDetailedData() { return detailedData; }
     public int getStates() { return states; }

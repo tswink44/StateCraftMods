@@ -30,13 +30,12 @@ public class EconomyConfig {
 
     // Spending limit configuration
     public static final ForgeConfigSpec.DoubleValue NATION_LEADER_DAILY_LIMIT;
-    public static final ForgeConfigSpec.DoubleValue NATION_ADMIN_DAILY_LIMIT;
+    public static final ForgeConfigSpec.DoubleValue NATION_OFFICER_DAILY_LIMIT;
     public static final ForgeConfigSpec.DoubleValue STATE_GOVERNOR_DAILY_LIMIT;
     public static final ForgeConfigSpec.DoubleValue CITY_MAYOR_DAILY_LIMIT;
 
     // Company configuration
     public static final ForgeConfigSpec.DoubleValue COMPANY_REGISTRATION_FEE;
-    public static final ForgeConfigSpec.IntValue MAX_COMPANIES_PER_PLAYER;
     public static final ForgeConfigSpec.DoubleValue COMPANY_TAX_RATE;
     public static final ForgeConfigSpec.DoubleValue COMPANY_OFFICER_DAILY_LIMIT;
 
@@ -124,8 +123,8 @@ public class EconomyConfig {
         BUILDER.comment("Nation leader daily spending limit (0 = unlimited, default)");
         NATION_LEADER_DAILY_LIMIT = BUILDER.defineInRange("nationLeaderDailyLimit", 0.0, 0.0, Double.MAX_VALUE);
 
-        BUILDER.comment("Nation admin daily spending limit");
-        NATION_ADMIN_DAILY_LIMIT = BUILDER.defineInRange("nationAdminDailyLimit", 50000.0, 0.0, Double.MAX_VALUE);
+        BUILDER.comment("Nation officer daily spending limit (was 'nationAdminDailyLimit')");
+        NATION_OFFICER_DAILY_LIMIT = BUILDER.defineInRange("nationAdminDailyLimit", 50000.0, 0.0, Double.MAX_VALUE);
 
         BUILDER.comment("State governor daily spending limit");
         STATE_GOVERNOR_DAILY_LIMIT = BUILDER.defineInRange("stateGovernorDailyLimit", 20000.0, 0.0, Double.MAX_VALUE);
@@ -141,8 +140,6 @@ public class EconomyConfig {
         BUILDER.comment("Fee to register a new company (paid to the state treasury where HQ is located, 0 = free)");
         COMPANY_REGISTRATION_FEE = BUILDER.defineInRange("registrationFee", 1000.0, 0.0, Double.MAX_VALUE);
 
-        BUILDER.comment("Maximum number of companies a single player can found (0 = unlimited)");
-        MAX_COMPANIES_PER_PLAYER = BUILDER.defineInRange("maxCompaniesPerPlayer", 3, 0, 100);
 
         BUILDER.comment("Corporate tax rate — percentage of company balance collected each tax period (0.0 = no tax, 0.05 = 5%)");
         COMPANY_TAX_RATE = BUILDER.defineInRange("companyTaxRate", 0.02, 0.0, 1.0);

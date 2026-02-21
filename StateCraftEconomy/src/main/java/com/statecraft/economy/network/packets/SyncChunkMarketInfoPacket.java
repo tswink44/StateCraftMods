@@ -18,7 +18,7 @@ public class SyncChunkMarketInfoPacket {
     private final boolean isPrivatelyOwned;
     private final boolean canListForSale;
     private final boolean canBuy;
-    private final int valuation;  // Improvement score
+    private final double valuation;  // Chunk valuation (total value)
     private final double estimatedTax;  // Estimated tax per cycle
 
     // Constructor for unclaimed chunk
@@ -43,7 +43,7 @@ public class SyncChunkMarketInfoPacket {
                                       double salePrice, String sellerName, String ownerName,
                                       String cityName, boolean isPrivatelyOwned,
                                       boolean canListForSale, boolean canBuy,
-                                      int valuation, double estimatedTax) {
+                                      double valuation, double estimatedTax) {
         this.chunkX = chunkX;
         this.chunkZ = chunkZ;
         this.isClaimed = isClaimed;
@@ -71,7 +71,7 @@ public class SyncChunkMarketInfoPacket {
         this.isPrivatelyOwned = buf.readBoolean();
         this.canListForSale = buf.readBoolean();
         this.canBuy = buf.readBoolean();
-        this.valuation = buf.readInt();
+        this.valuation = buf.readDouble();
         this.estimatedTax = buf.readDouble();
     }
 
@@ -87,7 +87,7 @@ public class SyncChunkMarketInfoPacket {
         buf.writeBoolean(isPrivatelyOwned);
         buf.writeBoolean(canListForSale);
         buf.writeBoolean(canBuy);
-        buf.writeInt(valuation);
+        buf.writeDouble(valuation);
         buf.writeDouble(estimatedTax);
     }
 
@@ -103,7 +103,7 @@ public class SyncChunkMarketInfoPacket {
     public boolean isPrivatelyOwned() { return isPrivatelyOwned; }
     public boolean canListForSale() { return canListForSale; }
     public boolean canBuy() { return canBuy; }
-    public int getValuation() { return valuation; }
+    public double getValuation() { return valuation; }
     public double getEstimatedTax() { return estimatedTax; }
 }
 

@@ -292,8 +292,8 @@ public class EconomyCommands {
             ServerPlayer player = context.getSource().getPlayerOrException();
             double amount = DoubleArgumentType.getDouble(context, "amount");
 
-            if (!StateCraftIntegration.isNationAdmin(player)) {
-                context.getSource().sendFailure(Component.literal("§cOnly nation admins can withdraw from treasury!"));
+            if (!StateCraftIntegration.isNationLeaderOrOfficer(player)) {
+                context.getSource().sendFailure(Component.literal("§cOnly the nation leader or officers can withdraw from treasury!"));
                 return 0;
             }
 

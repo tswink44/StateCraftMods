@@ -266,5 +266,91 @@ public class IntegrationRegistry {
         }
         return 0;
     }
+
+    // ==================== Company Economy ====================
+
+    public static void notifyCompanyCreated(UUID companyId) {
+        if (economyIntegration != null) {
+            try {
+                economyIntegration.onCompanyCreated(companyId);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error notifying economy integration of company creation: {}", e.getMessage());
+            }
+        }
+    }
+
+    public static boolean notifyCompanyDissolving(UUID companyId, UUID founderId) {
+        if (economyIntegration != null) {
+            try {
+                return economyIntegration.onCompanyDissolving(companyId, founderId);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error notifying economy integration of company dissolution: {}", e.getMessage());
+            }
+        }
+        return true;
+    }
+
+    public static double getCompanyBalance(UUID companyId) {
+        if (economyIntegration != null) {
+            try {
+                return economyIntegration.getCompanyBalance(companyId);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error getting company balance: {}", e.getMessage());
+            }
+        }
+        return 0;
+    }
+
+    public static boolean isDividendsEnabled(UUID companyId) {
+        if (economyIntegration != null) {
+            try {
+                return economyIntegration.isDividendsEnabled(companyId);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error checking dividends enabled: {}", e.getMessage());
+            }
+        }
+        return false;
+    }
+
+    public static double getDividendRate(UUID companyId) {
+        if (economyIntegration != null) {
+            try {
+                return economyIntegration.getDividendRate(companyId);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error getting dividend rate: {}", e.getMessage());
+            }
+        }
+        return 0;
+    }
+
+    public static void setDividendsEnabled(UUID companyId, boolean enabled) {
+        if (economyIntegration != null) {
+            try {
+                economyIntegration.setDividendsEnabled(companyId, enabled);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error setting dividends enabled: {}", e.getMessage());
+            }
+        }
+    }
+
+    public static void setDividendRate(UUID companyId, double rate) {
+        if (economyIntegration != null) {
+            try {
+                economyIntegration.setDividendRate(companyId, rate);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error setting dividend rate: {}", e.getMessage());
+            }
+        }
+    }
+
+    public static void setDividendPeriodTicks(UUID companyId, long ticks) {
+        if (economyIntegration != null) {
+            try {
+                economyIntegration.setDividendPeriodTicks(companyId, ticks);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error setting dividend period: {}", e.getMessage());
+            }
+        }
+    }
 }
 

@@ -404,7 +404,7 @@ public class ElectionManager {
     public Set<UUID> getAllNationCitizens(Nation nation) {
         Set<UUID> citizens = new HashSet<>();
         citizens.add(nation.getLeaderId());
-        citizens.addAll(nation.getAdmins());
+        citizens.addAll(nation.getOfficers());
         citizens.addAll(nation.getMembers());
 
         for (State state : nation.getAllStates()) {

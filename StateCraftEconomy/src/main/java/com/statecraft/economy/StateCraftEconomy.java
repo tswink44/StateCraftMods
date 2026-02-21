@@ -142,7 +142,7 @@ public class StateCraftEconomy {
         }
 
         // Run company dividend tick
-        com.statecraft.economy.company.CompanyManager.getInstance().tick(event.getServer());
+        com.statecraft.economy.company.CompanyEconomyManager.getInstance().tick(event.getServer());
 
         // Run bank interest and loan tick
         com.statecraft.economy.company.BankManager.getInstance().tick(event.getServer());

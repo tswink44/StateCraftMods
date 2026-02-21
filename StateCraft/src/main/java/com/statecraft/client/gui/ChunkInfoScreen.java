@@ -36,14 +36,14 @@ public class ChunkInfoScreen extends StateCraftScreen {
     // Scrolling
     private int scrollOffset = 0;
     private int contentHeight = 0;
-    private static final int SCROLL_AREA_HEIGHT = 120;
+    private static final int SCROLL_AREA_HEIGHT = 138;
     private static final int LINE_HEIGHT = 12;
 
     public ChunkInfoScreen(int chunkX, int chunkZ) {
         super(Component.literal("Chunk Info"));
         this.chunkX = chunkX;
         this.chunkZ = chunkZ;
-        this.guiWidth = 260; this.guiHeight = 220;
+        this.guiWidth = 260; this.guiHeight = 240;
     }
 
     @Override
@@ -212,7 +212,9 @@ public class ChunkInfoScreen extends StateCraftScreen {
     }
 
     private int getMaxScroll() {
-        return Math.max(0, (contentHeight - SCROLL_AREA_HEIGHT) / LINE_HEIGHT);
+        int overflow = contentHeight - SCROLL_AREA_HEIGHT;
+        if (overflow <= 0) return 0;
+        return (overflow + LINE_HEIGHT - 1) / LINE_HEIGHT; // ceiling division
     }
 
     @Override

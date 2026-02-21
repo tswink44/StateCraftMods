@@ -81,6 +81,28 @@ public class LegislatureManager {
     }
 
     /**
+     * Get the current value of a passed policy for a nation.
+     * Called by the Economy mod via reflection to read policy values like IMPORT_TARIFF.
+     *
+     * @param nationId The nation UUID
+     * @param policy   The policy type to query
+     * @return The current policy value as a Number, or null if not applicable
+     */
+    public Number getPassedPolicyValue(UUID nationId, PolicyType policy) {
+        Nation nation = ChunkClaimManager.getInstance().getNation(nationId);
+        if (nation == null) return null;
+
+        return switch (policy) {
+            case IMPORT_TARIFF -> nation.getImportTariffRate();
+            case NATION_SALES_TAX_RATE -> nation.getSalesTaxRate();
+            case STATE_PASS_THROUGH_RATE -> nation.getStatePassThroughRate();
+            case BASE_CHUNK_VALUE -> nation.getBaseChunkValue();
+            case CHUNK_CLAIM_FEE -> nation.getChunkClaimFee();
+            default -> null;
+        };
+    }
+
+    /**
      * Called every server tick to process bill transitions
      */
     public void tick(MinecraftServer server) {
@@ -502,6 +524,11 @@ public class LegislatureManager {
                 case NATION_SALES_TAX_RATE:
                     nation.setSalesTaxRate(Double.parseDouble(value));
                     StateCraft.LOGGER.info("Policy change: Nation sales tax rate set to {}% for nation {}",
+                        Double.parseDouble(value) * 100, nation.getName());
+                    break;
+                case IMPORT_TARIFF:
+                    nation.setImportTariffRate(Double.parseDouble(value));
+                    StateCraft.LOGGER.info("Policy change: Import tariff rate set to {}% for nation {}",
                         Double.parseDouble(value) * 100, nation.getName());
                     break;
                 case LEADER_SPENDING_LIMIT:

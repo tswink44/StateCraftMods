@@ -61,8 +61,8 @@ public class ContractsMainScreen extends StateCraftScreen {
     public ContractsMainScreen(String nationName) {
         super(Component.literal("Government Contracts"));
         this.nationName = nationName;
-        this.guiWidth = 360;
-        this.guiHeight = 280;
+        this.guiWidth = 340;
+        this.guiHeight = 260;
     }
 
     @Override
@@ -251,9 +251,10 @@ public class ContractsMainScreen extends StateCraftScreen {
     protected void renderContent(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderDivider(graphics, guiLeft + 10, guiTop + 22, guiWidth - 20);
 
-        // Treasury balance display
-        String treasuryText = String.format("§6Treasury: §a$%.2f", nationTreasuryBalance);
-        graphics.drawString(this.font, treasuryText, guiLeft + guiWidth - font.width(treasuryText.replaceAll("§.", "")) - 15, guiTop + 8, COLOR_TEXT);
+        // Treasury balance display - right-aligned on the title row, compact format
+        String treasuryText = String.format("§a$%.2f", nationTreasuryBalance);
+        int treasuryWidth = font.width(treasuryText.replaceAll("§.", ""));
+        graphics.drawString(this.font, treasuryText, guiLeft + guiWidth - treasuryWidth - 10, guiTop + 8, 0xFFAAAAAA);
 
         if (!dataLoaded) {
             graphics.drawCenteredString(this.font, "§7Loading contract data...",

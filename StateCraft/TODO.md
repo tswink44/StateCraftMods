@@ -1,23 +1,18 @@
 # StateCraft — TODO & Feature Suggestions
 
 *Generated from codebase analysis — February 19, 2026*
+*Updated: February 20, 2026 — Diplomacy framework implemented*
 
 ---
 
 ## 🔴 BUGS (Must Fix)
 
-### 1. Diplomacy Policies Stored But Not Fully Applied
-**Severity: High** — War/Alliance/Peace declarations are one-sided.
+### ~~1. Diplomacy Policies Stored But Not Fully Applied~~ ✅ FIXED
+~~**Severity: High** — War/Alliance/Peace declarations are one-sided.~~
 
-`DECLARE_WAR`, `DECLARE_PEACE`, `FORM_ALLIANCE`, and `BREAK_ALLIANCE` in `applyPolicyChange()` only modify the **declaring** nation's allies/enemies sets. The **target** nation is never notified or updated. For example, if Nation A declares war on Nation B:
-- Nation A's `enemies` set includes Nation B ✅
-- Nation B's `enemies` set does **not** include Nation A ❌
-- No notification is sent to Nation B
-- Open borders check on Nation B side won't block Nation A players
+~~`DECLARE_WAR`, `DECLARE_PEACE`, `FORM_ALLIANCE`, and `BREAK_ALLIANCE` in `applyPolicyChange()` only modify the **declaring** nation's allies/enemies sets. The **target** nation is never notified or updated.~~
 
-This means war/alliance is completely asymmetric and the target nation has no awareness.
-
-**Fix:** When applying `DECLARE_WAR`, also call `targetNation.addEnemy(declaringNation.getId())`. Same for alliances (both sides) and peace (both sides remove). Send mail notifications to the target nation's leader.
+**Fixed:** Implemented a full `DiplomacyManager` singleton that handles all diplomatic actions bilaterally. All four legislature policy cases (`DECLARE_WAR`, `DECLARE_PEACE`, `FORM_ALLIANCE`, `BREAK_ALLIANCE`) in `LegislatureManager.applyPolicyChange()` now route through `DiplomacyManager` instead of directly modifying nation enemy/ally sets. War declarations update both nations' enemy sets and send mail notifications. Peace and alliance use a proposal/acceptance workflow requiring the target nation leader's consent. Alliance breaks are immediate and bilateral. A new `DiplomacyScreen` GUI (accessible from Country Management) allows leaders to manage all diplomatic actions, view nation relationships, and handle inbound/outbound proposals.
 
 ### ~~2. Emergency Powers Are Defined But Have Zero Mechanical Effect~~ ✅ FIXED
 ~~**Severity: High** — Entire emergency power system is non-functional.~~
@@ -63,10 +58,10 @@ The `SyncNationDataPacket` now carries the real treasury balance as a `double` (
 
 **Fixed:** Added `save()`/`load()` NBT methods to `EmergencyPowerManager`. Both `successionOriginalLeaders` (UUID→UUID) and `emergencyTaxCollected` (UUID→Long) maps are now serialized as `ListTag` entries with `CompoundTag` elements. Integrated into `LegislatureManager.save()` and `LegislatureManager.load()` under the `"emergencyPowerManager"` key, which flows through `NationSavedData` automatically. Backward compatible — existing saves without the key are handled gracefully.
 
-### 8. Legislature `DECLARE_WAR` Policy Still One-Sided (Bug #1 Partial)
-**Severity: High** — The `DIPLOMATIC_CRISIS` emergency power now correctly declares war bilaterally (both nations updated). However, the normal legislature path via `applyPolicyChange()` → `DECLARE_WAR` case still only calls `nation.addEnemy(enemyId)` on the declaring nation. The target nation's `enemies` set is not updated, so standard legislature war declarations remain asymmetric. Same issue exists for `DECLARE_PEACE`, `FORM_ALLIANCE`, and `BREAK_ALLIANCE`.
+### ~~8. Legislature `DECLARE_WAR` Policy Still One-Sided (Bug #1 Partial)~~ ✅ FIXED
+~~**Severity: High** — The `DIPLOMATIC_CRISIS` emergency power now correctly declares war bilaterally (both nations updated). However, the normal legislature path via `applyPolicyChange()` → `DECLARE_WAR` case still only calls `nation.addEnemy(enemyId)` on the declaring nation. The target nation's `enemies` set is not updated, so standard legislature war declarations remain asymmetric. Same issue exists for `DECLARE_PEACE`, `FORM_ALLIANCE`, and `BREAK_ALLIANCE`.~~
 
-**Fix:** Update the `DECLARE_WAR`, `DECLARE_PEACE`, `FORM_ALLIANCE`, and `BREAK_ALLIANCE` cases in `LegislatureManager.applyPolicyChange()` to modify both nations and send mail notifications. This is the remaining portion of original Bug #1.
+**Fixed:** All four legislature diplomacy cases now route through `DiplomacyManager` for bilateral effects (see Bug #1 fix). `DECLARE_WAR` calls `DiplomacyManager.declareWar()`, `DECLARE_PEACE` calls `DiplomacyManager.proposePeace()`, `FORM_ALLIANCE` calls `DiplomacyManager.proposeAlliance()`, `BREAK_ALLIANCE` calls `DiplomacyManager.breakAlliance()`. The `resolveNation()` helper resolves nation names/UUIDs from the policy value string.
 
 ---
 
@@ -161,13 +156,24 @@ Currently unclaimed wilderness is completely unprotected — anyone can modify i
 
 ### Diplomacy
 
-#### 22. Bilateral Alliance/War System
-Alliances and war should require mutual agreement or at least mutual awareness:
-- **Alliance:** Proposing nation sends alliance request → target nation's legislature votes to accept/reject
-- **War:** Declaring nation's legislature votes → target nation is automatically notified and set to enemy status on both sides
-- **Peace Treaty:** Both nations' legislatures must pass peace bills
+#### ~~22. Bilateral Alliance/War System~~ ✅ IMPLEMENTED
+~~Alliances and war should require mutual agreement or at least mutual awareness:~~
+~~- **Alliance:** Proposing nation sends alliance request → target nation's legislature votes to accept/reject~~
+~~- **War:** Declaring nation's legislature votes → target nation is automatically notified and set to enemy status on both sides~~
+~~- **Peace Treaty:** Both nations' legislatures must pass peace bills~~
 
-Currently alliance/war is completely unilateral (see Bug #1).
+~~Currently alliance/war is completely unilateral (see Bug #1).~~
+
+**Implemented:** Full `DiplomacyManager` singleton with bilateral diplomatic actions:
+- **War:** Immediate bilateral — both nations' enemy sets updated, mail sent to target leader, all members notified. Truces block re-declaration for 48 hours.
+- **Peace:** Proposal/acceptance workflow — proposer creates pending peace proposal, target leader must accept via DiplomacyScreen. Acceptance removes enemy status on both sides and creates a 48-hour truce.
+- **Alliance:** Proposal/acceptance workflow — proposer creates pending alliance proposal, target leader must accept. Acceptance adds both nations to each other's ally sets.
+- **Break Alliance:** Immediate bilateral — both nations' ally sets updated, notification sent.
+- **Truces:** 48-hour post-peace truces prevent immediate re-declaration of war. Truces are persisted and auto-expire.
+- **Persistence:** `DiplomacyManager.save()`/`load()` integrated into `LegislatureManager` → `NationSavedData` flow.
+- **Network:** `DiplomacyActionPacket` (C→S), `RequestDiplomacyDataPacket` (C→S), `SyncDiplomacyDataPacket` (S→C).
+- **GUI:** `DiplomacyScreen` with Relations/Inbound/Outbound tabs, action buttons (War/Peace/Alliance/Break Alliance), proposal accept/reject, accessible from Country Management for all members (actions leader-only).
+- **Config:** `MAX_DIPLOMACY_PROPOSALS` configurable max outbound proposals per nation (default 5).
 
 #### 23. Trade Agreements Between Nations
 Let nations establish trade agreements that:
@@ -175,8 +181,10 @@ Let nations establish trade agreements that:
 - Allow shared marketplace access
 - Enable cross-border currency transfers at reduced fees
 
-#### 24. Nation Map / Diplomacy Screen
-A GUI screen showing all nations, their relationships (ally/enemy/neutral), borders, and basic stats. Currently players must use `/sc nation list` and individual info commands.
+#### ~~24. Nation Map / Diplomacy Screen~~ ✅ IMPLEMENTED
+~~A GUI screen showing all nations, their relationships (ally/enemy/neutral), borders, and basic stats. Currently players must use `/sc nation list` and individual info commands.~~
+
+**Implemented:** `DiplomacyScreen` shows all nations with color-coded diplomatic status (AT_WAR = red, TRUCE = yellow, ALLIED = green, NEUTRAL = gray). Three tabs: Relations (all nations + status), Inbound (pending proposals to accept/reject), Outbound (proposals sent). Accessible from Country Management for all nation members. Leader-only action bar with target input and War/Peace/Alliance/Break buttons.
 
 ### Contracts
 
@@ -248,14 +256,14 @@ Add admin commands for debugging:
 
 ## 📋 PRIORITY ORDER (Recommended)
 
-1. **Bug #8** — Legislature DECLARE_WAR still one-sided (High — only DIPLOMATIC_CRISIS does bilateral, normal legislature path is broken)
+1. ~~**Bug #8** — Legislature DECLARE_WAR still one-sided~~ ✅ FIXED (all 4 diplomacy cases now route through DiplomacyManager)
 2. ~~**Bug #2** — Emergency powers non-functional~~ ✅ FIXED (all 5 powers now have mechanical effects + Executive Actions GUI)
 3. ~~**Bug #7** — EmergencyPowerManager state not persisted~~ ✅ FIXED (save/load NBT integrated into LegislatureManager flow)
-4. **Bug #1** — Diplomacy one-sided (High — war/alliance broken; Bug #8 is the remaining part)
+4. ~~**Bug #1** — Diplomacy one-sided~~ ✅ FIXED (full DiplomacyManager with bilateral effects, proposals, truces, GUI)
 5. **Bug #3** — Import tariff no handler (Medium — fails silently)
 6. **Feature #33** — City/State disband commands (High — no way to clean up)
 7. **Feature #11** — Leadership transfer (High — leader locked in position)
-8. **Feature #22** — Bilateral diplomacy (High — fixes Bug #1 / #8 properly)
+8. ~~**Feature #22** — Bilateral diplomacy~~ ✅ IMPLEMENTED (DiplomacyManager + DiplomacyScreen + persistence)
 9. **Feature #12** — PvP protection (Medium — war has no combat mechanics)
 10. **Feature #13** — Unread mail notification (Medium — easy QoL win)
 11. **Feature #9** — State/City elections (Medium — governance gap)

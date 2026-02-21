@@ -6,9 +6,9 @@ package com.statecraft.legislature;
 public enum PolicyType {
     // Taxation policies
     STATE_PASS_THROUGH_RATE("State Pass-Through Rate", Category.TAXATION, 0.0, 1.0, ValueType.PERCENTAGE,
-        "Percentage of state revenue that must be passed to nation treasury"),
-    IMPORT_TARIFF("Import Tariff", Category.TAXATION, 0.0, 1.0, ValueType.PERCENTAGE,
-        "Tax rate on trade with other nations"),
+        "Percentage of state property tax revenue that must be passed to nation treasury"),
+    IMPORT_TARIFF("Import Tariff", Category.TAXATION, 0.0, 0.5, ValueType.PERCENTAGE,
+        "Tax on cross-nation marketplace purchases, charged to the buyer at the buyer's nation rate (0-50%). Revenue goes to the buyer's nation treasury."),
     BASE_CHUNK_VALUE("Base Chunk Value", Category.TAXATION, 1, 100000, ValueType.CURRENCY,
         "Base valuation for chunks in the nation (default $100)"),
     NATION_SALES_TAX_RATE("Nation Sales Tax", Category.TAXATION, 0.0, 0.5, ValueType.PERCENTAGE,
@@ -64,7 +64,15 @@ public enum PolicyType {
 
     // Custom laws (roleplay)
     CUSTOM_LAW("Custom Law", Category.CUSTOM, 0, 0, ValueType.TEXT,
-        "Custom law or regulation for roleplay purposes");
+        "Custom law or regulation for roleplay purposes"),
+    CUSTOM_LAW_2("Custom Law 2", Category.CUSTOM, 0, 0, ValueType.TEXT,
+        "Additional custom law or regulation"),
+    CUSTOM_LAW_3("Custom Law 3", Category.CUSTOM, 0, 0, ValueType.TEXT,
+        "Additional custom law or regulation"),
+    CUSTOM_LAW_4("Custom Law 4", Category.CUSTOM, 0, 0, ValueType.TEXT,
+        "Additional custom law or regulation"),
+    CUSTOM_LAW_5("Custom Law 5", Category.CUSTOM, 0, 0, ValueType.TEXT,
+        "Additional custom law or regulation");
 
     private final String displayName;
     private final Category category;

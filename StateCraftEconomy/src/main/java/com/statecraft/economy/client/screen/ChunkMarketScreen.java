@@ -46,7 +46,7 @@ public class ChunkMarketScreen extends Screen {
     private boolean isPrivatelyOwned = false;
     private boolean canListForSale = false;
     private boolean canBuy = false;
-    private int valuation = 0;
+    private double valuation = 0;
     private double estimatedTax = 0;
 
     // Price input for listing
@@ -129,7 +129,8 @@ public class ChunkMarketScreen extends Screen {
 
         // Valuation and Tax rows (always show for claimed chunks)
         if (isClaimed) {
-            menuEntries.add(new MenuEntry("Valuation: " + valuation, startY + spacing * row, false));
+            String valStr = EconomyManager.getInstance().formatCurrency(valuation);
+            menuEntries.add(new MenuEntry("Valuation: " + valStr, startY + spacing * row, false));
             row++;
 
             String taxStr = EconomyManager.getInstance().formatCurrency(estimatedTax);
@@ -321,7 +322,7 @@ public class ChunkMarketScreen extends Screen {
     public void updateMarketInfo(boolean isClaimed, boolean isForSale, double salePrice,
                                   String sellerName, String ownerName, String cityName,
                                   boolean isPrivatelyOwned, boolean canListForSale, boolean canBuy,
-                                  int valuation, double estimatedTax) {
+                                  double valuation, double estimatedTax) {
         this.isClaimed = isClaimed;
         this.isForSale = isForSale;
         this.salePrice = salePrice;

@@ -16,10 +16,14 @@ import java.util.List;
 /**
  * Screen showing detailed nation information using horizontal info rows
  * and a simplified button bar at the bottom.
+ * Content area is scrollable so rows never overlap with buttons.
  */
 public class NationInfoScreen extends StateCraftScreen {
 
     private static final int FLAG_SIZE = 24;
+    private static final int ROW_HEIGHT = 13;
+    private static final int ROW_SPACING = 15;
+    private static final int SECTION_GAP = 3;
 
     private final String nationName;
 
@@ -35,7 +39,7 @@ public class NationInfoScreen extends StateCraftScreen {
     private String description = "";
     private String leaderName = "Unknown";
     private boolean isLeader = false;
-    private boolean isAdmin = false;
+    private boolean isOfficer = false;
     private boolean isMember = false;
     private String flagUrl = "";
     private List<String> stateNames = new ArrayList<>();
@@ -46,6 +50,9 @@ public class NationInfoScreen extends StateCraftScreen {
     private Button managementButton;
     private Button leaveButton;
     private Button joinButton;
+
+    // Scrolling
+    private int scrollOffset = 0;
 
     public NationInfoScreen(String nationName) {
         super(Component.literal("Nation: " + nationName));
@@ -116,6 +123,24 @@ public class NationInfoScreen extends StateCraftScreen {
         ));
     }
 
+    /** Total height of all content rows (for scroll clamping). */
+    private int getTotalContentHeight() {
+        // 3 info rows + gap + header + 4 stat rows + gap + header + 2 diplomacy rows
+        // = 3*ROW_SPACING + SECTION_GAP + ROW_SPACING + 4*ROW_SPACING + SECTION_GAP + ROW_SPACING + 2*ROW_SPACING
+        // = (3+1+4+1+2)*ROW_SPACING + 2*SECTION_GAP = 11*ROW_SPACING + 2*SECTION_GAP
+        return 11 * ROW_SPACING + 2 * SECTION_GAP;
+    }
+
+    /** Y coordinate where the scrollable content area starts. */
+    private int contentTop() {
+        return guiTop + 24;
+    }
+
+    /** Y coordinate where the scrollable content area ends (just above button bar). */
+    private int contentBottom() {
+        return guiTop + guiHeight - 32;
+    }
+
     @Override
     protected void renderContent(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         // Render flag in top-left corner above the title bar
@@ -123,96 +148,124 @@ public class NationInfoScreen extends StateCraftScreen {
 
         int startX = guiLeft + 10;
         int rowEnd = guiLeft + guiWidth - 10;
-        int rowHeight = 14;
 
-        // Title row
-        graphics.fill(startX, guiTop + 6, rowEnd, guiTop + 20, 0xAA808080);
+        // Title row (fixed, not scrollable)
+        graphics.fill(startX, guiTop + 6, rowEnd, guiTop + 19, 0xAA808080);
         graphics.fill(startX, guiTop + 6, rowEnd, guiTop + 7, 0xFF505050);
-        graphics.fill(startX, guiTop + 19, rowEnd, guiTop + 20, 0xFF404040);
-        graphics.drawString(this.font, "Nation: " + nationName, startX + 4, guiTop + 9, 0xFFFFFF00);
+        graphics.fill(startX, guiTop + 18, rowEnd, guiTop + 19, 0xFF404040);
+        graphics.drawString(this.font, "Nation: " + nationName, startX + 4, guiTop + 8, 0xFFFFFF00);
 
         if (!dataLoaded) {
             graphics.drawCenteredString(this.font, "§7Loading...", this.width / 2, guiTop + 80, COLOR_TEXT);
             return;
         }
 
-        int y = guiTop + 24;
-        int spacing = 16;
+        int clipTop = contentTop();
+        int clipBottom = contentBottom();
+
+        // Enable scissor to clip content to the scrollable area
+        graphics.enableScissor(startX, clipTop, rowEnd, clipBottom);
+
+        int y = clipTop - scrollOffset;
 
         // Leader row
         renderInfoRow(graphics, startX, rowEnd, y, "§7Leader", "§f" + leaderName);
-        y += spacing;
+        y += ROW_SPACING;
 
         // Status row
         String statusText = isOpen ? "§aOpen" : "§cClosed";
         renderInfoRow(graphics, startX, rowEnd, y, "§7Status", statusText);
-        y += spacing;
+        y += ROW_SPACING;
 
         // Balance row
         renderInfoRow(graphics, startX, rowEnd, y, "§7Treasury", "§e" + formatBalance(balance));
-        y += spacing;
+        y += ROW_SPACING;
 
         // Gap
-        y += 4;
+        y += SECTION_GAP;
 
         // Statistics section header
-        graphics.fill(startX, y, rowEnd, y + rowHeight, 0xAA606060);
-        graphics.fill(startX, y, rowEnd, y + 1, 0xFF505050);
-        graphics.fill(startX, y + rowHeight - 1, rowEnd, y + rowHeight, 0xFF404040);
-        graphics.drawString(this.font, "§6Statistics", startX + 4, y + 3, COLOR_PRIMARY);
-        y += spacing;
+        renderSectionHeader(graphics, startX, rowEnd, y, "§6Statistics");
+        y += ROW_SPACING;
 
         // States row
         renderInfoRow(graphics, startX, rowEnd, y, "§7States", "§f" + stateCount + "/" + maxStates);
-        y += spacing;
+        y += ROW_SPACING;
 
         // Cities row
         renderInfoRow(graphics, startX, rowEnd, y, "§7Cities", "§f" + cityCount);
-        y += spacing;
+        y += ROW_SPACING;
 
         // Chunks row
         renderInfoRow(graphics, startX, rowEnd, y, "§7Chunks", "§f" + chunkCount);
-        y += spacing;
+        y += ROW_SPACING;
 
         // Members row
         renderInfoRow(graphics, startX, rowEnd, y, "§7Members", "§f" + memberCount);
-        y += spacing;
+        y += ROW_SPACING;
 
         // Gap
-        y += 4;
+        y += SECTION_GAP;
 
         // Diplomacy section header
-        graphics.fill(startX, y, rowEnd, y + rowHeight, 0xAA606060);
-        graphics.fill(startX, y, rowEnd, y + 1, 0xFF505050);
-        graphics.fill(startX, y + rowHeight - 1, rowEnd, y + rowHeight, 0xFF404040);
-        graphics.drawString(this.font, "§6Diplomacy", startX + 4, y + 3, COLOR_PRIMARY);
-        y += spacing;
+        renderSectionHeader(graphics, startX, rowEnd, y, "§6Diplomacy");
+        y += ROW_SPACING;
 
         // Allies row
         String alliesText = allyNames.isEmpty() ? "§8None" : "§a" + String.join(", ", allyNames);
         renderInfoRow(graphics, startX, rowEnd, y, "§7Allies", alliesText);
-        y += spacing;
+        y += ROW_SPACING;
 
         // Enemies row
         String enemiesText = enemyNames.isEmpty() ? "§8None" : "§c" + String.join(", ", enemyNames);
         renderInfoRow(graphics, startX, rowEnd, y, "§7Enemies", enemiesText);
+
+        graphics.disableScissor();
+
+        // Draw a small scroll indicator if content overflows
+        int visibleHeight = clipBottom - clipTop;
+        int totalHeight = getTotalContentHeight();
+        if (totalHeight > visibleHeight) {
+            int scrollBarHeight = Math.max(10, visibleHeight * visibleHeight / totalHeight);
+            int maxScroll = totalHeight - visibleHeight;
+            int scrollBarY = clipTop + (int)((float) scrollOffset / maxScroll * (visibleHeight - scrollBarHeight));
+            graphics.fill(rowEnd - 3, scrollBarY, rowEnd - 1, scrollBarY + scrollBarHeight, 0x88FFFFFF);
+        }
+    }
+
+    /**
+     * Render a section header row (e.g. "Statistics", "Diplomacy")
+     */
+    private void renderSectionHeader(GuiGraphics graphics, int left, int right, int y, String label) {
+        graphics.fill(left, y, right, y + ROW_HEIGHT, 0xAA606060);
+        graphics.fill(left, y, right, y + 1, 0xFF505050);
+        graphics.fill(left, y + ROW_HEIGHT - 1, right, y + ROW_HEIGHT, 0xFF404040);
+        graphics.drawString(this.font, label, left + 4, y + 3, COLOR_PRIMARY);
     }
 
     /**
      * Render a single info row with a label on the left and value on the right
      */
     private void renderInfoRow(GuiGraphics graphics, int left, int right, int y, String label, String value) {
-        int rowHeight = 14;
         // Row background
-        graphics.fill(left, y, right, y + rowHeight, 0xAA808080);
+        graphics.fill(left, y, right, y + ROW_HEIGHT, 0xAA808080);
         // Top/bottom borders
         graphics.fill(left, y, right, y + 1, 0xFF505050);
-        graphics.fill(left, y + rowHeight - 1, right, y + rowHeight, 0xFF404040);
+        graphics.fill(left, y + ROW_HEIGHT - 1, right, y + ROW_HEIGHT, 0xFF404040);
         // Label (left-aligned)
         graphics.drawString(this.font, label, left + 4, y + 3, COLOR_TEXT);
         // Value (right-aligned)
         int valueWidth = this.font.width(value.replaceAll("§.", ""));
         graphics.drawString(this.font, value, right - valueWidth - 6, y + 3, COLOR_TEXT);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        int visibleHeight = contentBottom() - contentTop();
+        int totalHeight = getTotalContentHeight();
+        int maxScroll = Math.max(0, totalHeight - visibleHeight);
+        scrollOffset = (int) Math.max(0, Math.min(maxScroll, scrollOffset - delta * 6));
+        return true;
     }
 
     private String formatBalance(double balance) {
@@ -233,7 +286,7 @@ public class NationInfoScreen extends StateCraftScreen {
     }
 
     private void openManagementScreen() {
-        this.minecraft.setScreen(new CountryManagementScreen(nationName, isAdmin, isMember, isLeader));
+        this.minecraft.setScreen(new CountryManagementScreen(nationName, isOfficer, isMember, isLeader));
     }
 
     private void leaveNation() {
@@ -280,7 +333,7 @@ public class NationInfoScreen extends StateCraftScreen {
     // Called by network handler when data is received
     public void updateData(int states, int maxStates, int cities, int chunks, int members,
                            double balance, boolean open, String desc, String leader,
-                           boolean isLeader, boolean isAdmin, boolean isMember,
+                           boolean isLeader, boolean isOfficer, boolean isMember,
                            List<String> stateNames, List<String> allies, List<String> enemies,
                            String flagUrl) {
         this.stateCount = states;
@@ -293,7 +346,7 @@ public class NationInfoScreen extends StateCraftScreen {
         this.description = desc;
         this.leaderName = leader;
         this.isLeader = isLeader;
-        this.isAdmin = isAdmin;
+        this.isOfficer = isOfficer;
         this.isMember = isMember;
         this.stateNames = stateNames;
         this.allyNames = allies;
@@ -318,29 +371,29 @@ public class NationInfoScreen extends StateCraftScreen {
     // Overload for backward compatibility (without isMember)
     public void updateData(int states, int maxStates, int cities, int chunks, int members,
                            double balance, boolean open, String desc, String leader,
-                           boolean isLeader, boolean isAdmin,
+                           boolean isLeader, boolean isOfficer,
                            List<String> stateNames, List<String> allies, List<String> enemies,
                            String flagUrl) {
         updateData(states, maxStates, cities, chunks, members, balance, open, desc, leader,
-                   isLeader, isAdmin, isAdmin, stateNames, allies, enemies, flagUrl);
+                   isLeader, isOfficer, isOfficer, stateNames, allies, enemies, flagUrl);
     }
 
     // Overload for backward compatibility (without flagUrl)
     public void updateData(int states, int maxStates, int cities, int chunks, int members,
                            double balance, boolean open, String desc, String leader,
-                           boolean isLeader, boolean isAdmin, boolean isMember,
+                           boolean isLeader, boolean isOfficer, boolean isMember,
                            List<String> stateNames, List<String> allies, List<String> enemies) {
         updateData(states, maxStates, cities, chunks, members, balance, open, desc, leader,
-                   isLeader, isAdmin, isMember, stateNames, allies, enemies, "");
+                   isLeader, isOfficer, isMember, stateNames, allies, enemies, "");
     }
 
     // Overload for backward compatibility (without isMember or flagUrl)
     public void updateData(int states, int maxStates, int cities, int chunks, int members,
                            double balance, boolean open, String desc, String leader,
-                           boolean isLeader, boolean isAdmin,
+                           boolean isLeader, boolean isOfficer,
                            List<String> stateNames, List<String> allies, List<String> enemies) {
         updateData(states, maxStates, cities, chunks, members, balance, open, desc, leader,
-                   isLeader, isAdmin, isAdmin, stateNames, allies, enemies, "");
+                   isLeader, isOfficer, isOfficer, stateNames, allies, enemies, "");
     }
 }
 

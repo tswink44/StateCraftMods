@@ -269,7 +269,7 @@ public class TaxationManager {
 
         // Collect corporate taxes from companies
         try {
-            com.statecraft.economy.company.CompanyManager.getInstance().collectCompanyTaxes(server);
+            com.statecraft.economy.company.CompanyEconomyManager.getInstance().collectCompanyTaxes(server);
         } catch (Exception e) {
             StateCraftEconomy.LOGGER.error("Error during corporate tax collection", e);
         }

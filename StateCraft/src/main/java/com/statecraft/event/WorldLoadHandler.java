@@ -1,6 +1,7 @@
 package com.statecraft.event;
 
 import com.statecraft.StateCraft;
+import com.statecraft.company.CompanyManager;
 import com.statecraft.contract.ContractManager;
 import com.statecraft.core.ChunkClaimManager;
 import com.statecraft.core.InvitationManager;
@@ -56,7 +57,8 @@ public class WorldLoadHandler {
         if (ChunkClaimManager.getInstance().isDirty() ||
             InvitationManager.getInstance().isDirty() ||
             LegislatureManager.getInstance().isDirty() ||
-            ContractManager.getInstance().isDirty()) {
+            ContractManager.getInstance().isDirty() ||
+            CompanyManager.getInstance().isDirty()) {
             NationSavedData data = NationSavedData.get(level);
             data.markForSave();
             StateCraft.LOGGER.debug("StateCraft data marked for save");

@@ -65,16 +65,9 @@ public class StateInfoScreen extends StateCraftScreen {
             btn -> openCitiesScreen()
         ));
 
-        // Create City button
-        this.addRenderableWidget(createButton(
-            startX + spacing, buttonY, buttonWidth, 20,
-            Component.literal("New"),
-            btn -> openCreateCityScreen()
-        ));
-
         // Mailbox button - hidden until we know permissions
         mailButton = this.addRenderableWidget(createButton(
-            startX + spacing * 2, buttonY, buttonWidth, 20,
+            startX + spacing, buttonY, buttonWidth, 20,
             Component.literal("§eMail"),
             btn -> openMailboxScreen()
         ));
@@ -82,7 +75,7 @@ public class StateInfoScreen extends StateCraftScreen {
 
         // Settings button - hidden until we know permissions
         settingsButton = this.addRenderableWidget(createButton(
-            startX + spacing * 3, buttonY, buttonWidth, 20,
+            startX + spacing * 2, buttonY, buttonWidth, 20,
             Component.literal("Settings"),
             btn -> openSettingsScreen()
         ));
@@ -90,7 +83,7 @@ public class StateInfoScreen extends StateCraftScreen {
 
         // Appoint Governor button - hidden until we know if player is nation leader
         appointButton = this.addRenderableWidget(createButton(
-            startX + spacing * 4, buttonY, buttonWidth, 20,
+            startX + spacing * 3, buttonY, buttonWidth, 20,
             Component.literal("§bAppoint"),
             btn -> openAppointScreen()
         ));
@@ -98,7 +91,7 @@ public class StateInfoScreen extends StateCraftScreen {
 
         // Leave button - hidden until we know permissions (not governor)
         leaveButton = this.addRenderableWidget(createButton(
-            startX + spacing * 4, buttonY, buttonWidth, 20,
+            startX + spacing * 3, buttonY, buttonWidth, 20,
             Component.literal("§cLeave"),
             btn -> leaveState()
         ));
@@ -175,9 +168,6 @@ public class StateInfoScreen extends StateCraftScreen {
         this.minecraft.setScreen(new CitiesListScreen(nationName, stateName));
     }
 
-    private void openCreateCityScreen() {
-        this.minecraft.setScreen(new CreateCityScreen(nationName, stateName));
-    }
 
     private void openSettingsScreen() {
         this.minecraft.setScreen(new StateSettingsScreen(nationName, stateName));

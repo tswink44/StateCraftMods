@@ -35,6 +35,7 @@ public class Nation {
     private double baseChunkValue; // Base valuation for chunks in the nation (default $100)
     private double chunkClaimFee; // Fee cities pay to nation when claiming chunks
     private double salesTaxRate; // Nation's sales tax rate (e.g., 0.20 = 20%) - set via legislature
+    private double importTariffRate; // Import tariff on cross-nation marketplace purchases (buyer-side, 0-50%)
 
     // Constitutional settings (can only be changed via constitutional amendment)
     private int leaderTermDays = 7;       // Default: 7 days term for leader
@@ -64,6 +65,7 @@ public class Nation {
         this.baseChunkValue = 100.0; // Default $100
         this.chunkClaimFee = 0.0; // Default: no fee
         this.salesTaxRate = 0.0; // Default: no nation sales tax (set via legislature)
+        this.importTariffRate = 0.0; // Default: no import tariff (set via legislature)
     }
 
     public UUID getId() {
@@ -86,20 +88,45 @@ public class Nation {
         this.leaderId = leaderId;
     }
 
+    // TODO: Remove admins set entirely once Economy mod is refactored to stop calling isAdmin() via reflection.
+    // The "admin" role no longer exists in the governance model. Roles are: Leader, Officer, Governor, Mayor, Citizen.
+    // Kept for backward save compatibility — old saves may have admin entries which are migrated to officers on load.
+
+    /** @deprecated Admin role removed. Use isLeader(), isOfficer(), or specific role checks instead. */
+    @Deprecated
     public Set<UUID> getAdmins() {
         return Collections.unmodifiableSet(admins);
     }
 
+    /** @deprecated Admin role removed. Use addOfficer() instead. */
+    @Deprecated
     public void addAdmin(UUID playerId) {
-        admins.add(playerId);
+        // Migrate: admins now become officers
+        officers.add(playerId);
     }
 
+    /** @deprecated Admin role removed. Use removeOfficer() instead. */
+    @Deprecated
     public void removeAdmin(UUID playerId) {
         admins.remove(playerId);
     }
 
+    /**
+     * @deprecated Admin role removed from governance model.
+     * Returns true for Leader only (backward compat for Economy mod reflection calls).
+     * Use isLeader() or isOfficer() directly instead.
+     */
+    @Deprecated
     public boolean isAdmin(UUID playerId) {
-        return admins.contains(playerId) || playerId.equals(leaderId);
+        return playerId.equals(leaderId);
+    }
+
+    /**
+     * Check if player is the nation leader or an officer.
+     * Officers have elevated permissions but not full leader powers.
+     */
+    public boolean isLeaderOrOfficer(UUID playerId) {
+        return playerId.equals(leaderId) || officers.contains(playerId);
     }
 
     public Set<UUID> getOfficers() {
@@ -277,6 +304,15 @@ public class Nation {
     public void setSalesTaxRate(double salesTaxRate) {
         // Clamp between 0 and 0.5 (0% to 50%)
         this.salesTaxRate = Math.max(0, Math.min(0.5, salesTaxRate));
+    }
+
+    public double getImportTariffRate() {
+        return importTariffRate;
+    }
+
+    public void setImportTariffRate(double importTariffRate) {
+        // Clamp between 0 and 0.5 (0% to 50%)
+        this.importTariffRate = Math.max(0, Math.min(0.5, importTariffRate));
     }
 
     // Constitutional settings getters and setters
@@ -464,7 +500,7 @@ public class Nation {
         if (playerId.equals(leaderId)) {
             return PermissionLevel.OWNER;
         }
-        if (admins.contains(playerId)) {
+        if (officers.contains(playerId)) {
             return PermissionLevel.ADMIN;
         }
         // Check state/city membership
@@ -495,6 +531,7 @@ public class Nation {
         tag.putDouble("baseChunkValue", baseChunkValue);
         tag.putDouble("chunkClaimFee", chunkClaimFee);
         tag.putDouble("salesTaxRate", salesTaxRate);
+        tag.putDouble("importTariffRate", importTariffRate);
 
         // Constitutional settings
         tag.putInt("leaderTermDays", leaderTermDays);
@@ -575,16 +612,19 @@ public class Nation {
         nation.baseChunkValue = tag.contains("baseChunkValue") ? tag.getDouble("baseChunkValue") : 100.0;
         nation.chunkClaimFee = tag.contains("chunkClaimFee") ? tag.getDouble("chunkClaimFee") : 0.0;
         nation.salesTaxRate = tag.contains("salesTaxRate") ? tag.getDouble("salesTaxRate") : 0.0;
+        nation.importTariffRate = tag.contains("importTariffRate") ? tag.getDouble("importTariffRate") : 0.0;
 
         // Constitutional settings (with defaults for backwards compatibility)
         nation.leaderTermDays = tag.contains("leaderTermDays") ? tag.getInt("leaderTermDays") : 7;
         nation.electionDurationDays = tag.contains("electionDurationDays") ? tag.getInt("electionDurationDays") : 1;
         nation.maxOfficers = tag.contains("maxOfficers") ? tag.getInt("maxOfficers") : 3;
 
-        // Load admins
+        // Load admins (legacy — migrate to officers)
         ListTag adminsList = tag.getList("admins", Tag.TAG_COMPOUND);
         for (int i = 0; i < adminsList.size(); i++) {
-            nation.admins.add(adminsList.getCompound(i).getUUID("id"));
+            UUID adminId = adminsList.getCompound(i).getUUID("id");
+            // Migrate old admins into the officers set (admin role no longer exists)
+            nation.officers.add(adminId);
         }
 
         // Load officers

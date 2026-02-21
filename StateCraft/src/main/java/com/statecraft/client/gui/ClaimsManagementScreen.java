@@ -3,7 +3,6 @@ package com.statecraft.client.gui;
 import com.statecraft.network.NetworkHandler;
 import com.statecraft.network.packets.RequestChunkInfoPacket;
 import com.statecraft.network.packets.RequestNationDataPacket;
-import com.statecraft.network.packets.ToggleAutoClaimPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
@@ -28,16 +27,9 @@ public class ClaimsManagementScreen extends StateCraftScreen {
     private String chunkCityName = "";
     private boolean chunkDataLoaded = false;
 
-    // Auto-claim state (synced from server)
-    private boolean autoClaimEnabled = false;
-    private boolean canUseAutoClaim = false;
-    private String autoClaimCityName = null;
-
-    private Button autoClaimButton;
-
     public ClaimsManagementScreen() {
         super(Component.literal("Manage Claims"));
-        this.guiWidth = 280; this.guiHeight = 250;
+        this.guiWidth = 280; this.guiHeight = 230;
     }
 
     @Override
@@ -90,15 +82,6 @@ public class ClaimsManagementScreen extends StateCraftScreen {
             Component.literal("View Chunk Map"),
             btn -> openChunkMap()
         ));
-
-        // Auto-claim toggle (admin only)
-        autoClaimButton = this.addRenderableWidget(createButton(
-            centerX - buttonWidth / 2, startY + spacing * 4,
-            buttonWidth, 18,
-            Component.literal("Auto-Claim: OFF"),
-            btn -> toggleAutoClaim()
-        ));
-        autoClaimButton.active = false; // Disabled until we know if player can use it
 
         // Back button
         this.addRenderableWidget(createButton(
@@ -164,12 +147,7 @@ public class ClaimsManagementScreen extends StateCraftScreen {
 
         // Help text at bottom
         renderDivider(graphics, guiLeft + 10, guiTop + guiHeight - 40, guiWidth - 20);
-
-        if (!canUseAutoClaim && dataLoaded && nationName != null) {
-            graphics.drawCenteredString(this.font, "§8Auto-claim requires nation admin", centerX, guiTop + guiHeight - 34, 0xFF666666);
-        } else {
-            graphics.drawCenteredString(this.font, "§8Stand in the chunk you want to claim/unclaim", centerX, guiTop + guiHeight - 34, 0xFF666666);
-        }
+        graphics.drawCenteredString(this.font, "§8Stand in the chunk you want to claim/unclaim", centerX, guiTop + guiHeight - 34, 0xFF666666);
     }
 
     private void claimCurrentChunk() {
@@ -201,28 +179,6 @@ public class ClaimsManagementScreen extends StateCraftScreen {
         }
     }
 
-    private void toggleAutoClaim() {
-        // Send packet to server to toggle auto-claim
-        NetworkHandler.sendToServer(new ToggleAutoClaimPacket(!autoClaimEnabled, cityName));
-    }
-
-    private void updateAutoClaimButton() {
-        if (autoClaimButton == null) return;
-
-        autoClaimButton.active = canUseAutoClaim;
-
-        if (autoClaimEnabled) {
-            String cityText = autoClaimCityName != null ? " (" + autoClaimCityName + ")" : "";
-            autoClaimButton.setMessage(Component.literal("Auto-Claim: §aON" + cityText));
-        } else {
-            if (!canUseAutoClaim) {
-                autoClaimButton.setMessage(Component.literal("§8Auto-Claim: §7Admin Only"));
-            } else {
-                autoClaimButton.setMessage(Component.literal("Auto-Claim: §cOFF"));
-            }
-        }
-    }
-
     private void goBack() {
         this.minecraft.setScreen(new MainMenuScreen());
     }
@@ -243,16 +199,6 @@ public class ClaimsManagementScreen extends StateCraftScreen {
     public void setNoNation() {
         this.dataLoaded = true;
         this.nationName = null;
-        this.canUseAutoClaim = false;
-        updateAutoClaimButton();
-    }
-
-    // Called by network handler when auto-claim state is synced
-    public void updateAutoClaimState(boolean enabled, boolean canUse, String cityName) {
-        this.autoClaimEnabled = enabled;
-        this.canUseAutoClaim = canUse;
-        this.autoClaimCityName = cityName;
-        updateAutoClaimButton();
     }
 
     // Called by network handler to update chunk info

@@ -7,8 +7,10 @@ import com.mojang.brigadier.arguments.LongArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.statecraft.economy.StateCraftEconomy;
-import com.statecraft.economy.company.Company;
-import com.statecraft.economy.company.CompanyManager;
+import com.statecraft.company.Company;
+import com.statecraft.company.CompanyManager;
+import com.statecraft.economy.company.CompanyEconomyManager;
+import com.statecraft.economy.company.DividendConfig;
 import com.statecraft.economy.company.BankManager;
 import com.statecraft.economy.config.EconomyConfig;
 import com.statecraft.economy.core.EconomyManager;
@@ -90,7 +92,7 @@ public class CompanyCommands {
             ServerPlayer player = ctx.getSource().getPlayerOrException();
             String name = StringArgumentType.getString(ctx, "name");
             EconomyManager ecoManager = EconomyManager.getInstance();
-            CompanyManager companyManager = CompanyManager.getInstance();
+            CompanyEconomyManager companyEcoManager = CompanyEconomyManager.getInstance();
 
             // Check registration fee (banks have higher fee)
             double fee = isBank ? EconomyConfig.BANK_REGISTRATION_FEE.get() : EconomyConfig.COMPANY_REGISTRATION_FEE.get();
@@ -111,7 +113,7 @@ public class CompanyCommands {
                 headquartersCityId = StateCraftIntegration.getPlayerCityId(player);
             }
 
-            Company company = companyManager.createCompany(name, player.getUUID(), totalShares, headquartersCityId);
+            Company company = companyEcoManager.createCompany(name, player.getUUID(), totalShares, headquartersCityId);
             if (company == null) {
                 player.sendSystemMessage(Component.literal(
                     "§cFailed to create company. Name may already be taken or you've reached the maximum number of companies."));
@@ -122,7 +124,7 @@ public class CompanyCommands {
             if (isBank) {
                 company.setCompanyType(Company.CompanyType.BANK);
                 BankManager.getInstance().createBank(company.getId());
-                companyManager.markDirty();
+                CompanyManager.getInstance().markDirty();
             }
 
             // Charge registration fee (deposited to state treasury if possible)
@@ -246,10 +248,11 @@ public class CompanyCommands {
         }
 
         // Dividends
-        if (company.isDividendsEnabled()) {
+        DividendConfig divConfig = CompanyEconomyManager.getInstance().getDividendConfig(company.getId());
+        if (divConfig != null && divConfig.isEnabled()) {
             player.sendSystemMessage(Component.literal("§7Dividends: §a" +
-                String.format("%.1f%%", company.getDividendRate() * 100) + " §7every §f" +
-                company.getDividendPeriodTicks() + " §7ticks"));
+                String.format("%.1f%%", divConfig.getRate() * 100) + " §7every §f" +
+                divConfig.getPeriodTicks() + " §7ticks"));
         } else {
             player.sendSystemMessage(Component.literal("§7Dividends: §cDisabled"));
         }
@@ -397,8 +400,8 @@ public class CompanyCommands {
             Company company = getManagedCompany(player);
             if (company == null) return 0;
 
-            company.setDividendRate(rate);
-            CompanyManager.getInstance().markDirty();
+            CompanyEconomyManager.getInstance().getOrCreateDividendConfig(company.getId()).setRate(rate);
+            CompanyEconomyManager.getInstance().markDirty();
             player.sendSystemMessage(Component.literal(
                 "§aDividend rate for " + company.getName() + " set to " + String.format("%.1f%%", rate * 100)));
             return 1;
@@ -415,8 +418,8 @@ public class CompanyCommands {
             Company company = getManagedCompany(player);
             if (company == null) return 0;
 
-            company.setDividendPeriodTicks(ticks);
-            CompanyManager.getInstance().markDirty();
+            CompanyEconomyManager.getInstance().getOrCreateDividendConfig(company.getId()).setPeriodTicks(ticks);
+            CompanyEconomyManager.getInstance().markDirty();
             player.sendSystemMessage(Component.literal(
                 "§aDividend period for " + company.getName() + " set to " + ticks + " ticks"));
             return 1;
@@ -432,8 +435,8 @@ public class CompanyCommands {
             Company company = getManagedCompany(player);
             if (company == null) return 0;
 
-            company.setDividendsEnabled(enabled);
-            CompanyManager.getInstance().markDirty();
+            CompanyEconomyManager.getInstance().getOrCreateDividendConfig(company.getId()).setEnabled(enabled);
+            CompanyEconomyManager.getInstance().markDirty();
             player.sendSystemMessage(Component.literal(
                 "§aDividends for " + company.getName() + (enabled ? " §aenabled" : " §cdisabled")));
             return 1;
@@ -462,7 +465,7 @@ public class CompanyCommands {
             }
 
             double balance = EconomyManager.getInstance().getCompanyBalance(company.getId());
-            if (CompanyManager.getInstance().dissolveCompany(company.getId(), player.getUUID())) {
+            if (CompanyEconomyManager.getInstance().dissolveCompany(company.getId(), player.getUUID())) {
                 player.sendSystemMessage(Component.literal(
                     "§a" + name + " has been dissolved. " +
                     (balance > 0 ? EconomyManager.getInstance().formatCurrency(balance) + " distributed to shareholders." : "")));

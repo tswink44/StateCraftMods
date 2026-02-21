@@ -173,7 +173,7 @@ public class ServerPacketHandler {
             }
 
             // Add company accounts the player can manage (founder or officer)
-            var companyManager = com.statecraft.economy.company.CompanyManager.getInstance();
+            var companyManager = com.statecraft.company.CompanyManager.getInstance();
             for (var company : companyManager.getPlayerManagedCompanies(player.getUUID())) {
                 double companyBalance = manager.getCompanyBalance(company.getId());
                 accounts.add(new SyncAccountsPacket.AccountInfo(
@@ -393,12 +393,14 @@ public class ServerPacketHandler {
             canBuy = chunkInfo.isForSale() && !playerId.equals(chunkInfo.sellerId());
         }
 
-        // Get valuation (improvement score)
+        // Get actual chunk valuation from the valuation system
         String dimension = player.level().dimension().location().toString();
-        int valuation = com.statecraft.economy.valuation.ImprovementTracker.getInstance()
-            .getScoreNoScan(chunkX, chunkZ, dimension);
+        com.statecraft.economy.valuation.ChunkValuation chunkValuation =
+            com.statecraft.economy.valuation.ChunkValuationManager.getInstance()
+                .getValuation(chunkX, chunkZ, dimension);
+        double valuation = chunkValuation.getTotalValue();
 
-        // Calculate estimated tax
+        // Calculate estimated tax using actual valuation
         double estimatedTax = 0;
         double cityTaxRate = StateCraftIntegration.getChunkCityTaxRate(player.getServer(), chunkX, chunkZ, dimension);
         if (cityTaxRate > 0 && valuation > 0) {

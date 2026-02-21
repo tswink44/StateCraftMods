@@ -1,6 +1,8 @@
 package com.statecraft.network;
 
 import com.statecraft.StateCraft;
+import com.statecraft.company.Company;
+import com.statecraft.company.CompanyManager;
 import com.statecraft.config.StateCraftConfig;
 import com.statecraft.contract.Contract;
 import com.statecraft.contract.ContractBid;
@@ -71,7 +73,7 @@ public class ServerPacketHandler {
                     nation.getTotalChunkCount(),
                     nation.getAllMembers().size(),
                     player.getUUID().equals(nation.getLeaderId()),
-                    nation.isAdmin(player.getUUID())
+                    nation.isOfficer(player.getUUID())
                 ), player);
             }
         });
@@ -183,7 +185,7 @@ public class ServerPacketHandler {
                 nation.getDescription(),
                 leaderName,
                 player.getUUID().equals(nation.getLeaderId()),
-                nation.isAdmin(player.getUUID()),
+                nation.isOfficer(player.getUUID()),
                 isMember,
                 stateNames,
                 allyNames,
@@ -226,7 +228,8 @@ public class ServerPacketHandler {
                                     boolean isEnemy = playerNation != null &&
                                         playerNation.isEnemy(nation.getId());
                                     boolean canManage = isPlayerNation &&
-                                        (nation.isAdmin(player.getUUID()) ||
+                                        (nation.isLeaderOrOfficer(player.getUUID()) ||
+                                         player.getUUID().equals(state.getGovernorId()) ||
                                          player.getUUID().equals(city.getMayorId()));
 
                                     long key = (long) chunkX & 0xFFFFFFFFL | ((long) chunkZ & 0xFFFFFFFFL) << 32;
@@ -274,7 +277,9 @@ public class ServerPacketHandler {
                     City targetCity = null;
                     for (State state : nation.getAllStates()) {
                         for (City city : state.getAllCities()) {
-                            if (player.getUUID().equals(city.getMayorId()) || nation.isAdmin(player.getUUID())) {
+                            if (player.getUUID().equals(city.getMayorId()) ||
+                                player.getUUID().equals(state.getGovernorId()) ||
+                                nation.isLeaderOrOfficer(player.getUUID())) {
                                 targetCity = city;
                                 break;
                             }
@@ -507,8 +512,8 @@ public class ServerPacketHandler {
                 return;
             }
 
-            if (!nation.isAdmin(player.getUUID())) {
-                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "No permission"), player);
+            if (!player.getUUID().equals(nation.getLeaderId())) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Only the nation leader can change settings"), player);
                 return;
             }
 
@@ -591,32 +596,22 @@ public class ServerPacketHandler {
                 boolean leaderOnline = isPlayerOnline(player.server, nation.getLeaderId());
                 members.add(new SyncMembersPacket.MemberInfo(leaderName, "Leader", leaderOnline));
 
-                // Add admins
-                for (UUID adminId : nation.getAdmins()) {
-                    if (!adminId.equals(nation.getLeaderId())) {
-                        String name = getPlayerName(player.server, adminId);
-                        boolean online = isPlayerOnline(player.server, adminId);
-                        members.add(new SyncMembersPacket.MemberInfo(name, "Admin", online));
-                    }
-                }
-
-                // Add officers (not already listed as admin)
+                // Add officers
                 for (UUID officerId : nation.getOfficers()) {
-                    if (!officerId.equals(nation.getLeaderId()) && !nation.getAdmins().contains(officerId)) {
+                    if (!officerId.equals(nation.getLeaderId())) {
                         String name = getPlayerName(player.server, officerId);
                         boolean online = isPlayerOnline(player.server, officerId);
                         members.add(new SyncMembersPacket.MemberInfo(name, "Officer", online));
                     }
                 }
 
-                // Add regular members (not leader, admin, or officer)
+                // Add regular members (not leader or officer)
                 for (UUID memberId : nation.getMembers()) {
                     if (!memberId.equals(nation.getLeaderId()) &&
-                        !nation.getAdmins().contains(memberId) &&
                         !nation.getOfficers().contains(memberId)) {
                         String name = getPlayerName(player.server, memberId);
                         boolean online = isPlayerOnline(player.server, memberId);
-                        members.add(new SyncMembersPacket.MemberInfo(name, "Member", online));
+                        members.add(new SyncMembersPacket.MemberInfo(name, "Citizen", online));
                     }
                 }
             }
@@ -638,8 +633,8 @@ public class ServerPacketHandler {
             boolean canCreateState = false;
 
             if (nation != null) {
-                // Check if player is a nation admin (can create states)
-                canCreateState = nation.isAdmin(player.getUUID());
+                // Check if player is the nation leader (can create states)
+                canCreateState = player.getUUID().equals(nation.getLeaderId());
 
                 for (State state : nation.getAllStates()) {
                     String governorName = getPlayerName(player.server, state.getGovernorId());
@@ -672,8 +667,8 @@ public class ServerPacketHandler {
                 return;
             }
 
-            if (!nation.isAdmin(player.getUUID())) {
-                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Only nation admins can create states!"), player);
+            if (!player.getUUID().equals(nation.getLeaderId())) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Only the nation leader can create states!"), player);
                 return;
             }
 
@@ -770,7 +765,7 @@ public class ServerPacketHandler {
             String governorName = getPlayerName(player.server, state.getGovernorId());
             int memberCount = state.getAllResidents().size();
             boolean isGovernor = player.getUUID().equals(state.getGovernorId());
-            boolean canManage = isGovernor || nation.isAdmin(player.getUUID());
+            boolean canManage = isGovernor || nation.isLeaderOrOfficer(player.getUUID());
             boolean isNationLeader = player.getUUID().equals(nation.getLeaderId());
 
             List<String> cityNames = new ArrayList<>();
@@ -4784,5 +4779,261 @@ public class ServerPacketHandler {
             case "ALLIED" -> 2;
             default -> 3; // NEUTRAL
         };
+    }
+
+    // ==================== Company Handlers ====================
+
+    public static void handleRequestCompanyData(RequestCompanyDataPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+            sendCompanyData(player, "");
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleCreateCompany(CreateCompanyPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            String name = packet.getName().trim();
+            if (name.length() < 3 || name.length() > 24) {
+                sendCompanyData(player, "§cCompany name must be 3-24 characters.");
+                return;
+            }
+
+            int shares = Math.max(1, Math.min(1000000, packet.getTotalShares()));
+
+            // Determine HQ city from player's current location
+            UUID headquartersCityId = null;
+            ChunkClaimManager claimManager = ChunkClaimManager.getInstance();
+            ClaimedChunk chunk = claimManager.getClaimedChunk(
+                player.chunkPosition(), player.level().dimension());
+            if (chunk != null) {
+                headquartersCityId = chunk.getCityId();
+            }
+
+            Company company = CompanyManager.getInstance().createCompany(
+                name, player.getUUID(), shares, headquartersCityId);
+
+            if (company == null) {
+                sendCompanyData(player, "§cFailed to create company. Name may be taken or you've reached the limit.");
+                return;
+            }
+
+            if (!packet.getDescription().isBlank()) {
+                company.setDescription(packet.getDescription().trim());
+            }
+
+            String cityName = "";
+            if (headquartersCityId != null) {
+                City city2 = claimManager.getCity(headquartersCityId);
+                if (city2 != null) cityName = city2.getName();
+            }
+
+            sendCompanyData(player, "§a§lCompany Created! §r§f" + name + " §7with " + shares + " shares."
+                + (cityName.isEmpty() ? "" : " HQ: " + cityName));
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleCompanyAction(CompanyActionPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            CompanyManager companyManager = CompanyManager.getInstance();
+            UUID companyId;
+            try {
+                companyId = UUID.fromString(packet.getCompanyId());
+            } catch (IllegalArgumentException e) {
+                sendCompanyData(player, "§cInvalid company.");
+                return;
+            }
+
+            Company company = companyManager.getCompany(companyId);
+            if (company == null) {
+                sendCompanyData(player, "§cCompany not found.");
+                return;
+            }
+
+            String result;
+
+            switch (packet.getAction()) {
+                case ADD_OFFICER -> {
+                    if (!company.isFounder(player.getUUID())) {
+                        result = "§cOnly the founder can add officers.";
+                    } else {
+                        ServerPlayer target = player.server.getPlayerList().getPlayerByName(packet.getTargetPlayer());
+                        if (target == null) {
+                            result = "§cPlayer not found: " + packet.getTargetPlayer();
+                        } else if (company.addOfficer(target.getUUID())) {
+                            companyManager.markDirty();
+                            result = "§a" + packet.getTargetPlayer() + " added as officer.";
+                        } else {
+                            result = "§cPlayer is already an officer.";
+                        }
+                    }
+                }
+                case REMOVE_OFFICER -> {
+                    if (!company.isFounder(player.getUUID())) {
+                        result = "§cOnly the founder can remove officers.";
+                    } else {
+                        ServerPlayer target = player.server.getPlayerList().getPlayerByName(packet.getTargetPlayer());
+                        if (target == null) {
+                            result = "§cPlayer not found: " + packet.getTargetPlayer();
+                        } else if (company.removeOfficer(target.getUUID())) {
+                            companyManager.markDirty();
+                            result = "§a" + packet.getTargetPlayer() + " removed as officer.";
+                        } else {
+                            result = "§cCannot remove this player.";
+                        }
+                    }
+                }
+                case TRANSFER_SHARES -> {
+                    if (!company.isShareholder(player.getUUID())) {
+                        result = "§cYou don't own any shares.";
+                    } else {
+                        ServerPlayer target = player.server.getPlayerList().getPlayerByName(packet.getTargetPlayer());
+                        if (target == null) {
+                            result = "§cPlayer not found: " + packet.getTargetPlayer();
+                        } else if (company.transferShares(player.getUUID(), target.getUUID(), packet.getIntValue())) {
+                            companyManager.markDirty();
+                            result = "§aTransferred " + packet.getIntValue() + " shares to " + packet.getTargetPlayer() + ".";
+                        } else {
+                            result = "§cInsufficient shares.";
+                        }
+                    }
+                }
+                case SET_DIVIDEND_RATE -> {
+                    if (!company.isFounder(player.getUUID())) {
+                        result = "§cOnly the founder can set dividend rate.";
+                    } else {
+                        IntegrationRegistry.setDividendRate(company.getId(), packet.getDoubleValue());
+                        companyManager.markDirty();
+                        result = "§aDividend rate set to " + String.format("%.1f%%", packet.getDoubleValue() * 100);
+                    }
+                }
+                case TOGGLE_DIVIDENDS -> {
+                    if (!company.isFounder(player.getUUID())) {
+                        result = "§cOnly the founder can toggle dividends.";
+                    } else {
+                        boolean currentlyEnabled = IntegrationRegistry.isDividendsEnabled(company.getId());
+                        IntegrationRegistry.setDividendsEnabled(company.getId(), !currentlyEnabled);
+                        companyManager.markDirty();
+                        result = !currentlyEnabled ? "§aDividends enabled." : "§7Dividends disabled.";
+                    }
+                }
+                case RENAME -> {
+                    if (!company.isFounder(player.getUUID())) {
+                        result = "§cOnly the founder can rename the company.";
+                    } else {
+                        String newName = packet.getStringValue().trim();
+                        if (newName.length() < 3 || newName.length() > 24) {
+                            result = "§cName must be 3-24 characters.";
+                        } else if (companyManager.renameCompany(companyId, newName)) {
+                            result = "§aCompany renamed to " + newName + ".";
+                        } else {
+                            result = "§cName already taken.";
+                        }
+                    }
+                }
+                case SET_DESCRIPTION -> {
+                    if (!company.canManage(player.getUUID())) {
+                        result = "§cYou don't have permission.";
+                    } else {
+                        company.setDescription(packet.getStringValue().trim());
+                        companyManager.markDirty();
+                        result = "§aDescription updated.";
+                    }
+                }
+                case DISSOLVE -> {
+                    if (!company.isFounder(player.getUUID())) {
+                        result = "§cOnly the founder can dissolve the company.";
+                    } else if (companyManager.dissolveCompany(companyId, player.getUUID())) {
+                        result = "§cCompany dissolved.";
+                    } else {
+                        result = "§cFailed to dissolve company.";
+                    }
+                }
+                default -> result = "§cUnknown action.";
+            }
+
+            sendCompanyData(player, result);
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    private static void sendCompanyData(ServerPlayer player, String resultMessage) {
+        CompanyManager companyManager = CompanyManager.getInstance();
+        List<Company> playerCompanies = companyManager.getPlayerCompanies(player.getUUID());
+
+        if (playerCompanies.isEmpty()) {
+            NetworkHandler.sendToPlayer(new SyncCompanyDataPacket(
+                false, "", "", "", "", 0, 0, 0, 0, "",
+                false, false, false, 0.0, "",
+                new ArrayList<>(), new ArrayList<>(), resultMessage), player);
+            return;
+        }
+
+        // Send data for the first company the player is associated with
+        Company company = playerCompanies.get(0);
+
+        // Resolve founder name
+        String founderName = resolvePlayerName(player.server, company.getFounderId());
+
+        // Resolve HQ city name
+        String hqCity = "";
+        if (company.getHeadquartersCityId() != null) {
+            City city = ChunkClaimManager.getInstance().getCity(company.getHeadquartersCityId());
+            if (city != null) hqCity = city.getName();
+        }
+
+        // Build shareholder list
+        List<SyncCompanyDataPacket.ShareholderEntry> shareholders = new ArrayList<>();
+        for (Map.Entry<UUID, Integer> entry : company.getShareholders().entrySet()) {
+            String name = resolvePlayerName(player.server, entry.getKey());
+            double pct = company.getSharePercentage(entry.getKey());
+            shareholders.add(new SyncCompanyDataPacket.ShareholderEntry(name, entry.getValue(), pct));
+        }
+
+        // Build officer names list
+        List<String> officerNames = new ArrayList<>();
+        for (UUID officerId : company.getOfficers()) {
+            officerNames.add(resolvePlayerName(player.server, officerId));
+        }
+
+        NetworkHandler.sendToPlayer(new SyncCompanyDataPacket(
+            true,
+            company.getName(),
+            company.getId().toString(),
+            founderName,
+            company.getDescription(),
+            company.getTotalShares(),
+            company.getShareCount(player.getUUID()),
+            company.getShareholders().size(),
+            company.getOfficers().size(),
+            hqCity,
+            company.isFounder(player.getUUID()),
+            company.isOfficer(player.getUUID()),
+            IntegrationRegistry.isDividendsEnabled(company.getId()),
+            IntegrationRegistry.getDividendRate(company.getId()),
+            company.getCompanyType().name(),
+            shareholders,
+            officerNames,
+            resultMessage
+        ), player);
+    }
+
+    private static String resolvePlayerName(net.minecraft.server.MinecraftServer server, UUID playerId) {
+        ServerPlayer online = server.getPlayerList().getPlayer(playerId);
+        if (online != null) return online.getGameProfile().getName();
+        var profile = server.getProfileCache();
+        if (profile != null) {
+            var cached = profile.get(playerId);
+            if (cached.isPresent()) return cached.get().getName();
+        }
+        return playerId.toString().substring(0, 8);
     }
 }

@@ -4,7 +4,8 @@ import com.statecraft.economy.StateCraftEconomy;
 import com.statecraft.economy.core.EconomyManager;
 import com.statecraft.economy.core.SpendingLimitManager;
 import com.statecraft.economy.core.TaxationManager;
-import com.statecraft.economy.company.CompanyManager;
+import com.statecraft.company.CompanyManager;
+import com.statecraft.economy.company.CompanyEconomyManager;
 import com.statecraft.economy.company.BankManager;
 import com.statecraft.economy.marketplace.MarketplaceManager;
 import com.statecraft.economy.data.EconomySavedData;
@@ -42,9 +43,10 @@ public class WorldLoadHandler {
                 TaxationManager taxManager = TaxationManager.getInstance();
                 SpendingLimitManager spendingMgr = SpendingLimitManager.getInstance();
                 CompanyManager companyMgr = CompanyManager.getInstance();
+                CompanyEconomyManager companyEcoMgr = CompanyEconomyManager.getInstance();
                 BankManager bankMgr = BankManager.getInstance();
                 MarketplaceManager marketMgr = MarketplaceManager.getInstance();
-                if (manager.isDirty() || taxManager.isDirty() || spendingMgr.isDirty() || companyMgr.isDirty() || bankMgr.isDirty() || marketMgr.isDirty()) {
+                if (manager.isDirty() || taxManager.isDirty() || spendingMgr.isDirty() || companyMgr.isDirty() || companyEcoMgr.isDirty() || bankMgr.isDirty() || marketMgr.isDirty()) {
                     EconomySavedData data = EconomySavedData.get(serverLevel);
                     data.markForSave();
                     StateCraftEconomy.LOGGER.debug("Economy data saved");

@@ -1,7 +1,7 @@
 package com.statecraft.economy.block.entity;
 
-import com.statecraft.economy.company.Company;
-import com.statecraft.economy.company.CompanyManager;
+import com.statecraft.company.Company;
+import com.statecraft.company.CompanyManager;
 import com.statecraft.economy.gui.CompanyVaultMenu;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;

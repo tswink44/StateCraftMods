@@ -6,7 +6,8 @@ import com.statecraft.economy.core.EconomyManager;
 import com.statecraft.economy.core.SpendingLimitManager;
 import com.statecraft.economy.core.TaxationManager;
 import com.statecraft.economy.core.Transaction;
-import com.statecraft.economy.company.CompanyManager;
+import com.statecraft.company.CompanyManager;
+import com.statecraft.economy.company.CompanyEconomyManager;
 import com.statecraft.economy.company.BankManager;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -150,7 +151,16 @@ public class EconomySavedData extends SavedData {
 
         // Load company manager state
         if (tag.contains("CompanyManager")) {
-            CompanyManager.getInstance().load(tag.getCompound("CompanyManager"));
+            CompoundTag companyManagerTag = tag.getCompound("CompanyManager");
+            CompanyManager.getInstance().load(companyManagerTag);
+
+            // Load CompanyEconomyManager dividend configs
+            if (tag.contains("CompanyEconomyManager")) {
+                CompanyEconomyManager.getInstance().load(tag.getCompound("CompanyEconomyManager"));
+            } else {
+                // Legacy migration: dividend data was stored inside Company tags
+                CompanyEconomyManager.getInstance().migrateFromLegacyCompanyData(companyManagerTag);
+            }
         }
 
         // Load bank manager state (must be after CompanyManager since it references companies)
@@ -280,6 +290,10 @@ public class EconomySavedData extends SavedData {
         // Save company manager state
         tag.put("CompanyManager", CompanyManager.getInstance().save());
         CompanyManager.getInstance().clearDirty();
+
+        // Save company economy manager (dividend configs)
+        tag.put("CompanyEconomyManager", CompanyEconomyManager.getInstance().save());
+        CompanyEconomyManager.getInstance().clearDirty();
 
         // Save bank manager state
         tag.put("BankManager", BankManager.getInstance().save());

@@ -81,7 +81,7 @@ public class SpendingLimitManager {
      */
     public enum GovernmentRole {
         NATION_LEADER,
-        NATION_ADMIN,
+        NATION_OFFICER,
         STATE_GOVERNOR,
         CITY_MAYOR,
         COMPANY_OFFICER,
@@ -101,8 +101,8 @@ public class SpendingLimitManager {
                 }
                 return EconomyConfig.NATION_LEADER_DAILY_LIMIT.get();
             }
-            case NATION_ADMIN -> {
-                return EconomyConfig.NATION_ADMIN_DAILY_LIMIT.get();
+            case NATION_OFFICER -> {
+                return EconomyConfig.NATION_OFFICER_DAILY_LIMIT.get();
             }
             case STATE_GOVERNOR -> {
                 return EconomyConfig.STATE_GOVERNOR_DAILY_LIMIT.get();

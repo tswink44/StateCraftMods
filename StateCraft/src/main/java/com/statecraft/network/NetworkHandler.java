@@ -564,6 +564,32 @@ public class NetworkHandler {
             .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncDiplomacyData(pkt, ctx), ctx))
             .add();
 
+        // Company packets (Client -> Server)
+        CHANNEL.messageBuilder(RequestCompanyDataPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestCompanyDataPacket::encode)
+            .decoder(RequestCompanyDataPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestCompanyData)
+            .add();
+
+        CHANNEL.messageBuilder(CreateCompanyPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(CreateCompanyPacket::encode)
+            .decoder(CreateCompanyPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleCreateCompany)
+            .add();
+
+        CHANNEL.messageBuilder(CompanyActionPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(CompanyActionPacket::encode)
+            .decoder(CompanyActionPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleCompanyAction)
+            .add();
+
+        // Company packets (Server -> Client)
+        CHANNEL.messageBuilder(SyncCompanyDataPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncCompanyDataPacket::encode)
+            .decoder(SyncCompanyDataPacket::new)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncCompanyData(pkt, ctx), ctx))
+            .add();
+
         StateCraft.LOGGER.info("StateCraft network packets registered");
     }
 

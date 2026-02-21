@@ -4,6 +4,8 @@ import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.statecraft.economy.StateCraftEconomy;
+import com.statecraft.company.Company;
+import com.statecraft.company.CompanyManager;
 import com.statecraft.economy.company.*;
 import com.statecraft.economy.config.EconomyConfig;
 import com.statecraft.economy.core.EconomyManager;

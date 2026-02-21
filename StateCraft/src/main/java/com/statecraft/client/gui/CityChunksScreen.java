@@ -26,7 +26,7 @@ public class CityChunksScreen extends StateCraftScreen {
 
     // Scrolling
     private int scrollOffset = 0;
-    private static final int MAX_VISIBLE = 8;
+    private static final int MAX_VISIBLE = 7;
     private static final int ROW_HEIGHT = 18;
 
     public CityChunksScreen(String nationName, String stateName, String cityName) {
@@ -34,8 +34,8 @@ public class CityChunksScreen extends StateCraftScreen {
         this.nationName = nationName;
         this.stateName = stateName;
         this.cityName = cityName;
-        this.guiWidth = 300;
-        this.guiHeight = 220;
+        this.guiWidth = 310;
+        this.guiHeight = 240;
     }
 
     @Override
@@ -71,9 +71,9 @@ public class CityChunksScreen extends StateCraftScreen {
 
         // Column headers
         int headerY = guiTop + 28;
-        int colCoords = guiLeft + 15;
-        int colOwner = guiLeft + 95;
-        int colStatus = guiLeft + 195;
+        int colCoords = guiLeft + 18;
+        int colOwner = guiLeft + 105;
+        int colStatus = guiLeft + 205;
 
         graphics.drawString(this.font, "§6Coordinates", colCoords, headerY, COLOR_PRIMARY);
         graphics.drawString(this.font, "§6Owner", colOwner, headerY, COLOR_PRIMARY);
@@ -81,20 +81,30 @@ public class CityChunksScreen extends StateCraftScreen {
 
         renderDivider(graphics, guiLeft + 10, headerY + 11, guiWidth - 20);
 
-        // Chunk list
+        // List area
         int listTop = headerY + 16;
+        int listAreaHeight = MAX_VISIBLE * ROW_HEIGHT;
         int endIndex = Math.min(scrollOffset + MAX_VISIBLE, chunks.size());
+
+        // Render list background
+        renderSubPanel(graphics, guiLeft + 8, listTop - 3, guiWidth - 16, listAreaHeight + 4);
 
         for (int i = scrollOffset; i < endIndex; i++) {
             SyncCityChunksPacket.ChunkEntry chunk = chunks.get(i);
-            int y = listTop + (i - scrollOffset) * ROW_HEIGHT;
+            int rowIndex = i - scrollOffset;
+            int y = listTop + rowIndex * ROW_HEIGHT;
+
+            // Alternating row background
+            if (rowIndex % 2 == 0) {
+                graphics.fill(guiLeft + 9, y - 2, guiLeft + guiWidth - 9, y + ROW_HEIGHT - 4, 0x15FFFFFF);
+            }
 
             // Highlight row on hover
-            boolean hovered = mouseX >= guiLeft + 10 && mouseX < guiLeft + guiWidth - 10
-                && mouseY >= y - 1 && mouseY < y + ROW_HEIGHT - 3;
+            boolean hovered = mouseX >= guiLeft + 9 && mouseX < guiLeft + guiWidth - 9
+                && mouseY >= y - 2 && mouseY < y + ROW_HEIGHT - 4;
 
             if (hovered) {
-                graphics.fill(guiLeft + 10, y - 2, guiLeft + guiWidth - 10, y + ROW_HEIGHT - 3, 0x30FFFFFF);
+                graphics.fill(guiLeft + 9, y - 2, guiLeft + guiWidth - 9, y + ROW_HEIGHT - 4, 0x30FFFFFF);
             }
 
             // Coordinates
@@ -118,26 +128,34 @@ public class CityChunksScreen extends StateCraftScreen {
                 graphics.drawString(this.font, "§7" + typeLabel, colStatus, y, COLOR_TEXT);
             }
 
-            // Click hint icon
+            // Click hint arrow
             if (hovered) {
-                graphics.drawString(this.font, "§e→", guiLeft + guiWidth - 20, y, COLOR_TEXT);
+                graphics.drawString(this.font, "§e→", guiLeft + guiWidth - 22, y, COLOR_TEXT);
             }
         }
 
-        // Scroll indicators
-        if (scrollOffset > 0) {
-            graphics.drawCenteredString(this.font, "§7▲ scroll up", this.width / 2, listTop - 10, 0xFF888888);
-        }
-        if (endIndex < chunks.size()) {
-            int bottomY = listTop + MAX_VISIBLE * ROW_HEIGHT;
-            graphics.drawCenteredString(this.font, "§7▼ " + (chunks.size() - endIndex) + " more", this.width / 2, bottomY, 0xFF888888);
+        // Scrollbar track (right edge of list area)
+        if (chunks.size() > MAX_VISIBLE) {
+            int scrollbarX = guiLeft + guiWidth - 13;
+            int scrollbarTrackTop = listTop - 2;
+            int scrollbarTrackHeight = listAreaHeight;
+
+            // Track background
+            graphics.fill(scrollbarX, scrollbarTrackTop, scrollbarX + 4, scrollbarTrackTop + scrollbarTrackHeight, 0x40FFFFFF);
+
+            // Thumb
+            float thumbRatio = (float) MAX_VISIBLE / chunks.size();
+            int thumbHeight = Math.max(8, (int) (scrollbarTrackHeight * thumbRatio));
+            float scrollRatio = (float) scrollOffset / (chunks.size() - MAX_VISIBLE);
+            int thumbY = scrollbarTrackTop + (int) ((scrollbarTrackHeight - thumbHeight) * scrollRatio);
+            graphics.fill(scrollbarX, thumbY, scrollbarX + 4, thumbY + thumbHeight, 0xAA4A90D9);
         }
 
-        // Footer info
-        int footerY = guiTop + guiHeight - 45;
-        renderDivider(graphics, guiLeft + 10, footerY - 3, guiWidth - 20);
-        graphics.drawCenteredString(this.font, "§7Total chunks: §f" + chunks.size() + "  §8| Click a chunk to view details",
-            this.width / 2, footerY + 2, 0xFF888888);
+        // Footer area - below the list with clear separation
+        int footerY = listTop + listAreaHeight + 8;
+        renderDivider(graphics, guiLeft + 10, footerY, guiWidth - 20);
+        graphics.drawString(this.font, "§7Total: §f" + chunks.size() + " chunks", guiLeft + 15, footerY + 6, 0xFFAAAAAA);
+        graphics.drawString(this.font, "§8Click a row to view details", guiLeft + guiWidth / 2, footerY + 6, 0xFF666666);
     }
 
     @Override
@@ -149,8 +167,8 @@ public class CityChunksScreen extends StateCraftScreen {
 
             for (int i = scrollOffset; i < endIndex; i++) {
                 int y = listTop + (i - scrollOffset) * ROW_HEIGHT;
-                if (mouseX >= guiLeft + 10 && mouseX < guiLeft + guiWidth - 10
-                    && mouseY >= y - 1 && mouseY < y + ROW_HEIGHT - 3) {
+                if (mouseX >= guiLeft + 9 && mouseX < guiLeft + guiWidth - 9
+                    && mouseY >= y - 2 && mouseY < y + ROW_HEIGHT - 4) {
                     SyncCityChunksPacket.ChunkEntry chunk = chunks.get(i);
                     openChunkInfo(chunk.x, chunk.z);
                     return true;

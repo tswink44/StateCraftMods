@@ -76,6 +76,16 @@ public class StateCraftIntegration {
                         case "formatCurrency" -> { return economyIntegrationImpl.formatCurrency((Double) args[0]); }
                         case "getChunkImprovementScore" -> { return economyIntegrationImpl.getChunkImprovementScore((Integer) args[0], (Integer) args[1], (String) args[2]); }
                         case "getChunkTotalValue" -> { return economyIntegrationImpl.getChunkTotalValue((Integer) args[0], (Integer) args[1], (String) args[2]); }
+                        case "onCompanyCreated" -> economyIntegrationImpl.onCompanyCreated((UUID) args[0]);
+                        case "onCompanyDissolving" -> { return economyIntegrationImpl.onCompanyDissolving((UUID) args[0], (UUID) args[1]); }
+                        case "getCompanyBalance" -> { return economyIntegrationImpl.getCompanyBalance((UUID) args[0]); }
+                        case "isDividendsEnabled" -> { return economyIntegrationImpl.isDividendsEnabled((UUID) args[0]); }
+                        case "getDividendRate" -> { return economyIntegrationImpl.getDividendRate((UUID) args[0]); }
+                        case "getDividendPeriodTicks" -> { return economyIntegrationImpl.getDividendPeriodTicks((UUID) args[0]); }
+                        case "setDividendConfig" -> economyIntegrationImpl.setDividendConfig((UUID) args[0], (Boolean) args[1], (Double) args[2], (Long) args[3]);
+                        case "setDividendsEnabled" -> economyIntegrationImpl.setDividendsEnabled((UUID) args[0], (Boolean) args[1]);
+                        case "setDividendRate" -> economyIntegrationImpl.setDividendRate((UUID) args[0], (Double) args[1]);
+                        case "setDividendPeriodTicks" -> economyIntegrationImpl.setDividendPeriodTicks((UUID) args[0], (Long) args[1]);
                     }
                     return null;
                 }
@@ -260,6 +270,67 @@ public class StateCraftIntegration {
                 valuationManager.getValuation(chunkX, chunkZ, dimension);
             return valuation != null ? valuation.getTotalValue() : 0;
         }
+
+        // ==================== Company Economy ====================
+
+        public void onCompanyCreated(UUID companyId) {
+            EconomyManager.getInstance().getOrCreateCompanyTreasury(companyId);
+            StateCraftEconomy.LOGGER.info("Created treasury account for company {}", companyId);
+        }
+
+        public boolean onCompanyDissolving(UUID companyId, UUID founderId) {
+            return com.statecraft.economy.company.CompanyEconomyManager.getInstance()
+                .dissolveCompany(companyId, founderId);
+        }
+
+        public double getCompanyBalance(UUID companyId) {
+            return EconomyManager.getInstance().getCompanyBalance(companyId);
+        }
+
+        public boolean isDividendsEnabled(UUID companyId) {
+            var config = com.statecraft.economy.company.CompanyEconomyManager.getInstance()
+                .getDividendConfig(companyId);
+            return config != null && config.isEnabled();
+        }
+
+        public double getDividendRate(UUID companyId) {
+            var config = com.statecraft.economy.company.CompanyEconomyManager.getInstance()
+                .getDividendConfig(companyId);
+            return config != null ? config.getRate() : 0;
+        }
+
+        public long getDividendPeriodTicks(UUID companyId) {
+            var config = com.statecraft.economy.company.CompanyEconomyManager.getInstance()
+                .getDividendConfig(companyId);
+            return config != null ? config.getPeriodTicks() : 72000;
+        }
+
+        public void setDividendConfig(UUID companyId, boolean enabled, double rate, long periodTicks) {
+            var mgr = com.statecraft.economy.company.CompanyEconomyManager.getInstance();
+            var config = mgr.getOrCreateDividendConfig(companyId);
+            config.setEnabled(enabled);
+            config.setRate(rate);
+            config.setPeriodTicks(periodTicks);
+            mgr.markDirty();
+        }
+
+        public void setDividendsEnabled(UUID companyId, boolean enabled) {
+            var mgr = com.statecraft.economy.company.CompanyEconomyManager.getInstance();
+            mgr.getOrCreateDividendConfig(companyId).setEnabled(enabled);
+            mgr.markDirty();
+        }
+
+        public void setDividendRate(UUID companyId, double rate) {
+            var mgr = com.statecraft.economy.company.CompanyEconomyManager.getInstance();
+            mgr.getOrCreateDividendConfig(companyId).setRate(rate);
+            mgr.markDirty();
+        }
+
+        public void setDividendPeriodTicks(UUID companyId, long ticks) {
+            var mgr = com.statecraft.economy.company.CompanyEconomyManager.getInstance();
+            mgr.getOrCreateDividendConfig(companyId).setPeriodTicks(ticks);
+            mgr.markDirty();
+        }
     }
 
     /**
@@ -393,9 +464,9 @@ public class StateCraftIntegration {
     }
 
     /**
-     * Check if player is nation admin
+     * Check if player is nation leader or officer.
      */
-    public static boolean isNationAdmin(ServerPlayer player) {
+    public static boolean isNationLeaderOrOfficer(ServerPlayer player) {
         if (!initialized) return false;
 
         try {
@@ -408,11 +479,11 @@ public class StateCraftIntegration {
 
             if (nation != null) {
                 var nationClass = Class.forName("com.statecraft.core.Nation");
-                var isAdmin = nationClass.getMethod("isAdmin", UUID.class);
-                return (Boolean) isAdmin.invoke(nation, player.getUUID());
+                var isLeaderOrOfficer = nationClass.getMethod("isLeaderOrOfficer", UUID.class);
+                return (Boolean) isLeaderOrOfficer.invoke(nation, player.getUUID());
             }
         } catch (Exception e) {
-            StateCraftEconomy.LOGGER.debug("Error checking nation admin: {}", e.getMessage());
+            StateCraftEconomy.LOGGER.debug("Error checking nation leader/officer: {}", e.getMessage());
         }
         return false;
     }
@@ -453,9 +524,9 @@ public class StateCraftIntegration {
                         return SpendingLimitManager.GovernmentRole.NATION_LEADER;
                     }
 
-                    var isAdmin = nationClass.getMethod("isAdmin", UUID.class);
-                    if ((Boolean) isAdmin.invoke(nation, playerUUID)) {
-                        return SpendingLimitManager.GovernmentRole.NATION_ADMIN;
+                    var isLeaderOrOfficer = nationClass.getMethod("isLeaderOrOfficer", UUID.class);
+                    if ((Boolean) isLeaderOrOfficer.invoke(nation, playerUUID)) {
+                        return SpendingLimitManager.GovernmentRole.NATION_OFFICER;
                     }
                 }
                 case "STATE" -> {
@@ -479,15 +550,15 @@ public class StateCraftIntegration {
                             if (playerUUID.equals(governorId)) {
                                 return SpendingLimitManager.GovernmentRole.STATE_GOVERNOR;
                             }
-                            // Nation leader/admin accessing state account
+                            // Nation leader/officer accessing state account
                             var getLeaderId = nationClass.getMethod("getLeaderId");
                             UUID leaderId = (UUID) getLeaderId.invoke(nation);
                             if (playerUUID.equals(leaderId)) {
                                 return SpendingLimitManager.GovernmentRole.NATION_LEADER;
                             }
-                            var isAdmin = nationClass.getMethod("isAdmin", UUID.class);
-                            if ((Boolean) isAdmin.invoke(nation, playerUUID)) {
-                                return SpendingLimitManager.GovernmentRole.NATION_ADMIN;
+                            var isLeaderOrOfficer = nationClass.getMethod("isLeaderOrOfficer", UUID.class);
+                            if ((Boolean) isLeaderOrOfficer.invoke(nation, playerUUID)) {
+                                return SpendingLimitManager.GovernmentRole.NATION_OFFICER;
                             }
                             break;
                         }
@@ -530,9 +601,9 @@ public class StateCraftIntegration {
                                 if (playerUUID.equals(leaderId)) {
                                     return SpendingLimitManager.GovernmentRole.NATION_LEADER;
                                 }
-                                var isAdmin = nationClass.getMethod("isAdmin", UUID.class);
-                                if ((Boolean) isAdmin.invoke(nation, playerUUID)) {
-                                    return SpendingLimitManager.GovernmentRole.NATION_ADMIN;
+                                var isLeaderOrOfficer = nationClass.getMethod("isLeaderOrOfficer", UUID.class);
+                                if ((Boolean) isLeaderOrOfficer.invoke(nation, playerUUID)) {
+                                    return SpendingLimitManager.GovernmentRole.NATION_OFFICER;
                                 }
                                 break;
                             }
@@ -624,15 +695,15 @@ public class StateCraftIntegration {
 
             if (nation != null) {
                 var nationClass = Class.forName("com.statecraft.core.Nation");
-                var isAdmin = nationClass.getMethod("isAdmin", UUID.class);
+                var isLeaderOrOfficer = nationClass.getMethod("isLeaderOrOfficer", UUID.class);
                 var getId = nationClass.getMethod("getId");
                 var getName = nationClass.getMethod("getName");
                 UUID nationId = (UUID) getId.invoke(nation);
                 String nationName = (String) getName.invoke(nation);
-                boolean isNationAdmin = (Boolean) isAdmin.invoke(nation, playerUUID);
+                boolean isNationLeaderOrOfficer = (Boolean) isLeaderOrOfficer.invoke(nation, playerUUID);
 
-                // Add nation account if player is admin
-                if (isNationAdmin) {
+                // Add nation account if player is leader or officer
+                if (isNationLeaderOrOfficer) {
                     accounts.add(new SyncAccountsPacket.AccountInfo(
                         "NATION",
                         nationName,
@@ -658,8 +729,8 @@ public class StateCraftIntegration {
                             UUID governorId = (UUID) stateGetGovernorId.invoke(state);
                             boolean isGovernor = playerUUID.equals(governorId);
 
-                            // Add state account if player is governor or nation admin
-                            if (isGovernor || isNationAdmin) {
+                            // Add state account if player is governor or nation leader/officer
+                            if (isGovernor || isNationLeaderOrOfficer) {
                                 UUID stateId = (UUID) stateGetId.invoke(state);
                                 String stateName = (String) stateGetName.invoke(state);
 
@@ -688,8 +759,8 @@ public class StateCraftIntegration {
                                         UUID governorIdForCity = (UUID) stateGetGovernorId.invoke(state);
                                         boolean isGovernorForCity = playerUUID.equals(governorIdForCity);
 
-                                        // Add city account if player is mayor, governor of parent state, or nation admin
-                                        if (isMayor || isGovernorForCity || isNationAdmin) {
+                                        // Add city account if player is mayor, governor of parent state, or nation leader/officer
+                                        if (isMayor || isGovernorForCity || isNationLeaderOrOfficer) {
                                             UUID cityId = (UUID) cityGetId.invoke(city);
                                             String cityName = (String) cityGetName.invoke(city);
 
@@ -1043,10 +1114,10 @@ public class StateCraftIntegration {
                 NetworkHandler.sendToPlayer(new SyncBalancePacket(result.getNewBalance(), manager.getNationBalance(nationId)), player);
             }
             case WITHDRAW -> {
-                // Only admins can withdraw
-                if (!isNationAdmin(player)) {
+                // Only leader/officers can withdraw
+                if (!isNationLeaderOrOfficer(player)) {
                     NetworkHandler.sendToPlayer(new TransactionResultPacket(false,
-                        "Only nation admins can withdraw from treasury", manager.getBalance(player.getUUID())), player);
+                        "Only nation leader or officers can withdraw from treasury", manager.getBalance(player.getUUID())), player);
                     return;
                 }
                 // Check daily spending limit
@@ -1295,8 +1366,8 @@ public class StateCraftIntegration {
                 var nation = getNation.invoke(manager, nationId);
                 if (nation != null) {
                     var nationClass = Class.forName("com.statecraft.core.Nation");
-                    var isAdmin = nationClass.getMethod("isAdmin", UUID.class);
-                    return (Boolean) isAdmin.invoke(nation, playerId);
+                    var isLeaderOrOfficer = nationClass.getMethod("isLeaderOrOfficer", UUID.class);
+                    return (Boolean) isLeaderOrOfficer.invoke(nation, playerId);
                 }
             }
 

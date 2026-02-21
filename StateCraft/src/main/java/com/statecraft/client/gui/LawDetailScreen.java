@@ -92,20 +92,67 @@ public class LawDetailScreen extends StateCraftScreen {
         }
         y += 8;
 
-        // Policy changes
-        if (!lawInfo.policyChanges.isEmpty()) {
+        // Policy changes (non-custom laws)
+        boolean hasRegularPolicies = false;
+        boolean hasCustomLaws = false;
+        for (Map.Entry<String, String> entry : lawInfo.policyChanges.entrySet()) {
+            String policyName = entry.getKey();
+            if (isCustomLawPolicy(policyName)) {
+                hasCustomLaws = true;
+            } else {
+                hasRegularPolicies = true;
+            }
+        }
+
+        if (hasRegularPolicies) {
             renderDivider(graphics, guiLeft + 10, y - 2, guiWidth - 20);
             graphics.drawString(this.font, "§6Policy Changes", leftCol, y, COLOR_PRIMARY);
             y += 14;
 
             for (Map.Entry<String, String> entry : lawInfo.policyChanges.entrySet()) {
                 String policyName = entry.getKey();
+                if (isCustomLawPolicy(policyName)) continue; // skip custom laws here
                 String value = entry.getValue();
                 String displayValue = formatPolicyValue(policyName, value);
                 graphics.drawString(this.font, "§7• §f" + policyName + ": §a" + displayValue, leftCol, y, COLOR_TEXT);
                 y += LINE_HEIGHT;
             }
             y += 8;
+        }
+
+        // Custom Laws section - rendered as readable text blocks
+        if (hasCustomLaws) {
+            renderDivider(graphics, guiLeft + 10, y - 2, guiWidth - 20);
+            graphics.drawString(this.font, "§6Custom Laws", leftCol, y, COLOR_PRIMARY);
+            y += 14;
+
+            int lawNumber = 0;
+            for (Map.Entry<String, String> entry : lawInfo.policyChanges.entrySet()) {
+                String policyName = entry.getKey();
+                if (!isCustomLawPolicy(policyName)) continue;
+                lawNumber++;
+
+                String lawText = entry.getValue();
+
+                // Sub-panel background for each custom law
+                List<String> wrappedLaw = wrapText(lawText, guiWidth - 50);
+                int blockHeight = wrappedLaw.size() * LINE_HEIGHT + 8;
+
+                graphics.fill(guiLeft + 12, y - 2, guiLeft + guiWidth - 12, y + blockHeight, 0x44000000);
+                graphics.fill(guiLeft + 12, y - 2, guiLeft + 14, y + blockHeight, 0xFF4A90D9); // accent bar
+
+                // Law label
+                String label = "§e§l" + getCustomLawLabel(policyName);
+                graphics.drawString(this.font, label, leftCol + 5, y, 0xFFFFAA00);
+                y += LINE_HEIGHT + 2;
+
+                // Law text wrapped
+                for (String line : wrappedLaw) {
+                    graphics.drawString(this.font, "§f" + line, leftCol + 5, y, 0xFFDDDDDD);
+                    y += LINE_HEIGHT;
+                }
+                y += 8;
+            }
         }
 
         // Full text (for custom laws)
@@ -217,6 +264,25 @@ public class LawDetailScreen extends StateCraftScreen {
             }
         } catch (Exception ignored) {}
         return value;
+    }
+
+    private boolean isCustomLawPolicy(String policyName) {
+        for (PolicyType pt : PolicyType.values()) {
+            if ((pt.getDisplayName().equals(policyName) || pt.name().equals(policyName))
+                && pt.getCategory() == PolicyType.Category.CUSTOM) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String getCustomLawLabel(String policyName) {
+        for (PolicyType pt : PolicyType.values()) {
+            if (pt.getDisplayName().equals(policyName) || pt.name().equals(policyName)) {
+                return pt.getDisplayName();
+            }
+        }
+        return policyName;
     }
 
     private void goBack() {

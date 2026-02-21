@@ -27,21 +27,21 @@ public class CountryManagementScreen extends StateCraftScreen {
     private final String nationName;
 
     // Permission flags passed from NationInfoScreen
-    private final boolean isAdmin;
+    private final boolean isOfficer;
     private final boolean isMember;
     private final boolean isLeader;
 
     // Menu row entries
     private final List<MenuRow> rows = new ArrayList<>();
 
-    public CountryManagementScreen(String nationName, boolean isAdmin, boolean isMember, boolean isLeader) {
+    public CountryManagementScreen(String nationName, boolean isOfficer, boolean isMember, boolean isLeader) {
         super(Component.literal("Management: " + nationName));
         this.nationName = nationName;
-        this.isAdmin = isAdmin;
+        this.isOfficer = isOfficer;
         this.isMember = isMember;
         this.isLeader = isLeader;
         this.guiWidth = 260;
-        this.guiHeight = 200;
+        this.guiHeight = 240;
     }
 
     @Override
@@ -63,32 +63,35 @@ public class CountryManagementScreen extends StateCraftScreen {
         int spacing = 18;
         int row = 0;
 
-        // === Admin Section ===
-        if (isAdmin) {
+        // === Officer+ Section ===
+        if (isOfficer || isLeader) {
             // Mail
-            rows.add(new MenuRow("§eMail", startY + spacing * row, true));
+            rows.add(new MenuRow("§e\u2709 Mail", startY + spacing * row, true));
             this.addRenderableWidget(createCompactArrowButton(
                 arrowX, startY + spacing * row, arrowBtnWidth, buttonHeight,
                 btn -> openMailScreen()
             ));
             row++;
+        }
 
+        // === Leader Section ===
+        if (isLeader) {
             // Settings
-            rows.add(new MenuRow("Settings", startY + spacing * row, true));
+            rows.add(new MenuRow("§7\u2699 Settings", startY + spacing * row, true));
             this.addRenderableWidget(createCompactArrowButton(
                 arrowX, startY + spacing * row, arrowBtnWidth, buttonHeight,
                 btn -> openSettingsScreen()
             ));
             row++;
 
-            // Gap after admin section
+            // Gap after leader section
             row++;
         }
 
         // === Member Section ===
         if (isMember) {
             // Elections
-            rows.add(new MenuRow("§6Elections", startY + spacing * row, true));
+            rows.add(new MenuRow("§6\u2611 Elections", startY + spacing * row, true));
             this.addRenderableWidget(createCompactArrowButton(
                 arrowX, startY + spacing * row, arrowBtnWidth, buttonHeight,
                 btn -> openElectionsScreen()
@@ -96,7 +99,7 @@ public class CountryManagementScreen extends StateCraftScreen {
             row++;
 
             // Legislature (Propose)
-            rows.add(new MenuRow("§bLegislature", startY + spacing * row, true));
+            rows.add(new MenuRow("§b\u2696 Legislature", startY + spacing * row, true));
             this.addRenderableWidget(createCompactArrowButton(
                 arrowX, startY + spacing * row, arrowBtnWidth, buttonHeight,
                 btn -> openLegislatureScreen()
@@ -104,7 +107,7 @@ public class CountryManagementScreen extends StateCraftScreen {
             row++;
 
             // View Laws
-            rows.add(new MenuRow("View Laws", startY + spacing * row, true));
+            rows.add(new MenuRow("§f\u270E View Laws", startY + spacing * row, true));
             this.addRenderableWidget(createCompactArrowButton(
                 arrowX, startY + spacing * row, arrowBtnWidth, buttonHeight,
                 btn -> openViewLawsScreen()
@@ -112,7 +115,7 @@ public class CountryManagementScreen extends StateCraftScreen {
             row++;
 
             // Contracts
-            rows.add(new MenuRow("§eContracts", startY + spacing * row, true));
+            rows.add(new MenuRow("§e\u270D Contracts", startY + spacing * row, true));
             this.addRenderableWidget(createCompactArrowButton(
                 arrowX, startY + spacing * row, arrowBtnWidth, buttonHeight,
                 btn -> openContractsScreen()

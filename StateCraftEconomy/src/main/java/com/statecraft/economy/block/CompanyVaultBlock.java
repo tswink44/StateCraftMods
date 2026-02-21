@@ -2,8 +2,8 @@ package com.statecraft.economy.block;
 
 import com.statecraft.economy.block.entity.CompanyVaultBlockEntity;
 import com.statecraft.economy.block.entity.ModBlockEntities;
-import com.statecraft.economy.company.Company;
-import com.statecraft.economy.company.CompanyManager;
+import com.statecraft.company.Company;
+import com.statecraft.company.CompanyManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerPlayer;

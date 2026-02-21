@@ -141,5 +141,78 @@ public interface EconomyIntegration {
     default double getChunkTotalValue(int chunkX, int chunkZ, String dimension) {
         return 0;
     }
+
+    // ==================== Company Economy Integration ====================
+
+    /**
+     * Called when a company is created — economy mod should create a treasury account
+     * @param companyId The UUID of the new company
+     */
+    default void onCompanyCreated(UUID companyId) {}
+
+    /**
+     * Called before a company is dissolved — economy mod should distribute balance
+     * to shareholders and handle bank dissolution.
+     * @param companyId The company being dissolved
+     * @param founderId The founder requesting dissolution
+     * @return true if economy-side cleanup succeeded (or no economy loaded)
+     */
+    default boolean onCompanyDissolving(UUID companyId, UUID founderId) {
+        return true;
+    }
+
+    /**
+     * Get a company's treasury balance
+     * @param companyId The company UUID
+     * @return The balance, or 0 if not available
+     */
+    default double getCompanyBalance(UUID companyId) {
+        return 0;
+    }
+
+    /**
+     * Check if dividends are enabled for a company
+     */
+    default boolean isDividendsEnabled(UUID companyId) {
+        return false;
+    }
+
+    /**
+     * Get the dividend rate for a company (0.0 - 1.0)
+     */
+    default double getDividendRate(UUID companyId) {
+        return 0;
+    }
+
+    /**
+     * Get the dividend period in ticks for a company
+     */
+    default long getDividendPeriodTicks(UUID companyId) {
+        return 72000;
+    }
+
+    /**
+     * Set dividend configuration for a company
+     * @param companyId The company UUID
+     * @param enabled Whether dividends are enabled
+     * @param rate The dividend rate (0.0 - 1.0)
+     * @param periodTicks The period between dividend payouts in game ticks
+     */
+    default void setDividendConfig(UUID companyId, boolean enabled, double rate, long periodTicks) {}
+
+    /**
+     * Enable or disable dividends for a company
+     */
+    default void setDividendsEnabled(UUID companyId, boolean enabled) {}
+
+    /**
+     * Set the dividend rate for a company
+     */
+    default void setDividendRate(UUID companyId, double rate) {}
+
+    /**
+     * Set the dividend period for a company
+     */
+    default void setDividendPeriodTicks(UUID companyId, long ticks) {}
 }
 

@@ -25,8 +25,8 @@ import java.util.Map;
 public class ChunkMarketplaceScreen extends StateCraftScreen {
 
     private static final int MAP_SIZE = 17; // 17x17 chunk grid (matches ChunkMapScreen)
-    private static final int MIN_CELL_SIZE = 12;
-    private static final int MAX_CELL_SIZE = 24;
+    private static final int MIN_CELL_SIZE = 10;
+    private static final int MAX_CELL_SIZE = 20;
     private static final int TERRAIN_RESOLUTION = 8; // Sample 8x8 points per chunk for better building clarity
 
     // View mode
@@ -102,8 +102,11 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
         // Calculate appropriate dimensions based on mode
         if (mapMode) {
             // Match ChunkMapScreen sizing approach
-            int availableWidth = this.width - 80 - 80; // 80 for margins, 80 for sidebar buttons
-            int availableHeight = this.height - 100; // 100 for top/bottom margins
+            // Horizontal: 15px left padding + map + 10px gap + SIDEBAR_WIDTH + 15px right padding
+            int sidebarTotal = 10 + SIDEBAR_WIDTH + 15; // gap + sidebar + right padding
+            int availableWidth = this.width - 60 - sidebarTotal; // 60 for centering margins
+            // Vertical: 35px top (title+divider+mode text) + map + 30px legend area + 28px back button
+            int availableHeight = this.height - 95; // 95 for top + bottom
 
             // Calculate max cell size that fits
             int maxCellsWidth = availableWidth / MAP_SIZE;
@@ -112,8 +115,8 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
             cellSize = Math.max(MIN_CELL_SIZE, Math.min(MAX_CELL_SIZE, cellSize));
 
             // Set GUI size based on calculated cell size
-            this.guiWidth = MAP_SIZE * cellSize + SIDEBAR_WIDTH + 30;
-            this.guiHeight = MAP_SIZE * cellSize + 80;
+            this.guiWidth = 15 + MAP_SIZE * cellSize + sidebarTotal;
+            this.guiHeight = MAP_SIZE * cellSize + 95; // 35 top + map + 30 legend + 30 back button
         } else {
             // List mode - compact size
             this.guiWidth = 280;
@@ -332,13 +335,13 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
             ).pos(guiLeft + guiWidth - 75, guiTop + 6).size(65, 14).build());
 
             if (mapMode) {
-                // Terrain toggle button (in map mode) - positioned like ChunkMapScreen
+                // Terrain toggle button (in map mode) - positioned in sidebar area
                 int mapRight = guiLeft + 15 + MAP_SIZE * cellSize + 10;
                 String terrainText = terrainMode ? "Grid" : "Terrain";
                 toggleTerrainButton = this.addRenderableWidget(Button.builder(
                     Component.literal(terrainText),
                     btn -> toggleTerrain()
-                ).pos(mapRight, guiTop + 35).size(60, 18).build());
+                ).pos(mapRight, guiTop + 35).size(SIDEBAR_WIDTH, 18).build());
             }
 
             if (!mapMode) {
@@ -354,11 +357,11 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
                 ).pos(guiLeft + guiWidth - 25, guiTop + guiHeight - 55).size(18, 14).build());
             }
 
-            // Back button (matches ChunkMapScreen Close button)
+            // Back button
             this.addRenderableWidget(Button.builder(
                 Component.literal("Back"),
                 btn -> goBack()
-            ).pos(guiLeft + guiWidth / 2 - 40, guiTop + guiHeight - 28).size(80, 20).build());
+            ).pos(guiLeft + guiWidth / 2 - 40, guiTop + guiHeight - 24).size(80, 20).build());
         } else {
             // Buy confirmation popup buttons
             int popupCenterX = this.width / 2;
@@ -400,8 +403,9 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
             return;
         }
 
-        // Divider under title (matches ChunkMapScreen)
-        renderDivider(graphics, guiLeft + 10, guiTop + 22, guiWidth - 20);
+        // Divider under title (only span map area if in map mode)
+        int dividerWidth = mapMode ? MAP_SIZE * cellSize + 5 : guiWidth - 20;
+        renderDivider(graphics, guiLeft + 10, guiTop + 22, dividerWidth);
 
         if (!dataLoaded) {
             graphics.drawCenteredString(this.font, "Loading...", this.width / 2, guiTop + 100, 0xFFAAAAAA);
@@ -626,9 +630,10 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
             graphics.drawString(this.font, "§8to select", sidebarX + 4, sidebarY + 32, 0xFF888888);
         }
 
-        // Legend at bottom (matches ChunkMapScreen style)
+        // Legend at bottom (anchored below the map)
         int legendX = mapX;
-        int legendY = mapY + mapPixelSize + 6;
+        int mapBottom = mapY + mapPixelSize;
+        int legendY = mapBottom + 4;
         graphics.drawString(this.font, "§7Legend:", legendX, legendY, 0xFFCCCCCC);
         legendY += 12;
         graphics.fill(legendX, legendY + 1, legendX + 8, legendY + 9, 0xFF3366CC);

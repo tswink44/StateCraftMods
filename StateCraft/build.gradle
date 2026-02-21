@@ -93,6 +93,13 @@ minecraft {
             args '--username', 'Dev2'
         }
 
+        // Third client for multiplayer testing
+        client3 {
+            parent runs.client
+            workingDirectory project.file('run-client3')
+            args '--username', 'Dev3'
+        }
+
         server {
             property 'forge.enabledGameTestNamespaces', 'statecraft'
             args '--nogui'

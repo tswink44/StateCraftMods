@@ -39,7 +39,7 @@ public class CityInfoScreen extends StateCraftScreen {
         this.nationName = nationName;
         this.stateName = stateName;
         this.cityName = cityName;
-        this.guiWidth = 280; this.guiHeight = 220;
+        this.guiWidth = 320; this.guiHeight = 220;
     }
 
     private Button settingsButton;
@@ -90,7 +90,7 @@ public class CityInfoScreen extends StateCraftScreen {
 
         // Settings button - hidden until we know permissions
         settingsButton = this.addRenderableWidget(createButton(
-            startX + spacing * 3 + 5, buttonY, buttonWidth, 20,
+            startX + spacing * 4 + 5, buttonY, buttonWidth + 10, 20,
             Component.literal("Settings"),
             btn -> openSettingsScreen()
         ));
@@ -98,7 +98,7 @@ public class CityInfoScreen extends StateCraftScreen {
 
         // Appoint Mayor button - hidden until we know if player is governor/leader
         appointButton = this.addRenderableWidget(createButton(
-            startX + spacing * 4 + 5, buttonY, buttonWidth, 20,
+            startX + spacing * 5 + 10, buttonY, buttonWidth + 10, 20,
             Component.literal("§bAppoint"),
             btn -> openAppointScreen()
         ));
@@ -106,7 +106,7 @@ public class CityInfoScreen extends StateCraftScreen {
 
         // Leave button - hidden until we know permissions (not mayor)
         leaveButton = this.addRenderableWidget(createButton(
-            startX + spacing * 4 + 5, buttonY, buttonWidth, 20,
+            startX + spacing * 5 + 10, buttonY, buttonWidth, 20,
             Component.literal("§cLeave"),
             btn -> leaveCity()
         ));

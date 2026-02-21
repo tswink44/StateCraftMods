@@ -1,5 +1,7 @@
 package com.statecraft.economy.company;
 
+import com.statecraft.company.Company;
+import com.statecraft.company.CompanyManager;
 import com.statecraft.economy.StateCraftEconomy;
 import com.statecraft.economy.config.EconomyConfig;
 import com.statecraft.economy.core.Bank;

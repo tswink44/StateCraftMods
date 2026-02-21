@@ -26,7 +26,7 @@ public class MainMenuScreen extends StateCraftScreen {
     private int totalChunks = 0;
     private int totalMembers = 0;
     private boolean isLeader = false;
-    private boolean isAdmin = false;
+    private boolean isOfficer = false;
     private boolean dataLoaded = false;
     private boolean inNation = false;
 
@@ -35,6 +35,7 @@ public class MainMenuScreen extends StateCraftScreen {
     private Button mailboxButton;
     private Button companyButton;
     private Button chunkButton;
+    private Button marketplaceButton;
     private Button cityButton;
     private Button stateButton;
     private Button nationButton;
@@ -47,7 +48,7 @@ public class MainMenuScreen extends StateCraftScreen {
     public MainMenuScreen() {
         super(Component.literal("StateCraft"));
         this.guiWidth = 260;
-        this.guiHeight = 200;
+        this.guiHeight = 218;
     }
 
     @Override
@@ -93,12 +94,11 @@ public class MainMenuScreen extends StateCraftScreen {
         row++;
 
         // My Company
-        menuEntries.add(new MenuEntry("My Company", startY + spacing * row, false));
+        menuEntries.add(new MenuEntry("My Company", startY + spacing * row, true));
         companyButton = this.addRenderableWidget(createCompactArrowButton(
             arrowX, startY + spacing * row, arrowBtnWidth, buttonHeight,
-            btn -> {}
+            btn -> openCompanyScreen()
         ));
-        companyButton.active = false;
         row++;
 
         // === Territory Section (with gap) ===
@@ -109,6 +109,14 @@ public class MainMenuScreen extends StateCraftScreen {
         chunkButton = this.addRenderableWidget(createCompactArrowButton(
             arrowX, startY + spacing * row, arrowBtnWidth, buttonHeight,
             btn -> openChunkScreen()
+        ));
+        row++;
+
+        // Marketplace
+        menuEntries.add(new MenuEntry("\u2692 Marketplace", startY + spacing * row, true));
+        marketplaceButton = this.addRenderableWidget(createCompactArrowButton(
+            arrowX, startY + spacing * row, arrowBtnWidth, buttonHeight,
+            btn -> openMarketplaceScreen()
         ));
         row++;
 
@@ -231,6 +239,10 @@ public class MainMenuScreen extends StateCraftScreen {
         this.minecraft.setScreen(new ProfileScreen());
     }
 
+    private void openCompanyScreen() {
+        this.minecraft.setScreen(new CompanyScreen());
+    }
+
     private void openNationScreen() {
         // Open the NationsListScreen which shows all nations
         this.minecraft.setScreen(new NationsListScreen());
@@ -268,6 +280,10 @@ public class MainMenuScreen extends StateCraftScreen {
         }
     }
 
+    private void openMarketplaceScreen() {
+        this.minecraft.setScreen(new ChunkMarketplaceScreen());
+    }
+
     private void openMapScreen() {
         this.minecraft.setScreen(new ChunkMapScreen());
     }
@@ -282,14 +298,14 @@ public class MainMenuScreen extends StateCraftScreen {
 
     // Called by network handler when data is received
     public void updateNationData(String nationName, String stateName, String cityName,
-                                  int chunks, int members, boolean leader, boolean admin) {
+                                  int chunks, int members, boolean leader, boolean officer) {
         this.nationName = nationName;
         this.stateName = stateName;
         this.cityName = cityName;
         this.totalChunks = chunks;
         this.totalMembers = members;
         this.isLeader = leader;
-        this.isAdmin = admin;
+        this.isOfficer = officer;
         this.inNation = nationName != null && !nationName.isEmpty();
         this.dataLoaded = true;
     }

@@ -52,7 +52,7 @@ public class DiplomacyScreen extends StateCraftScreen {
         super(Component.literal("Diplomacy"));
         this.nationName = nationName;
         this.guiWidth = 320;
-        this.guiHeight = 256;
+        this.guiHeight = 280;
     }
 
     @Override
@@ -127,15 +127,16 @@ public class DiplomacyScreen extends StateCraftScreen {
         // Leader action bar (bottom area, above Back)
         if (isLeader && currentTab == Tab.RELATIONS) {
             // Target input
-            targetInput = new EditBox(this.font, guiLeft + 10, guiTop + guiHeight - 52, 140, 16,
+            int actionAreaY = guiTop + guiHeight - 78;
+            targetInput = new EditBox(this.font, guiLeft + 10, actionAreaY, 140, 16,
                 Component.literal("Target Nation"));
             targetInput.setMaxLength(24);
             targetInput.setHint(Component.literal("Nation name..."));
             this.addRenderableWidget(targetInput);
 
-            // Action buttons
+            // Action buttons - two rows next to the input
             int btnX = guiLeft + 156;
-            int btnY = guiTop + guiHeight - 54;
+            int btnY = actionAreaY - 1;
             this.addRenderableWidget(createButton(btnX, btnY, 48, 16,
                 Component.literal("§cWar"), btn -> confirmDiplomacyAction("DECLARE_WAR")));
             this.addRenderableWidget(createButton(btnX + 52, btnY, 48, 16,
@@ -213,7 +214,7 @@ public class DiplomacyScreen extends StateCraftScreen {
         // Result message
         if (!resultMessage.isEmpty() && System.currentTimeMillis() - resultMessageTime < 5000) {
             graphics.drawCenteredString(this.font, resultMessage, guiLeft + guiWidth / 2,
-                guiTop + guiHeight - 70, 0xFFFFFF00);
+                guiTop + guiHeight - 96, 0xFFFFFF00);
         }
     }
 

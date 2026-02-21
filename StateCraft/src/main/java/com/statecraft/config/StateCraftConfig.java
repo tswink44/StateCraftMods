@@ -48,6 +48,9 @@ public class StateCraftConfig {
     public static final ForgeConfigSpec.BooleanValue PVP_PROTECT_ALLIES;
     public static final ForgeConfigSpec.IntValue MAX_DIPLOMACY_PROPOSALS;
 
+    // Company Settings
+    public static final ForgeConfigSpec.IntValue MAX_COMPANIES_PER_PLAYER;
+
     static {
         BUILDER.comment(
             "StateCraft Configuration",
@@ -167,6 +170,17 @@ public class StateCraftConfig {
 
         BUILDER.comment("Maximum number of outbound diplomatic proposals per nation (alliance + peace)");
         MAX_DIPLOMACY_PROPOSALS = BUILDER.defineInRange("maxDiplomacyProposals", 5, 1, 50);
+
+        BUILDER.pop();
+
+        BUILDER.comment(
+            "Company Settings",
+            "Configure player-created companies"
+        ).push("companies");
+
+        BUILDER.comment("Maximum number of companies a single player can found (0 = unlimited)");
+        MAX_COMPANIES_PER_PLAYER = BUILDER.defineInRange("maxCompaniesPerPlayer", 3, 0, 100);
+
 
         BUILDER.pop();
 

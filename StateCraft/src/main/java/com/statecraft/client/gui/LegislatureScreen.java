@@ -129,7 +129,7 @@ public class LegislatureScreen extends StateCraftScreen {
         for (int i = scrollOffset; i < endIndex; i++) {
             SyncLegislatureDataPacket.BillSummary bill = activeBills.get(i);
             int billIndex = i - scrollOffset;
-            int yOffset = billIndex * 48; // Space per bill entry
+            int yOffset = billIndex * 37; // Space per bill entry (11+11+11+4)
 
             // Add vote buttons for VOTING bills (if player is legislature member and hasn't voted)
             if (bill.getStatus().equals("VOTING") && isLegislatureMember && !bill.hasPlayerVoted()) {
@@ -270,12 +270,13 @@ public class LegislatureScreen extends StateCraftScreen {
         }
 
         // History list - render with hover detection
+        // History entries have 2 lines (title + author) = 11+11+4 = 26px each
+        int entryHeight = 26;
         int endIndex = Math.min(scrollOffset + MAX_VISIBLE_BILLS, recentHistory.size());
         for (int i = scrollOffset; i < endIndex; i++) {
             SyncLegislatureDataPacket.BillSummary bill = recentHistory.get(i);
 
             // Check if this entry is hovered
-            int entryHeight = 37; // approximate height per entry
             int entryTop = y;
             int entryBottom = y + entryHeight;
             boolean isHovered = mouseX >= x && mouseX < guiLeft + guiWidth - 30 &&
@@ -283,7 +284,7 @@ public class LegislatureScreen extends StateCraftScreen {
 
             // Draw highlight if hovered
             if (isHovered) {
-                graphics.fill(x - 3, entryTop - 1, guiLeft + guiWidth - 25, entryBottom - 5, 0x33FFFFFF);
+                graphics.fill(x - 3, entryTop - 1, guiLeft + guiWidth - 25, entryBottom - 1, 0x33FFFFFF);
             }
 
             y = renderBillEntry(graphics, bill, x, y, mouseX, mouseY, false);
@@ -425,7 +426,7 @@ public class LegislatureScreen extends StateCraftScreen {
         if (button == 0 && currentTab == Tab.HISTORY && !recentHistory.isEmpty()) {
             int startY = guiTop + 48 + 14; // After tab content header
             int x = guiLeft + 15;
-            int entryHeight = 37;
+            int entryHeight = 26; // 2 lines (title + author): 11+11+4 spacing
 
             int endIndex = Math.min(scrollOffset + MAX_VISIBLE_BILLS, recentHistory.size());
             int y = startY;

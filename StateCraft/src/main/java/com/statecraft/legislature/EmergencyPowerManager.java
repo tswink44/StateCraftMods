@@ -272,7 +272,6 @@ public class EmergencyPowerManager {
         Set<UUID> allMembers = new HashSet<>();
         allMembers.addAll(nation.getMembers());
         allMembers.addAll(nation.getOfficers());
-        allMembers.addAll(nation.getAdmins());
         allMembers.add(nation.getLeaderId());
 
         for (UUID memberId : allMembers) {
@@ -332,8 +331,7 @@ public class EmergencyPowerManager {
         UUID tempLeaderId = profile.get().getId();
 
         // Must be a member of the nation
-        if (!nation.isMember(tempLeaderId) && !nation.isAdmin(tempLeaderId) &&
-            !nation.isOfficer(tempLeaderId)) {
+        if (!nation.isMember(tempLeaderId)) {
             Legislature legislature = LegislatureManager.getInstance().getOrCreateLegislature(nation.getId());
             legislature.deactivateEmergencyPower(EmergencyPower.SUCCESSION_CRISIS);
             return "§c" + temporaryLeaderName + " is not a member of " + nation.getName() + ".";
@@ -344,8 +342,8 @@ public class EmergencyPowerManager {
 
         // Set temporary leader
         nation.setLeaderId(tempLeaderId);
-        // Ensure they have admin
-        nation.addAdmin(tempLeaderId);
+        // Ensure they have officer status
+        nation.addOfficer(tempLeaderId);
         ChunkClaimManager.getInstance().markDirty();
 
         // Notify temporary leader
@@ -405,7 +403,6 @@ public class EmergencyPowerManager {
         Set<UUID> allMembers = new HashSet<>();
         allMembers.addAll(nation.getMembers());
         allMembers.addAll(nation.getOfficers());
-        allMembers.addAll(nation.getAdmins());
         allMembers.add(nation.getLeaderId());
 
         for (UUID memberId : allMembers) {

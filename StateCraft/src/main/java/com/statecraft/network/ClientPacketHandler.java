@@ -30,7 +30,7 @@ public class ClientPacketHandler {
                         packet.getChunks(),
                         packet.getMembers(),
                         packet.isLeader(),
-                        packet.isAdmin()
+                        packet.isOfficer()
                     );
                 } else {
                     screen.setNoNation();
@@ -70,7 +70,7 @@ public class ClientPacketHandler {
                         packet.getDescription(),
                         packet.getLeaderName(),
                         packet.isLeader(),
-                        packet.isAdmin(),
+                        packet.isOfficer(),
                         packet.isMember(),
                         packet.getStateNames(),
                         packet.getAllyNames(),
@@ -397,9 +397,7 @@ public class ClientPacketHandler {
     public static void handleSyncAutoClaim(SyncAutoClaimPacket packet, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
             Minecraft mc = Minecraft.getInstance();
-            if (mc.screen instanceof ClaimsManagementScreen screen) {
-                screen.updateAutoClaimState(packet.isEnabled(), packet.canUse(), packet.getCityName());
-            } else if (mc.screen instanceof ChunkMapScreen screen) {
+            if (mc.screen instanceof ChunkMapScreen screen) {
                 screen.updateAutoClaimState(packet.isEnabled(), packet.canUse(), packet.getCityName());
             }
         });
@@ -622,6 +620,16 @@ public class ClientPacketHandler {
         ctx.get().enqueueWork(() -> {
             Minecraft mc = Minecraft.getInstance();
             if (mc.screen instanceof com.statecraft.client.gui.DiplomacyScreen screen) {
+                screen.updateData(packet);
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncCompanyData(SyncCompanyDataPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof com.statecraft.client.gui.CompanyScreen screen) {
                 screen.updateData(packet);
             }
         });

@@ -71,8 +71,8 @@ repositories {
 dependencies {
     minecraft 'net.minecraftforge:forge:1.20.1-47.2.0'
 
-    // Optional: StateCraft integration (place StateCraft jar in libs folder)
-    // compileOnly files('libs/statecraft-1.0.0.jar')
+    // StateCraft integration - company data classes live in StateCraft
+    compileOnly project(':StateCraft')
 }
 
 jar {

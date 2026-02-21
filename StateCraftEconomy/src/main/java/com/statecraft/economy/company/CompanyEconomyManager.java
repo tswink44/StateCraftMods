@@ -1,5 +1,7 @@
 package com.statecraft.economy.company;
 
+import com.statecraft.company.Company;
+import com.statecraft.company.CompanyManager;
 import com.statecraft.economy.StateCraftEconomy;
 import com.statecraft.economy.config.EconomyConfig;
 import com.statecraft.economy.core.EconomyManager;
@@ -15,30 +17,27 @@ import net.minecraft.network.chat.Component;
 import javax.annotation.Nullable;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 /**
- * Central manager for all companies in the economy.
- * Handles company CRUD, dividend distribution, and company taxation.
+ * Economy-specific operations for companies.
+ * Delegates company CRUD and data to StateCraft's CompanyManager.
+ * Owns dividend configuration, treasury management, and company taxation.
  *
  * Singleton — one instance per server.
  */
-public class CompanyManager {
-    private static CompanyManager instance;
+public class CompanyEconomyManager {
+    private static CompanyEconomyManager instance;
 
-    // All companies indexed by ID
-    private final Map<UUID, Company> companies = new ConcurrentHashMap<>();
-
-    // Name index for uniqueness checks (lowercase -> company id)
-    private final Map<String, UUID> nameIndex = new ConcurrentHashMap<>();
+    /** Dividend configs keyed by company UUID. */
+    private final Map<UUID, DividendConfig> dividendConfigs = new ConcurrentHashMap<>();
 
     private boolean dirty = false;
 
-    private CompanyManager() {}
+    private CompanyEconomyManager() {}
 
-    public static CompanyManager getInstance() {
+    public static CompanyEconomyManager getInstance() {
         if (instance == null) {
-            instance = new CompanyManager();
+            instance = new CompanyEconomyManager();
         }
         return instance;
     }
@@ -47,58 +46,45 @@ public class CompanyManager {
         instance = null;
     }
 
-    // ==================== Company CRUD ====================
+    // ==================== Dividend Config Access ====================
 
     /**
-     * Create a new company.
-     *
-     * @param name Company name (must be unique)
-     * @param founderId UUID of the founding player
-     * @param totalShares Total number of shares to issue
-     * @param headquartersCityId Optional city where the company is registered (for tax jurisdiction)
-     * @return The created Company, or null if creation failed (name taken, limit reached)
+     * Get or create dividend config for a company.
+     */
+    public DividendConfig getOrCreateDividendConfig(UUID companyId) {
+        return dividendConfigs.computeIfAbsent(companyId, DividendConfig::new);
+    }
+
+    /**
+     * Get dividend config for a company, or null if none exists.
+     */
+    @Nullable
+    public DividendConfig getDividendConfig(UUID companyId) {
+        return dividendConfigs.get(companyId);
+    }
+
+    // ==================== Economy-Aware Company CRUD ====================
+
+    /**
+     * Create a new company with a treasury account.
+     * Delegates the core creation to StateCraft's CompanyManager, then creates the treasury.
      */
     @Nullable
     public Company createCompany(String name, UUID founderId, int totalShares, @Nullable UUID headquartersCityId) {
-        // Check name uniqueness
-        if (nameIndex.containsKey(name.toLowerCase())) {
-            return null;
-        }
-
-        // Check max companies per player
-        int maxPerPlayer = EconomyConfig.MAX_COMPANIES_PER_PLAYER.get();
-        if (maxPerPlayer > 0) {
-            long foundedCount = companies.values().stream()
-                .filter(c -> c.getFounderId().equals(founderId))
-                .count();
-            if (foundedCount >= maxPerPlayer) {
-                return null;
-            }
-        }
-
-        Company company = new Company(UUID.randomUUID(), name, founderId, totalShares);
-        company.setHeadquartersCityId(headquartersCityId);
-
-        companies.put(company.getId(), company);
-        nameIndex.put(name.toLowerCase(), company.getId());
+        Company company = CompanyManager.getInstance().createCompany(name, founderId, totalShares, headquartersCityId);
+        if (company == null) return null;
 
         // Create the company treasury account
         EconomyManager.getInstance().getOrCreateCompanyTreasury(company.getId());
-
-        dirty = true;
-        StateCraftEconomy.LOGGER.info("Company '{}' created by {} with {} shares", name, founderId, totalShares);
         return company;
     }
 
     /**
-     * Dissolve a company and distribute remaining balance to shareholders.
-     *
-     * @param companyId The company to dissolve
-     * @param initiatorId The player requesting dissolution (must be founder)
-     * @return true if dissolved successfully
+     * Dissolve a company: handle bank dissolution, distribute balance to shareholders,
+     * then delegate the actual removal to StateCraft's CompanyManager.
      */
     public boolean dissolveCompany(UUID companyId, UUID initiatorId) {
-        Company company = companies.get(companyId);
+        Company company = CompanyManager.getInstance().getCompany(companyId);
         if (company == null) return false;
         if (!company.isFounder(initiatorId)) return false;
 
@@ -108,8 +94,7 @@ public class CompanyManager {
         if (company.isBank()) {
             BankManager bankManager = BankManager.getInstance();
             if (bankManager.isBank(companyId)) {
-                // dissolveBank handles depositor refunds and loan cleanup, updates treasury balance
-                bankManager.dissolveBank(companyId, null); // server can be null for non-notification path
+                bankManager.dissolveBank(companyId, null);
             }
         }
 
@@ -130,64 +115,12 @@ public class CompanyManager {
             ecoManager.getOrCreateCompanyTreasury(companyId).setBalance(0);
         }
 
-        // Remove from indices
-        nameIndex.remove(company.getName().toLowerCase());
-        companies.remove(companyId);
+        // Remove dividend config
+        dividendConfigs.remove(companyId);
 
+        // Delegate the actual removal to StateCraft's CompanyManager
         dirty = true;
-        StateCraftEconomy.LOGGER.info("Company '{}' dissolved by {}", company.getName(), initiatorId);
-        return true;
-    }
-
-    // ==================== Lookups ====================
-
-    @Nullable
-    public Company getCompany(UUID companyId) {
-        return companies.get(companyId);
-    }
-
-    @Nullable
-    public Company getCompanyByName(String name) {
-        UUID id = nameIndex.get(name.toLowerCase());
-        return id != null ? companies.get(id) : null;
-    }
-
-    public Collection<Company> getAllCompanies() {
-        return Collections.unmodifiableCollection(companies.values());
-    }
-
-    /**
-     * Rename a company, updating the name index.
-     * @return true if renamed successfully, false if name taken
-     */
-    public boolean renameCompany(UUID companyId, String newName) {
-        Company company = companies.get(companyId);
-        if (company == null) return false;
-        if (nameIndex.containsKey(newName.toLowerCase())) return false;
-
-        nameIndex.remove(company.getName().toLowerCase());
-        company.setName(newName);
-        nameIndex.put(newName.toLowerCase(), companyId);
-        dirty = true;
-        return true;
-    }
-
-    /**
-     * Get all companies where a player is a shareholder, officer, or founder.
-     */
-    public List<Company> getPlayerCompanies(UUID playerId) {
-        return companies.values().stream()
-            .filter(c -> c.isShareholder(playerId) || c.isOfficer(playerId))
-            .collect(Collectors.toList());
-    }
-
-    /**
-     * Get all companies where a player is an officer (can manage).
-     */
-    public List<Company> getPlayerManagedCompanies(UUID playerId) {
-        return companies.values().stream()
-            .filter(c -> c.canManage(playerId))
-            .collect(Collectors.toList());
+        return CompanyManager.getInstance().dissolveCompany(companyId, initiatorId);
     }
 
     // ==================== Dividend Distribution ====================
@@ -198,12 +131,14 @@ public class CompanyManager {
     public void tick(MinecraftServer server) {
         long currentTime = server.overworld().getGameTime();
 
-        for (Company company : companies.values()) {
-            if (!company.isDividendsEnabled()) continue;
-            if (company.getDividendRate() <= 0) continue;
+        for (Company company : CompanyManager.getInstance().getAllCompanies()) {
+            DividendConfig config = dividendConfigs.get(company.getId());
+            if (config == null) continue;
+            if (!config.isEnabled()) continue;
+            if (config.getRate() <= 0) continue;
 
-            if (currentTime - company.getLastDividendTime() >= company.getDividendPeriodTicks()) {
-                distributeDividends(server, company, currentTime);
+            if (currentTime - config.getLastDividendTime() >= config.getPeriodTicks()) {
+                distributeDividends(server, company, config, currentTime);
             }
         }
     }
@@ -211,14 +146,14 @@ public class CompanyManager {
     /**
      * Distribute dividends for a single company.
      */
-    private void distributeDividends(MinecraftServer server, Company company, long currentTime) {
+    private void distributeDividends(MinecraftServer server, Company company, DividendConfig config, long currentTime) {
         EconomyManager ecoManager = EconomyManager.getInstance();
         double balance = ecoManager.getCompanyBalance(company.getId());
-        double totalPayout = company.calculateTotalDividend(balance);
+        double totalPayout = config.calculateTotalDividend(balance);
 
         if (totalPayout <= 0 || balance < totalPayout) {
             // Insufficient funds — skip this cycle and notify founder
-            company.setLastDividendTime(currentTime);
+            config.setLastDividendTime(currentTime);
             dirty = true;
 
             ServerPlayer founder = server.getPlayerList().getPlayer(company.getFounderId());
@@ -249,12 +184,13 @@ public class CompanyManager {
         // Distribute to each shareholder
         for (Map.Entry<UUID, Integer> entry : company.getShareholders().entrySet()) {
             UUID shareholderId = entry.getKey();
-            double payout = company.calculateDividend(balance, shareholderId);
+            double sharePercentage = company.getSharePercentage(shareholderId);
+            double payout = config.calculateDividend(balance, sharePercentage);
             if (payout <= 0.01) continue;
 
             ecoManager.deposit(shareholderId, payout,
                 "Dividend from " + company.getName() +
-                " (" + String.format("%.1f%%", company.getSharePercentage(shareholderId) * 100) + " of shares)");
+                " (" + String.format("%.1f%%", sharePercentage * 100) + " of shares)");
 
             // Notify online shareholders
             ServerPlayer shareholderPlayer = server.getPlayerList().getPlayer(shareholderId);
@@ -265,7 +201,7 @@ public class CompanyManager {
             }
         }
 
-        company.setLastDividendTime(currentTime);
+        config.setLastDividendTime(currentTime);
         dirty = true;
         ecoManager.markDirty();
 
@@ -280,7 +216,8 @@ public class CompanyManager {
      * Tax is a flat rate on company balance, paid to the headquarters city's state treasury.
      */
     public void collectCompanyTaxes(MinecraftServer server) {
-        if (companies.isEmpty()) return;
+        Collection<Company> allCompanies = CompanyManager.getInstance().getAllCompanies();
+        if (allCompanies.isEmpty()) return;
 
         EconomyManager ecoManager = EconomyManager.getInstance();
         double taxRate = EconomyConfig.COMPANY_TAX_RATE.get();
@@ -289,7 +226,7 @@ public class CompanyManager {
         int companiesTaxed = 0;
         double totalCollected = 0;
 
-        for (Company company : companies.values()) {
+        for (Company company : allCompanies) {
             double balance = ecoManager.getCompanyBalance(company.getId());
             if (balance <= 0) continue;
 
@@ -353,33 +290,65 @@ public class CompanyManager {
     public void clearDirty() { dirty = false; }
     public void markDirty() { dirty = true; }
 
+    /**
+     * Save dividend configs to NBT.
+     */
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        ListTag companiesList = new ListTag();
-        for (Company company : companies.values()) {
-            companiesList.add(company.save());
+        ListTag dividendList = new ListTag();
+        for (DividendConfig config : dividendConfigs.values()) {
+            dividendList.add(config.save());
         }
-        tag.put("Companies", companiesList);
+        tag.put("DividendConfigs", dividendList);
         return tag;
     }
 
+    /**
+     * Load dividend configs from NBT.
+     */
     public void load(CompoundTag tag) {
-        companies.clear();
-        nameIndex.clear();
+        dividendConfigs.clear();
 
-        if (tag.contains("Companies")) {
-            ListTag companiesList = tag.getList("Companies", Tag.TAG_COMPOUND);
-            for (int i = 0; i < companiesList.size(); i++) {
-                Company company = Company.load(companiesList.getCompound(i));
-                companies.put(company.getId(), company);
-                nameIndex.put(company.getName().toLowerCase(), company.getId());
+        if (tag.contains("DividendConfigs")) {
+            ListTag dividendList = tag.getList("DividendConfigs", Tag.TAG_COMPOUND);
+            for (int i = 0; i < dividendList.size(); i++) {
+                DividendConfig config = DividendConfig.load(dividendList.getCompound(i));
+                dividendConfigs.put(config.getCompanyId(), config);
             }
         }
 
         dirty = false;
-        StateCraftEconomy.LOGGER.info("Loaded {} companies", companies.size());
+        StateCraftEconomy.LOGGER.info("Loaded {} dividend configs", dividendConfigs.size());
+    }
+
+    /**
+     * Migrate dividend data from legacy Company NBT format.
+     * Called after CompanyManager.load() on worlds that have dividend data
+     * stored in the old Company tags but no CompanyEconomyManager section.
+     *
+     * @param companyManagerTag The raw CompanyManager NBT tag
+     */
+    public void migrateFromLegacyCompanyData(CompoundTag companyManagerTag) {
+        if (!companyManagerTag.contains("Companies")) return;
+
+        ListTag companiesList = companyManagerTag.getList("Companies", Tag.TAG_COMPOUND);
+        int migrated = 0;
+        for (int i = 0; i < companiesList.size(); i++) {
+            CompoundTag companyTag = companiesList.getCompound(i);
+            // Only migrate if the company tag has dividend data
+            if (companyTag.contains("DividendsEnabled") || companyTag.contains("DividendRate")) {
+                UUID companyId = companyTag.getUUID("Id");
+                if (!dividendConfigs.containsKey(companyId)) {
+                    DividendConfig config = DividendConfig.importFromLegacyCompanyTag(companyId, companyTag);
+                    dividendConfigs.put(companyId, config);
+                    migrated++;
+                }
+            }
+        }
+
+        if (migrated > 0) {
+            dirty = true;
+            StateCraftEconomy.LOGGER.info("Migrated {} dividend configs from legacy Company data", migrated);
+        }
     }
 }
-
-
-

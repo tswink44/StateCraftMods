@@ -241,10 +241,7 @@ public class ExecutiveActionsScreen extends StateCraftScreen {
             graphics.drawCenteredString(this.font, resultMessage, this.width / 2, guiTop + guiHeight - 73, 0xFFFFFFFF);
         }
 
-        // Confirmation dialog
-        if (showConfirmation) {
-            renderConfirmationDialog(graphics, mouseX, mouseY);
-        }
+        // Confirmation dialog is rendered in render() override so it appears on top of all widgets
     }
 
     private void renderPowerEntry(GuiGraphics graphics, int startX, int y, PowerEntry entry, int mouseX, int mouseY) {
@@ -304,26 +301,6 @@ public class ExecutiveActionsScreen extends StateCraftScreen {
         }
     }
 
-    private void renderConfirmationDialog(GuiGraphics graphics, int mouseX, int mouseY) {
-        int dialogWidth = 220;
-        int dialogHeight = 80;
-        int dx = this.width / 2 - dialogWidth / 2;
-        int dy = this.height / 2 - dialogHeight / 2;
-
-        // Background
-        graphics.fill(dx - 2, dy - 2, dx + dialogWidth + 2, dy + dialogHeight + 2, 0xFF000000);
-        graphics.fill(dx, dy, dx + dialogWidth, dy + dialogHeight, 0xFF1A1A2E);
-        graphics.fill(dx, dy, dx + dialogWidth, dy + 1, COLOR_WARNING);
-
-        // Text
-        graphics.drawCenteredString(this.font, "§c§lConfirm Executive Action", this.width / 2, dy + 8, 0xFFFF4444);
-        graphics.drawCenteredString(this.font, "§fInvoke §e" + confirmDisplayName + "§f?", this.width / 2, dy + 24, 0xFFFFFFFF);
-        graphics.drawCenteredString(this.font, "§7This action has serious consequences.", this.width / 2, dy + 36, 0xFF999999);
-
-        // Use the last two widget slots for confirm/cancel
-        // We handle clicks manually for the dialog buttons
-    }
-
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (showConfirmation) {
@@ -354,7 +331,7 @@ public class ExecutiveActionsScreen extends StateCraftScreen {
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         super.render(graphics, mouseX, mouseY, partialTick);
 
-        // Render confirmation dialog buttons on top of everything
+        // Render confirmation dialog on top of everything (after all widgets)
         if (showConfirmation) {
             int dialogWidth = 220;
             int dialogHeight = 80;
@@ -362,12 +339,25 @@ public class ExecutiveActionsScreen extends StateCraftScreen {
             int dy = this.height / 2 - dialogHeight / 2;
             int btnY = dy + dialogHeight - 24;
 
-            // Confirm
+            // Full-screen opaque dimming overlay to block all content behind the dialog
+            graphics.fill(0, 0, this.width, this.height, 0xCC000000);
+
+            // Dialog background (fully opaque)
+            graphics.fill(dx - 2, dy - 2, dx + dialogWidth + 2, dy + dialogHeight + 2, 0xFF000000);
+            graphics.fill(dx, dy, dx + dialogWidth, dy + dialogHeight, 0xFF1A1A2E);
+            graphics.fill(dx, dy, dx + dialogWidth, dy + 1, COLOR_WARNING);
+
+            // Text
+            graphics.drawCenteredString(this.font, "§c§lConfirm Executive Action", this.width / 2, dy + 8, 0xFFFF4444);
+            graphics.drawCenteredString(this.font, "§fInvoke §e" + confirmDisplayName + "§f?", this.width / 2, dy + 24, 0xFFFFFFFF);
+            graphics.drawCenteredString(this.font, "§7This action has serious consequences.", this.width / 2, dy + 36, 0xFF999999);
+
+            // Confirm button
             boolean hoverConfirm = mouseX >= dx + 20 && mouseX <= dx + 100 && mouseY >= btnY && mouseY <= btnY + 18;
             graphics.fill(dx + 20, btnY, dx + 100, btnY + 18, hoverConfirm ? 0xFFCC3333 : 0xFF882222);
             graphics.drawCenteredString(this.font, "§cConfirm", dx + 60, btnY + 5, 0xFFFFFFFF);
 
-            // Cancel
+            // Cancel button
             boolean hoverCancel = mouseX >= dx + 120 && mouseX <= dx + 200 && mouseY >= btnY && mouseY <= btnY + 18;
             graphics.fill(dx + 120, btnY, dx + 200, btnY + 18, hoverCancel ? 0xFF555555 : 0xFF333333);
             graphics.drawCenteredString(this.font, "§7Cancel", dx + 160, btnY + 5, 0xFFFFFFFF);
