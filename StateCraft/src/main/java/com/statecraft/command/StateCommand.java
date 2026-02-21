@@ -46,7 +46,7 @@ public class StateCommand {
                 return 0;
             }
 
-            if (!nation.isAdmin(player.getUUID())) {
+            if (!nation.isLeaderOrOfficer(player.getUUID())) {
                 context.getSource().sendFailure(Component.literal("Only nation admins can create states!"));
                 return 0;
             }

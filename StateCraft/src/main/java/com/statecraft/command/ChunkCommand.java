@@ -58,7 +58,7 @@ public class ChunkCommand {
             for (State state : nation.getAllStates()) {
                 for (City city : state.getAllCities()) {
                     // Check if player is mayor or nation admin
-                    if (player.getUUID().equals(city.getMayorId()) || nation.isAdmin(player.getUUID())) {
+                    if (player.getUUID().equals(city.getMayorId()) || nation.isLeaderOrOfficer(player.getUUID())) {
                         playerCity = city;
                         break;
                     }
@@ -145,7 +145,7 @@ public class ChunkCommand {
             }
 
             // Check permission - must be city mayor or nation admin
-            if (!player.getUUID().equals(targetCity.getMayorId()) && !nation.isAdmin(player.getUUID())) {
+            if (!player.getUUID().equals(targetCity.getMayorId()) && !nation.isLeaderOrOfficer(player.getUUID())) {
                 context.getSource().sendFailure(Component.literal("You don't have permission to claim chunks for this city!"));
                 return 0;
             }
@@ -215,7 +215,7 @@ public class ChunkCommand {
             }
 
             Nation nation = ChunkClaimManager.getInstance().getPlayerNation(player.getUUID());
-            if (nation == null || (!player.getUUID().equals(city.getMayorId()) && !nation.isAdmin(player.getUUID()))) {
+            if (nation == null || (!player.getUUID().equals(city.getMayorId()) && !nation.isLeaderOrOfficer(player.getUUID()))) {
                 context.getSource().sendFailure(Component.literal("You don't have permission to unclaim this chunk!"));
                 return 0;
             }
@@ -305,7 +305,7 @@ public class ChunkCommand {
                     canTransfer = true;
                 }
                 Nation nation = ChunkClaimManager.getInstance().getPlayerNation(player.getUUID());
-                if (nation != null && nation.isAdmin(player.getUUID())) {
+                if (nation != null && nation.isLeaderOrOfficer(player.getUUID())) {
                     canTransfer = true;
                 }
             }

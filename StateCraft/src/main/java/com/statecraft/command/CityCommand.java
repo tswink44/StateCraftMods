@@ -57,8 +57,8 @@ public class CityCommand {
                 return 0;
             }
 
-            // Check permission - must be state governor or nation admin
-            if (!player.getUUID().equals(state.getGovernorId()) && !nation.isAdmin(player.getUUID())) {
+            // Check permission - must be state governor or nation leader/officer
+            if (!player.getUUID().equals(state.getGovernorId()) && !nation.isLeaderOrOfficer(player.getUUID())) {
                 context.getSource().sendFailure(Component.literal("You don't have permission to create cities in this state!"));
                 return 0;
             }

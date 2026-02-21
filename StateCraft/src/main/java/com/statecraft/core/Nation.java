@@ -15,7 +15,6 @@ public class Nation {
     private final UUID id;
     private String name;
     private UUID leaderId; // Nation leader/ruler
-    private final Set<UUID> admins; // Co-leaders with administrative powers
     private final Set<UUID> officers; // Legislature voting members appointed by leader
     private final Set<UUID> members; // Basic nation members (not in a city yet)
     private final Map<UUID, State> states;
@@ -47,7 +46,6 @@ public class Nation {
         this.id = id;
         this.name = name;
         this.leaderId = leaderId;
-        this.admins = new HashSet<>();
         this.officers = new HashSet<>();
         this.members = new HashSet<>();
         this.states = new HashMap<>();
@@ -88,38 +86,6 @@ public class Nation {
         this.leaderId = leaderId;
     }
 
-    // TODO: Remove admins set entirely once Economy mod is refactored to stop calling isAdmin() via reflection.
-    // The "admin" role no longer exists in the governance model. Roles are: Leader, Officer, Governor, Mayor, Citizen.
-    // Kept for backward save compatibility — old saves may have admin entries which are migrated to officers on load.
-
-    /** @deprecated Admin role removed. Use isLeader(), isOfficer(), or specific role checks instead. */
-    @Deprecated
-    public Set<UUID> getAdmins() {
-        return Collections.unmodifiableSet(admins);
-    }
-
-    /** @deprecated Admin role removed. Use addOfficer() instead. */
-    @Deprecated
-    public void addAdmin(UUID playerId) {
-        // Migrate: admins now become officers
-        officers.add(playerId);
-    }
-
-    /** @deprecated Admin role removed. Use removeOfficer() instead. */
-    @Deprecated
-    public void removeAdmin(UUID playerId) {
-        admins.remove(playerId);
-    }
-
-    /**
-     * @deprecated Admin role removed from governance model.
-     * Returns true for Leader only (backward compat for Economy mod reflection calls).
-     * Use isLeader() or isOfficer() directly instead.
-     */
-    @Deprecated
-    public boolean isAdmin(UUID playerId) {
-        return playerId.equals(leaderId);
-    }
 
     /**
      * Check if player is the nation leader or an officer.
@@ -155,7 +121,6 @@ public class Nation {
 
     public void removeMember(UUID playerId) {
         members.remove(playerId);
-        admins.remove(playerId);
         officers.remove(playerId);
     }
 
@@ -484,7 +449,7 @@ public class Nation {
     public Set<UUID> getAllMembers() {
         Set<UUID> allMembers = new HashSet<>();
         allMembers.add(leaderId);
-        allMembers.addAll(admins);
+        allMembers.addAll(officers);
         allMembers.addAll(members);
         for (State state : states.values()) {
             allMembers.addAll(state.getAllResidents());
@@ -538,14 +503,6 @@ public class Nation {
         tag.putInt("electionDurationDays", electionDurationDays);
         tag.putInt("maxOfficers", maxOfficers);
 
-        // Save admins
-        ListTag adminsList = new ListTag();
-        for (UUID admin : admins) {
-            CompoundTag adminTag = new CompoundTag();
-            adminTag.putUUID("id", admin);
-            adminsList.add(adminTag);
-        }
-        tag.put("admins", adminsList);
 
         // Save officers
         ListTag officersList = new ListTag();

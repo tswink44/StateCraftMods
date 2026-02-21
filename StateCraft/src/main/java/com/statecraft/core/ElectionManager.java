@@ -192,7 +192,7 @@ public class ElectionManager {
             return "No active election for this nation";
         }
 
-        if (!nation.isMember(playerId) && !nation.isAdmin(playerId) && !nation.getLeaderId().equals(playerId)) {
+        if (!nation.isMember(playerId) && !nation.isLeaderOrOfficer(playerId) && !nation.getLeaderId().equals(playerId)) {
             // Check if citizen of any city
             boolean isCitizen = false;
             for (State state : nation.getAllStates()) {
@@ -380,11 +380,11 @@ public class ElectionManager {
     }
 
     /**
-     * Check if a player is a citizen of a nation (member, admin, leader, or city resident)
+     * Check if a player is a citizen of a nation (member, officer, leader, or city resident)
      */
     private boolean isNationCitizen(Nation nation, UUID playerId) {
         if (nation.getLeaderId().equals(playerId)) return true;
-        if (nation.isAdmin(playerId)) return true;
+        if (nation.isLeaderOrOfficer(playerId)) return true;
         if (nation.isMember(playerId)) return true;
 
         for (State state : nation.getAllStates()) {

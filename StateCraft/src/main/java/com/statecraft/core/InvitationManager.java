@@ -180,12 +180,12 @@ public class InvitationManager {
             return false;
         }
 
-        // Check permission - must be sender or nation admin
+        // Check permission - must be sender or nation leader/officer
         if (!invitation.getSenderId().equals(cancelerId)) {
             ChunkClaimManager claimManager = ChunkClaimManager.getInstance();
             if (invitation.getType() == Invitation.InvitationType.NATION) {
                 Nation nation = claimManager.getNation(invitation.getEntityId());
-                if (nation == null || !nation.isAdmin(cancelerId)) {
+                if (nation == null || !nation.isLeaderOrOfficer(cancelerId)) {
                     return false;
                 }
             } else {

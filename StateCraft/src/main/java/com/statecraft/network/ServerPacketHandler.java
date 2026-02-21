@@ -802,8 +802,8 @@ public class ServerPacketHandler {
             if (nation != null) {
                 State state = nation.getStateByName(packet.getStateName());
                 if (state != null) {
-                    // Check if player can create cities (state governor or nation admin)
-                    canCreateCity = player.getUUID().equals(state.getGovernorId()) || nation.isAdmin(player.getUUID());
+                    // Check if player can create cities (state governor or nation leader/officer)
+                    canCreateCity = player.getUUID().equals(state.getGovernorId()) || nation.isLeaderOrOfficer(player.getUUID());
 
                     for (City city : state.getAllCities()) {
                         String mayorName = getPlayerName(player.server, city.getMayorId());
@@ -845,7 +845,7 @@ public class ServerPacketHandler {
             }
 
             // Check permissions - must be state governor or nation admin
-            if (!player.getUUID().equals(state.getGovernorId()) && !nation.isAdmin(player.getUUID())) {
+            if (!player.getUUID().equals(state.getGovernorId()) && !nation.isLeaderOrOfficer(player.getUUID())) {
                 NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Only the governor or nation admins can create cities!"), player);
                 return;
             }
@@ -931,7 +931,7 @@ public class ServerPacketHandler {
 
             String mayorName = getPlayerName(player.server, city.getMayorId());
             boolean isMayor = player.getUUID().equals(city.getMayorId());
-            boolean canManage = isMayor || player.getUUID().equals(state.getGovernorId()) || nation.isAdmin(player.getUUID());
+            boolean canManage = isMayor || player.getUUID().equals(state.getGovernorId()) || nation.isLeaderOrOfficer(player.getUUID());
             boolean canAppoint = player.getUUID().equals(state.getGovernorId()) || player.getUUID().equals(nation.getLeaderId());
 
             List<String> residentNames = new ArrayList<>();
@@ -975,7 +975,7 @@ public class ServerPacketHandler {
             // Check permissions - only mayor, governor, or nation admin can view settings
             boolean canManage = player.getUUID().equals(city.getMayorId()) ||
                                player.getUUID().equals(state.getGovernorId()) ||
-                               nation.isAdmin(player.getUUID());
+                               nation.isLeaderOrOfficer(player.getUUID());
 
             if (!canManage) {
                 player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§cYou don't have permission to view city settings"));
@@ -1163,9 +1163,9 @@ public class ServerPacketHandler {
                     boolean isMayor = player.getUUID().equals(city.getMayorId());
                     boolean isGovernor = state != null && player.getUUID().equals(state.getGovernorId());
                     boolean isPresident = nation != null && player.getUUID().equals(nation.getLeaderId());
-                    boolean isNationAdmin = nation != null && nation.isAdmin(player.getUUID());
+                    boolean isNationLeaderOrOfficer = nation != null && nation.isLeaderOrOfficer(player.getUUID());
 
-                    canManagePermits = isMayor || isGovernor || isPresident || isNationAdmin;
+                    canManagePermits = isMayor || isGovernor || isPresident || isNationLeaderOrOfficer;
                 } else {
                     ownerName = "Unknown City";
                 }
@@ -1215,9 +1215,9 @@ public class ServerPacketHandler {
                     boolean isMayor = player.getUUID().equals(city.getMayorId());
                     boolean isGovernor = state != null && player.getUUID().equals(state.getGovernorId());
                     boolean isPresident = nation != null && player.getUUID().equals(nation.getLeaderId());
-                    boolean isNationAdmin = nation != null && nation.isAdmin(player.getUUID());
+                    boolean isNationLeaderOrOfficer = nation != null && nation.isLeaderOrOfficer(player.getUUID());
 
-                    canManage = isMayor || isGovernor || isPresident || isNationAdmin;
+                    canManage = isMayor || isGovernor || isPresident || isNationLeaderOrOfficer;
                 }
             }
 
@@ -1304,9 +1304,9 @@ public class ServerPacketHandler {
                         boolean isMayor = player.getUUID().equals(city.getMayorId());
                         boolean isGovernor = state != null && player.getUUID().equals(state.getGovernorId());
                         boolean isPresident = nation != null && player.getUUID().equals(nation.getLeaderId());
-                        boolean isNationAdmin = nation != null && nation.isAdmin(player.getUUID());
+                        boolean isNationLeaderOrOfficer = nation != null && nation.isLeaderOrOfficer(player.getUUID());
 
-                        canManagePermits = isMayor || isGovernor || isPresident || isNationAdmin;
+                        canManagePermits = isMayor || isGovernor || isPresident || isNationLeaderOrOfficer;
                     }
                 }
 
@@ -1458,7 +1458,7 @@ public class ServerPacketHandler {
                     }
 
                     // Check if player is admin
-                    if (!nation.isAdmin(playerId)) {
+                    if (!nation.isLeaderOrOfficer(playerId)) {
                         player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§cYou must be a nation admin to change settings"));
                         return;
                     }
@@ -1506,7 +1506,7 @@ public class ServerPacketHandler {
                     }
 
                     // Check if player is governor or nation admin
-                    if (!playerId.equals(state.getGovernorId()) && !playerNation.isAdmin(playerId)) {
+                    if (!playerId.equals(state.getGovernorId()) && !playerNation.isLeaderOrOfficer(playerId)) {
                         player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§cYou must be a state governor or nation admin to change settings"));
                         return;
                     }
@@ -1572,7 +1572,7 @@ public class ServerPacketHandler {
                     // Check if player is mayor, state governor, or nation admin
                     if (!playerId.equals(city.getMayorId()) &&
                         !playerId.equals(parentState.getGovernorId()) &&
-                        !playerNation.isAdmin(playerId)) {
+                        !playerNation.isLeaderOrOfficer(playerId)) {
                         player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§cYou must be a city mayor, state governor, or nation admin to change settings"));
                         return;
                     }
@@ -2267,7 +2267,7 @@ public class ServerPacketHandler {
                     }
 
                     // Check if sender has permission to invite
-                    if (!nation.isAdmin(sender.getUUID())) {
+                    if (!nation.isLeaderOrOfficer(sender.getUUID())) {
                         NetworkHandler.sendToPlayer(new ActionResultPacket(false,
                             "You don't have permission to invite players to this nation!"), sender);
                         return;

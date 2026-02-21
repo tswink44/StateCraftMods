@@ -71,8 +71,10 @@ repositories {
 dependencies {
     minecraft 'net.minecraftforge:forge:1.20.1-47.2.0'
 
-    // StateCraft integration - company data classes live in StateCraft
-    compileOnly project(':StateCraft')
+    // StateCraft integration - company/nation data classes live in StateCraft
+    // Uses the built jar so Economy can compile standalone (without the root multi-project).
+    // Rebuild StateCraft first if you change its classes: cd ../StateCraft && ./gradlew build
+    compileOnly files("../StateCraft/build/libs/statecraft-1.0.0.jar")
 }
 
 jar {

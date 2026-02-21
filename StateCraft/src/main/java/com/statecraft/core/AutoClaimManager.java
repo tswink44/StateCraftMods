@@ -45,8 +45,8 @@ public class AutoClaimManager {
             return false;
         }
 
-        // Must be nation admin (includes leader)
-        return nation.isAdmin(player.getUUID());
+        // Must be nation leader or officer
+        return nation.isLeaderOrOfficer(player.getUUID());
     }
 
     /**
@@ -57,7 +57,7 @@ public class AutoClaimManager {
 
         // Check permission
         if (!canPlayerAutoClaim(player)) {
-            NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Only nation admins can use auto-claim!"), player);
+            NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Only nation leaders/officers can use auto-claim!"), player);
             syncAutoClaimState(player);
             return false;
         }
@@ -90,7 +90,7 @@ public class AutoClaimManager {
                 // Find any city the player can manage
                 for (State state : nation.getAllStates()) {
                     for (City city : state.getAllCities()) {
-                        if (playerId.equals(city.getMayorId()) || nation.isAdmin(playerId)) {
+                        if (playerId.equals(city.getMayorId()) || nation.isLeaderOrOfficer(playerId)) {
                             targetCity = city;
                             break;
                         }
