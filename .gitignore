@@ -10,18 +10,11 @@ build/
 *.iws
 out/
 
-# Minecraft run data
-run/logs/
-run/crash-reports/
-run/saves/
-run/config/
-run/*.log
-run/*.txt
-run/usercache.json
-run/usernamecache.json
-run/options.txt
-run/realms_persistence.json
-run/servers.dat
+# Minecraft run directories (server, test clients, data gen)
+**/run/
+**/run-client2/
+**/run-client3/
+**/run-data/
 
 # Eclipse
 .classpath
