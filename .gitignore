@@ -3,6 +3,9 @@
 build/
 !gradle/wrapper/gradle-wrapper.jar
 
+# Gradle checksums
+.gradle/*/checksums/
+
 # IntelliJ IDEA
 .idea/
 *.iml
@@ -22,6 +25,11 @@ run/usernamecache.json
 run/options.txt
 run/realms_persistence.json
 run/servers.dat
+
+# StateCraft specific run logs
+StateCraft/run/*
+StateCraft/run-client2/*
+StateCraft/run-data/*
 
 # Eclipse
 .classpath
