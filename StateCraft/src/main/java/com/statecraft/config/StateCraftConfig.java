@@ -42,11 +42,16 @@ public class StateCraftConfig {
     public static final ForgeConfigSpec.IntValue LEGISLATURE_QUORUM_PERCENT;
     public static final ForgeConfigSpec.IntValue LEGISLATURE_VETO_OVERRIDE_PERCENT;
     public static final ForgeConfigSpec.IntValue EMERGENCY_POWER_COOLDOWN_DAYS;
+    public static final ForgeConfigSpec.DoubleValue EMERGENCY_TAX_RATE;
+    public static final ForgeConfigSpec.DoubleValue MAX_EMERGENCY_TAX_RATE;
 
     // Diplomacy Settings
     public static final ForgeConfigSpec.BooleanValue PVP_PROTECT_SAME_NATION;
     public static final ForgeConfigSpec.BooleanValue PVP_PROTECT_ALLIES;
     public static final ForgeConfigSpec.IntValue MAX_DIPLOMACY_PROPOSALS;
+    public static final ForgeConfigSpec.IntValue PEACE_MAX_CURRENCY_PERCENT;
+    public static final ForgeConfigSpec.IntValue PEACE_MAX_CHUNK_COUNT;
+    public static final ForgeConfigSpec.IntValue PEACE_MAX_CHUNK_IMPROVEMENT_SCORE;
 
     // Company Settings
     public static final ForgeConfigSpec.IntValue MAX_COMPANIES_PER_PLAYER;
@@ -155,6 +160,12 @@ public class StateCraftConfig {
         BUILDER.comment("Cooldown in days before an emergency power can be used again");
         EMERGENCY_POWER_COOLDOWN_DAYS = BUILDER.defineInRange("emergencyPowerCooldownDays", 30, 0, 365);
 
+        BUILDER.comment("Default emergency tax rate (0.01 = 1%, 0.10 = 10%). Nations can override via legislature.");
+        EMERGENCY_TAX_RATE = BUILDER.defineInRange("emergencyTaxRate", 0.10, 0.01, 0.20);
+
+        BUILDER.comment("Maximum emergency tax rate a nation's legislature can set (cap to prevent abuse)");
+        MAX_EMERGENCY_TAX_RATE = BUILDER.defineInRange("maxEmergencyTaxRate", 0.20, 0.01, 0.50);
+
         BUILDER.pop();
 
         BUILDER.comment(
@@ -170,6 +181,15 @@ public class StateCraftConfig {
 
         BUILDER.comment("Maximum number of outbound diplomatic proposals per nation (alliance + peace)");
         MAX_DIPLOMACY_PROPOSALS = BUILDER.defineInRange("maxDiplomacyProposals", 5, 1, 50);
+
+        BUILDER.comment("Maximum currency demand in peace treaties as % of target nation's treasury (200 = 2x treasury, allows debt)");
+        PEACE_MAX_CURRENCY_PERCENT = BUILDER.defineInRange("peaceMaxCurrencyPercent", 200, 0, 1000);
+
+        BUILDER.comment("Maximum number of chunks that can be demanded in a peace treaty");
+        PEACE_MAX_CHUNK_COUNT = BUILDER.defineInRange("peaceMaxChunkCount", 10, 0, 100);
+
+        BUILDER.comment("Maximum total improvement score of chunks demanded in a peace treaty");
+        PEACE_MAX_CHUNK_IMPROVEMENT_SCORE = BUILDER.defineInRange("peaceMaxChunkImprovementScore", 500, 0, 100000);
 
         BUILDER.pop();
 

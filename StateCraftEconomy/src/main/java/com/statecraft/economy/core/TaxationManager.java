@@ -127,10 +127,15 @@ public class TaxationManager {
                     double taxAmount = calculateChunkTax(chunk, cityTaxRate);
                     UUID ownerId = chunk.getOwnerId();
 
-                    // Collect tax from owner
-                    TaxResult taxResult = collectTaxFromPlayer(server, ownerId, taxAmount, chunk);
+                    // Collect tax from owner (player or company)
+                    TaxResult taxResult;
+                    if (chunk.isCompanyOwned()) {
+                        taxResult = collectTaxFromCompany(server, ownerId, taxAmount, chunk);
+                    } else {
+                        taxResult = collectTaxFromPlayer(server, ownerId, taxAmount, chunk);
+                    }
 
-                    // Track player summary
+                    // Track player/company summary
                     playerTaxSummaries.computeIfAbsent(ownerId, k -> new PlayerTaxSummary())
                         .addTax(taxAmount);
 
@@ -140,26 +145,25 @@ public class TaxationManager {
                         result.chunksProcessed++;
                         cityChunksProcessed++;
 
-                        // Reset negative count on successful payment
-                        resetNegativeCount(chunk);
-                    } else if (taxResult.wentNegative) {
-                        cityRevenue += taxResult.amountCollected; // Still collect even if negative
-                        result.totalCollected += taxResult.amountCollected;
-                        result.chunksProcessed++;
-                        result.negativeBalances++;
-                        cityChunksProcessed++;
+                        if (taxResult.wentNegative) {
+                            // Payment went through but account is now negative
+                            result.negativeBalances++;
 
-                        // Track negative balance
-                        int negCount = incrementNegativeCount(chunk);
+                            // Track consecutive negative balance
+                            int negCount = incrementNegativeCount(chunk);
 
-                        if (negCount >= REPOSSESSION_THRESHOLD) {
-                            // Repossess the chunk
-                            repossessChunk(server, chunk, ownerId);
-                            result.chunksRepossessed++;
-                            resetNegativeCount(chunk);
+                            if (negCount >= REPOSSESSION_THRESHOLD) {
+                                // Repossess the chunk
+                                repossessChunk(server, chunk, ownerId);
+                                result.chunksRepossessed++;
+                                resetNegativeCount(chunk);
+                            } else {
+                                // Warn the player via mail
+                                warnPlayerAboutNegativeBalance(server, ownerId, chunk, negCount);
+                            }
                         } else {
-                            // Warn the player via mail
-                            warnPlayerAboutNegativeBalance(server, ownerId, chunk, negCount);
+                            // Successful payment with positive balance — reset negative count
+                            resetNegativeCount(chunk);
                         }
                     }
                 }
@@ -360,6 +364,40 @@ public class TaxationManager {
     }
 
     /**
+     * Collect property tax from a company treasury.
+     * Company-owned chunks are taxed from the company's treasury balance.
+     * If insufficient funds, the tax is force-withdrawn (can go negative).
+     */
+    private TaxResult collectTaxFromCompany(MinecraftServer server, UUID companyId, double amount, ChunkTaxInfo chunk) {
+        EconomyManager ecoManager = EconomyManager.getInstance();
+        double currentBalance = ecoManager.getCompanyBalance(companyId);
+
+        TaxResult result = new TaxResult();
+        result.amountCollected = amount;
+
+        String description = "Property tax for chunk (" + chunk.getChunkX() + ", " + chunk.getChunkZ() + ")";
+
+        if (currentBalance >= amount) {
+            // Sufficient funds — withdraw normally
+            ecoManager.getOrCreateCompanyTreasury(companyId).subtract(amount);
+            ecoManager.recordAccountTransaction(companyId, Transaction.Type.TAX, amount, null,
+                description, null, "Tax System");
+            result.collected = true;
+            result.wentNegative = false;
+        } else {
+            // Insufficient funds — force withdraw (company treasury goes negative)
+            ecoManager.getOrCreateCompanyTreasury(companyId).forceSubtract(amount);
+            ecoManager.recordAccountTransaction(companyId, Transaction.Type.TAX, amount, null,
+                "[FORCED] " + description, null, "Tax System");
+            result.collected = true;
+            result.wentNegative = true;
+        }
+
+        ecoManager.markDirty();
+        return result;
+    }
+
+    /**
      * Get the unique key for tracking negative balances per chunk ownership
      */
     private String getChunkOwnerKey(ChunkTaxInfo chunk) {
@@ -380,11 +418,12 @@ public class TaxationManager {
     }
 
     /**
-     * Repossess a chunk from a player due to unpaid taxes
+     * Repossess a chunk from a player or company due to unpaid taxes
      */
     private void repossessChunk(MinecraftServer server, ChunkTaxInfo chunk, UUID formerOwnerId) {
-        StateCraftEconomy.LOGGER.info("Repossessing chunk ({}, {}) from player {} due to unpaid taxes",
-            chunk.getChunkX(), chunk.getChunkZ(), formerOwnerId);
+        String ownerLabel = chunk.isCompanyOwned() ? "company " + formerOwnerId : "player " + formerOwnerId;
+        StateCraftEconomy.LOGGER.info("Repossessing chunk ({}, {}) from {} due to unpaid taxes",
+            chunk.getChunkX(), chunk.getChunkZ(), ownerLabel);
 
         // Transfer ownership back to government (null owner = government owned)
         boolean success = StateCraftIntegration.transferChunkToGovernment(
@@ -395,38 +434,69 @@ public class TaxationManager {
             String cityName = StateCraftIntegration.getCityName(chunk.getCityId());
             if (cityName == null || cityName.isEmpty()) cityName = "Unknown City";
 
-            // Send mail notification
-            StateCraftIntegration.sendRepossessionNotice(formerOwnerId, chunk.getChunkX(), chunk.getChunkZ(), cityName);
+            if (chunk.isCompanyOwned()) {
+                // Company-owned chunk — notify founder
+                com.statecraft.company.Company company =
+                    com.statecraft.company.CompanyManager.getInstance().getCompany(formerOwnerId);
+                if (company != null) {
+                    StateCraftIntegration.sendRepossessionNotice(
+                        company.getFounderId(), chunk.getChunkX(), chunk.getChunkZ(), cityName);
+                    // Notify founder if online
+                    ServerPlayer founder = server.getPlayerList().getPlayer(company.getFounderId());
+                    if (founder != null) {
+                        founder.sendSystemMessage(Component.literal(
+                            "§c§lTAX REPOSSESSION: §r" + company.getName() + "'s chunk at (" +
+                            chunk.getChunkX() + ", " + chunk.getChunkZ() +
+                            ") has been repossessed due to 3 consecutive tax periods with negative balance."
+                        ));
+                    }
+                }
+            } else {
+                // Player-owned chunk
+                StateCraftIntegration.sendRepossessionNotice(formerOwnerId, chunk.getChunkX(), chunk.getChunkZ(), cityName);
 
-            // Also notify the player directly if online
-            ServerPlayer player = server.getPlayerList().getPlayer(formerOwnerId);
-            if (player != null) {
-                player.sendSystemMessage(Component.literal(
-                    "§c§lTAX REPOSSESSION: §rYour chunk at (" + chunk.getChunkX() + ", " + chunk.getChunkZ() +
-                    ") has been repossessed due to 3 consecutive tax periods with negative balance."
-                ));
+                // Also notify the player directly if online
+                ServerPlayer player = server.getPlayerList().getPlayer(formerOwnerId);
+                if (player != null) {
+                    player.sendSystemMessage(Component.literal(
+                        "§c§lTAX REPOSSESSION: §rYour chunk at (" + chunk.getChunkX() + ", " + chunk.getChunkZ() +
+                        ") has been repossessed due to 3 consecutive tax periods with negative balance."
+                    ));
+                }
             }
         }
     }
 
     /**
-     * Warn player about their negative balance status
+     * Warn player/company about their negative balance status
      */
-    private void warnPlayerAboutNegativeBalance(MinecraftServer server, UUID playerId, ChunkTaxInfo chunk, int negCount) {
+    private void warnPlayerAboutNegativeBalance(MinecraftServer server, UUID ownerId, ChunkTaxInfo chunk, int negCount) {
         int remaining = REPOSSESSION_THRESHOLD - negCount;
-        double balance = EconomyManager.getInstance().getBalance(playerId);
 
-        // Send mail warning
-        StateCraftIntegration.sendTaxWarning(playerId, chunk.getChunkX(), chunk.getChunkZ(), remaining, balance);
+        if (chunk.isCompanyOwned()) {
+            // Company-owned: warn the founder
+            double balance = EconomyManager.getInstance().getCompanyBalance(ownerId);
+            com.statecraft.company.Company company =
+                com.statecraft.company.CompanyManager.getInstance().getCompany(ownerId);
+            if (company != null) {
+                StateCraftIntegration.sendTaxWarning(company.getFounderId(),
+                    chunk.getChunkX(), chunk.getChunkZ(), remaining, balance);
+            }
+        } else {
+            double balance = EconomyManager.getInstance().getBalance(ownerId);
+            StateCraftIntegration.sendTaxWarning(ownerId, chunk.getChunkX(), chunk.getChunkZ(), remaining, balance);
+        }
 
-        // Also notify directly if online
-        ServerPlayer player = server.getPlayerList().getPlayer(playerId);
-        if (player != null) {
-            player.sendSystemMessage(Component.literal(
-                "§e§lTAX WARNING: §rYou have a negative balance after paying taxes for chunk (" +
-                chunk.getChunkX() + ", " + chunk.getChunkZ() + "). " +
-                "§c" + remaining + "§r more negative tax period(s) and the chunk will be repossessed!"
-            ));
+        // Also notify directly if online (only for player-owned chunks)
+        if (!chunk.isCompanyOwned()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(ownerId);
+            if (player != null) {
+                player.sendSystemMessage(Component.literal(
+                    "§e§lTAX WARNING: §rYou have a negative balance after paying taxes for chunk (" +
+                    chunk.getChunkX() + ", " + chunk.getChunkZ() + "). " +
+                    "§c" + remaining + "§r more negative tax period(s) and the chunk will be repossessed!"
+                ));
+            }
         }
     }
 
@@ -506,7 +576,7 @@ public class TaxationManager {
     }
 
     // Tax rate getters
-    private double getTaxRateForCity(UUID cityId) {
+    public double getTaxRateForCity(UUID cityId) {
         // Get the city's configured tax rate via StateCraft integration
         double rate = StateCraftIntegration.getCityTaxRate(cityId);
         if (rate < 0) {
@@ -675,14 +745,22 @@ public class TaxationManager {
         private final int chunkZ;
         private final String dimension;
         private final UUID cityId;
-        private final UUID ownerId;
+        private final UUID ownerId; // Player UUID or Company UUID depending on companyOwned
         private final boolean privatelyOwned;
         private final double salePrice;
         private final net.minecraft.resources.ResourceKey<?> dimensionKey;
+        private final boolean companyOwned; // true if owned by a company (ownerId is companyId)
 
         public ChunkTaxInfo(int chunkX, int chunkZ, String dimension,
                           net.minecraft.resources.ResourceKey<?> dimensionKey,
                           UUID cityId, UUID ownerId, boolean privatelyOwned, double salePrice) {
+            this(chunkX, chunkZ, dimension, dimensionKey, cityId, ownerId, privatelyOwned, salePrice, false);
+        }
+
+        public ChunkTaxInfo(int chunkX, int chunkZ, String dimension,
+                          net.minecraft.resources.ResourceKey<?> dimensionKey,
+                          UUID cityId, UUID ownerId, boolean privatelyOwned, double salePrice,
+                          boolean companyOwned) {
             this.chunkX = chunkX;
             this.chunkZ = chunkZ;
             this.dimension = dimension;
@@ -691,6 +769,7 @@ public class TaxationManager {
             this.ownerId = ownerId;
             this.privatelyOwned = privatelyOwned;
             this.salePrice = salePrice;
+            this.companyOwned = companyOwned;
         }
 
         public int getChunkX() { return chunkX; }
@@ -701,6 +780,7 @@ public class TaxationManager {
         public UUID getOwnerId() { return ownerId; }
         public boolean isPrivatelyOwned() { return privatelyOwned; }
         public double getSalePrice() { return salePrice; }
+        public boolean isCompanyOwned() { return companyOwned; }
     }
 }
 

@@ -8,6 +8,8 @@ import com.statecraft.core.ElectionManager;
 import com.statecraft.core.Nation;
 import com.statecraft.data.NationSavedData;
 import com.statecraft.legislature.LegislatureManager;
+import com.statecraft.mail.MailManager;
+import com.statecraft.mail.Mailbox;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -27,6 +29,9 @@ public class ElectionTickHandler {
 
     private static int tickCounter = 0;
     private static final int CHECK_INTERVAL = 20 * 60; // Check every minute (20 ticks * 60 seconds)
+
+    private static int mailNotifyCounter = 0;
+    private static final int MAIL_NOTIFY_INTERVAL = 5; // Every 5 minutes (5 tick cycles)
 
     @SubscribeEvent
     public static void onServerTick(TickEvent.ServerTickEvent event) {
@@ -72,13 +77,47 @@ public class ElectionTickHandler {
             notifyContractOverdue(event.getServer(), contract);
         }
 
+        // Run shareholder vote tick (proposal expiration/resolution)
+        com.statecraft.company.ShareholderVoteManager shareholderVoteManager =
+            com.statecraft.company.ShareholderVoteManager.getInstance();
+        shareholderVoteManager.tick(event.getServer());
+
         // Save if any manager is dirty
-        boolean needsSave = electionManager.isDirty() || legislatureManager.isDirty() || contractManager.isDirty();
+        boolean needsSave = electionManager.isDirty() || legislatureManager.isDirty()
+            || contractManager.isDirty() || shareholderVoteManager.isDirty();
         if (needsSave) {
             ServerLevel overworld = event.getServer().getLevel(Level.OVERWORLD);
             if (overworld != null) {
                 NationSavedData.get(overworld).setDirty();
             }
+        }
+
+        // Periodic unread mail action bar notification (every 5 minutes)
+        mailNotifyCounter++;
+        if (mailNotifyCounter >= MAIL_NOTIFY_INTERVAL) {
+            mailNotifyCounter = 0;
+            sendUnreadMailActionBar(event.getServer());
+        }
+    }
+
+    /**
+     * Send action bar notification to all online players with unread mail
+     */
+    private static void sendUnreadMailActionBar(net.minecraft.server.MinecraftServer server) {
+        try {
+            MailManager mailManager = MailManager.getInstance();
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                Mailbox mailbox = mailManager.getPlayerMailbox(player.getUUID());
+                int unread = mailbox.getUnreadCount();
+                if (unread > 0) {
+                    player.displayClientMessage(
+                        Component.literal("§e✉ " + unread + " unread mail"),
+                        true // action bar
+                    );
+                }
+            }
+        } catch (Exception ignored) {
+            // Silently ignore — mail system may not be fully initialized
         }
     }
 

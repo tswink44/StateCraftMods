@@ -10,7 +10,8 @@ public class RequestGovMailDataPacket {
     public enum EntityType {
         NATION,
         STATE,
-        CITY
+        CITY,
+        COMPANY
     }
 
     public enum Action {

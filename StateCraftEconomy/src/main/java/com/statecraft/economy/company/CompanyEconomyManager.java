@@ -207,6 +207,22 @@ public class CompanyEconomyManager {
 
         StateCraftEconomy.LOGGER.info("Company '{}' paid {} in dividends to {} shareholders",
             company.getName(), ecoManager.formatCurrency(totalPayout), company.getShareholders().size());
+
+        // Send summary to the company's mailbox
+        if (StateCraftEconomy.isStateCraftLoaded()) {
+            StateCraftIntegration.sendCompanyMailboxNotificationById(company.getId(), "FINANCIAL",
+                "Dividend Payout — " + company.getName(),
+                String.format(
+                    "§aDividends distributed successfully.\n\n" +
+                    "§7Total Payout: §f%s\n" +
+                    "§7Shareholders: §f%d\n" +
+                    "§7Rate: §f%.1f%%\n" +
+                    "§7Remaining Balance: §f%s",
+                    ecoManager.formatCurrency(totalPayout),
+                    company.getShareholders().size(),
+                    config.getRate() * 100,
+                    ecoManager.formatCurrency(balance - totalPayout)));
+        }
     }
 
     // ==================== Company Taxation ====================

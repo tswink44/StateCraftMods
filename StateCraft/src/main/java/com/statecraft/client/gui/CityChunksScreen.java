@@ -112,7 +112,8 @@ public class CityChunksScreen extends StateCraftScreen {
             graphics.drawString(this.font, "§f" + coordStr, colCoords, y, COLOR_TEXT);
 
             // Owner
-            String ownerColor = chunk.ownershipType.equals("PLAYER") ? "§b" : "§7";
+            String ownerColor = chunk.ownershipType.equals("PLAYER") ? "§b" :
+                                chunk.ownershipType.equals("COMPANY") ? "§d" : "§7";
             String ownerLabel = chunk.ownerName;
             if (ownerLabel.length() > 12) {
                 ownerLabel = ownerLabel.substring(0, 11) + "…";
@@ -124,7 +125,8 @@ public class CityChunksScreen extends StateCraftScreen {
                 String priceStr = String.format("$%.0f", chunk.salePrice);
                 graphics.drawString(this.font, "§a" + priceStr, colStatus, y, COLOR_SECONDARY);
             } else {
-                String typeLabel = chunk.ownershipType.equals("PLAYER") ? "Private" : "Public";
+                String typeLabel = chunk.ownershipType.equals("PLAYER") ? "Private" :
+                                   chunk.ownershipType.equals("COMPANY") ? "Corporate" : "Public";
                 graphics.drawString(this.font, "§7" + typeLabel, colStatus, y, COLOR_TEXT);
             }
 

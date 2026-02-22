@@ -50,7 +50,10 @@ public class SyncDiplomacyDataPacket {
                 buf.readUtf(),  // proposalId (UUID as string)
                 buf.readUtf(),  // type: PEACE, ALLIANCE
                 buf.readUtf(),  // otherNationName
-                buf.readLong()  // expiresAt
+                buf.readLong(), // expiresAt
+                buf.readBoolean(), // hasTerms
+                buf.readDouble(),  // currencyDemand
+                buf.readVarInt()   // chunkDemandCount
             ));
         }
 
@@ -61,7 +64,10 @@ public class SyncDiplomacyDataPacket {
                 buf.readUtf(),
                 buf.readUtf(),
                 buf.readUtf(),
-                buf.readLong()
+                buf.readLong(),
+                buf.readBoolean(),
+                buf.readDouble(),
+                buf.readVarInt()
             ));
         }
 
@@ -84,6 +90,9 @@ public class SyncDiplomacyDataPacket {
             buf.writeUtf(p.type);
             buf.writeUtf(p.otherNationName);
             buf.writeLong(p.expiresAt);
+            buf.writeBoolean(p.hasTerms);
+            buf.writeDouble(p.currencyDemand);
+            buf.writeVarInt(p.chunkDemandCount);
         }
 
         buf.writeVarInt(outboundProposals.size());
@@ -92,6 +101,9 @@ public class SyncDiplomacyDataPacket {
             buf.writeUtf(p.type);
             buf.writeUtf(p.otherNationName);
             buf.writeLong(p.expiresAt);
+            buf.writeBoolean(p.hasTerms);
+            buf.writeDouble(p.currencyDemand);
+            buf.writeVarInt(p.chunkDemandCount);
         }
 
         buf.writeUtf(resultMessage);
@@ -119,12 +131,24 @@ public class SyncDiplomacyDataPacket {
         public final String type;       // PEACE, ALLIANCE
         public final String otherNationName;
         public final long expiresAt;
+        // Peace terms summary
+        public final boolean hasTerms;
+        public final double currencyDemand;
+        public final int chunkDemandCount;
 
         public ProposalEntry(String proposalId, String type, String otherNationName, long expiresAt) {
+            this(proposalId, type, otherNationName, expiresAt, false, 0, 0);
+        }
+
+        public ProposalEntry(String proposalId, String type, String otherNationName, long expiresAt,
+                              boolean hasTerms, double currencyDemand, int chunkDemandCount) {
             this.proposalId = proposalId;
             this.type = type;
             this.otherNationName = otherNationName;
             this.expiresAt = expiresAt;
+            this.hasTerms = hasTerms;
+            this.currencyDemand = currencyDemand;
+            this.chunkDemandCount = chunkDemandCount;
         }
     }
 }

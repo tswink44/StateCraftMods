@@ -4,12 +4,15 @@ import com.statecraft.network.NetworkHandler;
 import com.statecraft.network.packets.*;
 import com.statecraft.network.packets.SyncEmergencyPowerDataPacket.PowerEntry;
 import com.statecraft.network.packets.SyncEmergencyPowerDataPacket.PowerStatus;
+import com.statecraft.network.packets.SyncEmergencyPowerDataPacket.HistoryEntry;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -25,13 +28,21 @@ public class ExecutiveActionsScreen extends StateCraftScreen {
     private boolean isLeader = false;
     private boolean dataLoaded = false;
     private List<PowerEntry> powers = new ArrayList<>();
+    private List<HistoryEntry> history = new ArrayList<>();
     private String resultMessage = "";
     private long resultMessageTime = 0;
 
+    // View mode
+    private enum ViewMode { POWERS, HISTORY }
+    private ViewMode viewMode = ViewMode.POWERS;
+
     // Scrolling
     private int scrollOffset = 0;
+    private int historyScrollOffset = 0;
     private static final int ENTRY_HEIGHT = 56;
+    private static final int HISTORY_ENTRY_HEIGHT = 30;
     private static final int MAX_VISIBLE = 4;
+    private static final int MAX_HISTORY_VISIBLE = 6;
 
     // Target input for powers that require a target
     private EditBox targetInput;
@@ -61,6 +72,18 @@ public class ExecutiveActionsScreen extends StateCraftScreen {
         // Request data from server
         NetworkHandler.sendToServer(new RequestEmergencyPowerDataPacket(nationName));
 
+        // Tab buttons
+        this.addRenderableWidget(createButton(
+            guiLeft + 10, guiTop + guiHeight - 28, 60, 20,
+            Component.literal(viewMode == ViewMode.POWERS ? "§f⚡ Powers" : "§7⚡ Powers"),
+            btn -> { viewMode = ViewMode.POWERS; scrollOffset = 0; rebuildButtons(); }
+        ));
+        this.addRenderableWidget(createButton(
+            guiLeft + 75, guiTop + guiHeight - 28, 60, 20,
+            Component.literal(viewMode == ViewMode.HISTORY ? "§f📜 History" : "§7📜 History"),
+            btn -> { viewMode = ViewMode.HISTORY; historyScrollOffset = 0; rebuildButtons(); }
+        ));
+
         // Target input (hidden initially)
         targetInput = new EditBox(this.font, guiLeft + 15, guiTop + guiHeight - 52, guiWidth - 110, 16,
             Component.literal("Target"));
@@ -71,7 +94,7 @@ public class ExecutiveActionsScreen extends StateCraftScreen {
 
         // Back button
         this.addRenderableWidget(createButton(
-            guiLeft + guiWidth / 2 - 30, guiTop + guiHeight - 28, 60, 20,
+            guiLeft + guiWidth - 70, guiTop + guiHeight - 28, 60, 20,
             Component.literal("Back"),
             btn -> goBack()
         ));
@@ -83,6 +106,7 @@ public class ExecutiveActionsScreen extends StateCraftScreen {
     public void updateData(SyncEmergencyPowerDataPacket packet) {
         this.isLeader = packet.isLeader();
         this.powers = packet.getPowers();
+        this.history = packet.getHistory();
         this.dataLoaded = true;
 
         if (!packet.getResultMessage().isEmpty()) {
@@ -99,6 +123,7 @@ public class ExecutiveActionsScreen extends StateCraftScreen {
         init();
 
         if (!dataLoaded || !isLeader) return;
+        if (viewMode != ViewMode.POWERS) return;
 
         int startY = guiTop + 26;
         int btnX = guiLeft + guiWidth - 85;
@@ -204,6 +229,11 @@ public class ExecutiveActionsScreen extends StateCraftScreen {
             return;
         }
 
+        if (viewMode == ViewMode.HISTORY) {
+            renderHistoryView(graphics, startX, mouseX, mouseY);
+            return;
+        }
+
         // Render power entries
         int contentTop = guiTop + 26;
         int contentBottom = guiTop + guiHeight - 60;
@@ -242,6 +272,89 @@ public class ExecutiveActionsScreen extends StateCraftScreen {
         }
 
         // Confirmation dialog is rendered in render() override so it appears on top of all widgets
+    }
+
+    private void renderHistoryView(GuiGraphics graphics, int startX, int mouseX, int mouseY) {
+        int contentTop = guiTop + 26;
+        int contentBottom = guiTop + guiHeight - 60;
+
+        if (history.isEmpty()) {
+            graphics.drawCenteredString(this.font, "§7No executive action history yet.",
+                this.width / 2, guiTop + 100, 0xFF999999);
+            return;
+        }
+
+        SimpleDateFormat dateFormat = new SimpleDateFormat("MMM dd HH:mm");
+
+        for (int i = 0; i < history.size(); i++) {
+            int displayIndex = i - historyScrollOffset;
+            if (displayIndex < 0 || displayIndex >= MAX_HISTORY_VISIBLE) continue;
+
+            int y = contentTop + displayIndex * HISTORY_ENTRY_HEIGHT;
+            if (y + HISTORY_ENTRY_HEIGHT > contentBottom) break;
+
+            HistoryEntry entry = history.get(i);
+            renderHistoryEntry(graphics, startX, y, entry, dateFormat);
+        }
+
+        // Scroll indicators
+        if (historyScrollOffset > 0) {
+            graphics.drawCenteredString(this.font, "▲", this.width / 2, contentTop - 8, 0xFFAAAAAA);
+        }
+        if (historyScrollOffset + MAX_HISTORY_VISIBLE < history.size()) {
+            graphics.drawCenteredString(this.font, "▼", this.width / 2, contentBottom - 2, 0xFFAAAAAA);
+        }
+
+        // Total count
+        graphics.drawString(this.font, "§8" + history.size() + " events",
+            guiLeft + guiWidth - 10 - this.font.width(history.size() + " events"),
+            contentBottom + 2, 0xFF666666);
+    }
+
+    private void renderHistoryEntry(GuiGraphics graphics, int startX, int y, HistoryEntry entry, SimpleDateFormat dateFormat) {
+        int width = guiWidth - 20;
+        int entryRight = startX + width;
+
+        // Background color based on event type
+        int bgColor = switch (entry.eventType) {
+            case "Invoked" -> 0x33CC4444;     // Red
+            case "Revoked" -> 0x3344CC44;     // Green
+            case "Expired" -> 0x33666666;     // Gray
+            case "Ratified" -> 0x334488CC;    // Blue
+            case "Not Ratified" -> 0x33CC8844; // Orange
+            case "Overridden" -> 0x33CCCC44;  // Yellow
+            default -> 0x33444444;
+        };
+        graphics.fill(startX, y, entryRight, y + HISTORY_ENTRY_HEIGHT - 2, bgColor);
+        graphics.fill(startX, y, entryRight, y + 1, 0xFF404040);
+
+        // Event type badge color
+        String typeColor = switch (entry.eventType) {
+            case "Invoked" -> "§c";
+            case "Revoked" -> "§a";
+            case "Expired" -> "§8";
+            case "Ratified" -> "§b";
+            case "Not Ratified" -> "§6";
+            case "Overridden" -> "§e";
+            default -> "§7";
+        };
+
+        // Line 1: [EVENT_TYPE] Power Name — by Actor
+        String line1 = typeColor + "[" + entry.eventType.toUpperCase() + "] §f" + entry.powerDisplayName +
+            " §7— by §f" + entry.actorName;
+        graphics.drawString(this.font, line1, startX + 4, y + 4, 0xFFFFFFFF);
+
+        // Line 2: Timestamp + details
+        String timeStr = dateFormat.format(new Date(entry.timestamp));
+        String line2 = "§8" + timeStr;
+        if (!entry.details.isEmpty()) {
+            line2 += " §7| " + entry.details;
+        }
+        // Trim if too long
+        if (this.font.width(line2.replaceAll("§.", "")) > width - 8) {
+            line2 = line2.substring(0, Math.min(line2.length(), 60)) + "...";
+        }
+        graphics.drawString(this.font, line2, startX + 4, y + 16, 0xFF888888);
     }
 
     private void renderPowerEntry(GuiGraphics graphics, int startX, int y, PowerEntry entry, int mouseX, int mouseY) {
@@ -367,12 +480,20 @@ public class ExecutiveActionsScreen extends StateCraftScreen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
         if (showConfirmation) return true;
-        if (delta > 0 && scrollOffset > 0) {
-            scrollOffset--;
-            rebuildButtons();
-        } else if (delta < 0 && scrollOffset + MAX_VISIBLE < powers.size()) {
-            scrollOffset++;
-            rebuildButtons();
+        if (viewMode == ViewMode.HISTORY) {
+            if (delta > 0 && historyScrollOffset > 0) {
+                historyScrollOffset--;
+            } else if (delta < 0 && historyScrollOffset + MAX_HISTORY_VISIBLE < history.size()) {
+                historyScrollOffset++;
+            }
+        } else {
+            if (delta > 0 && scrollOffset > 0) {
+                scrollOffset--;
+                rebuildButtons();
+            } else if (delta < 0 && scrollOffset + MAX_VISIBLE < powers.size()) {
+                scrollOffset++;
+                rebuildButtons();
+            }
         }
         return true;
     }

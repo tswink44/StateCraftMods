@@ -234,7 +234,8 @@ public class CityInfoScreen extends StateCraftScreen {
     }
 
     private void renderFlag(GuiGraphics graphics) {
-        int flagX = guiLeft + 4;
+        // Position flag outside the panel to the left, same vertical height
+        int flagX = guiLeft - FLAG_SIZE - 8;
         int flagY = guiTop + 4;
 
         // Draw flag border/background

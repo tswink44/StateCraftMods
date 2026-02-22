@@ -12,7 +12,7 @@ public enum EmergencyPower {
     DIPLOMATIC_CRISIS("Diplomatic Crisis", 0, 14,
         "Instantly declare enemy status (war) without legislature vote"),
     EMERGENCY_TAX("Emergency Tax", 0, 60,
-        "One-time 10% levy on all citizen balances"),
+        "One-time levy on all citizen balances (rate set by legislature or server config, default 10%)"),
     SUCCESSION_CRISIS("Succession Crisis", 168, 0,
         "Appoint temporary successor if Leader going offline");
 

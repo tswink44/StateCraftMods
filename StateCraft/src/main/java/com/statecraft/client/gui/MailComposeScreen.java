@@ -7,29 +7,37 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 
 /**
- * Screen for composing and sending mail
+ * Screen for composing and sending mail.
+ * Supports individual mail and broadcast mail (to all nation members).
  */
 public class MailComposeScreen extends StateCraftScreen {
 
     private EditBox recipientField;
     private EditBox subjectField;
     private EditBox bodyField;
+    private EditBox currencyField;
 
     private final String prefilledRecipient;
     private final String prefilledSubject;
+    private boolean broadcastMode;
 
     private String errorMessage = null;
 
     public MailComposeScreen(String recipient) {
-        this(recipient, "");
+        this(recipient, "", false);
     }
 
     public MailComposeScreen(String recipient, String subject) {
+        this(recipient, subject, false);
+    }
+
+    public MailComposeScreen(String recipient, String subject, boolean broadcast) {
         super(Component.literal("Compose Mail"));
         this.prefilledRecipient = recipient;
         this.prefilledSubject = subject;
+        this.broadcastMode = broadcast;
         this.guiWidth = 320;
-        this.guiHeight = 240;
+        this.guiHeight = 260;
     }
 
     @Override
@@ -40,13 +48,22 @@ public class MailComposeScreen extends StateCraftScreen {
         int fieldWidth = guiWidth - 85;
         int y = guiTop + 30;
 
-        // Recipient field
+        // Broadcast toggle button
+        this.addRenderableWidget(createButton(
+            guiLeft + guiWidth - 90, guiTop + 6, 80, 14,
+            Component.literal(broadcastMode ? "§d📢 Broadcast" : "§7📢 Broadcast"),
+            btn -> toggleBroadcast()
+        ));
+
+        // Recipient field (hidden in broadcast mode)
         recipientField = new EditBox(this.font, fieldX, y, fieldWidth, 18, Component.literal("To"));
         recipientField.setMaxLength(32);
         if (prefilledRecipient != null && !prefilledRecipient.isEmpty()) {
             recipientField.setValue(prefilledRecipient);
         }
         recipientField.setHint(Component.literal("Player name..."));
+        recipientField.setEditable(!broadcastMode);
+        recipientField.visible = !broadcastMode;
         this.addRenderableWidget(recipientField);
         y += 24;
 
@@ -65,6 +82,16 @@ public class MailComposeScreen extends StateCraftScreen {
         bodyField.setMaxLength(500);
         bodyField.setHint(Component.literal("Write your message..."));
         this.addRenderableWidget(bodyField);
+        y += 105;
+
+        // Currency attachment field (not available in broadcast mode)
+        currencyField = new EditBox(this.font, fieldX, y, fieldWidth / 2, 18, Component.literal("Amount"));
+        currencyField.setMaxLength(12);
+        currencyField.setHint(Component.literal("0.00"));
+        currencyField.setFilter(s -> s.matches("[0-9.]*")); // Numbers and decimal only
+        currencyField.setEditable(!broadcastMode);
+        currencyField.visible = !broadcastMode;
+        this.addRenderableWidget(currencyField);
 
         int buttonY = guiTop + guiHeight - 30;
         int buttonWidth = 80;
@@ -72,7 +99,7 @@ public class MailComposeScreen extends StateCraftScreen {
         // Send button
         this.addRenderableWidget(createButton(
             guiLeft + guiWidth / 2 - buttonWidth - 10, buttonY, buttonWidth, 20,
-            Component.literal("Send"),
+            Component.literal(broadcastMode ? "§d📢 Broadcast" : "Send"),
             btn -> sendMail()
         ));
 
@@ -87,15 +114,26 @@ public class MailComposeScreen extends StateCraftScreen {
     @Override
     protected void renderContent(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         // Title
-        graphics.drawCenteredString(this.font, "§6✉ §fCompose New Mail", this.width / 2, guiTop + 10, COLOR_PRIMARY);
+        String title = broadcastMode ? "§d📢 §fBroadcast to Nation" : "§6✉ §fCompose New Mail";
+        graphics.drawCenteredString(this.font, title, this.width / 2, guiTop + 10, COLOR_PRIMARY);
 
         renderDivider(graphics, guiLeft + 10, guiTop + 22, guiWidth - 20);
 
         // Field labels
         int labelX = guiLeft + 15;
-        graphics.drawString(this.font, "§7To:", labelX, guiTop + 34, COLOR_TEXT);
+        if (broadcastMode) {
+            graphics.drawString(this.font, "§dTo:", labelX, guiTop + 34, COLOR_TEXT);
+            graphics.drawString(this.font, "§d§oAll Nation Members", guiLeft + 70, guiTop + 34, COLOR_TEXT);
+        } else {
+            graphics.drawString(this.font, "§7To:", labelX, guiTop + 34, COLOR_TEXT);
+        }
         graphics.drawString(this.font, "§7Subject:", labelX, guiTop + 58, COLOR_TEXT);
         graphics.drawString(this.font, "§7Message:", labelX, guiTop + 78, COLOR_TEXT);
+        if (!broadcastMode) {
+            graphics.drawString(this.font, "§7Attach $:", labelX, guiTop + 188, COLOR_TEXT);
+        } else {
+            graphics.drawString(this.font, "§8Currency attachments not available for broadcasts", labelX, guiTop + 188, COLOR_SECONDARY);
+        }
 
         // Error message
         if (errorMessage != null) {
@@ -108,16 +146,15 @@ public class MailComposeScreen extends StateCraftScreen {
         graphics.drawString(this.font, countText, guiLeft + 15, guiTop + guiHeight - 58, COLOR_SECONDARY);
     }
 
+    private void toggleBroadcast() {
+        this.broadcastMode = !this.broadcastMode;
+        this.errorMessage = null;
+        this.rebuildWidgets();
+    }
+
     private void sendMail() {
-        String recipient = recipientField.getValue().trim();
         String subject = subjectField.getValue().trim();
         String body = bodyField.getValue().trim();
-
-        // Validation
-        if (recipient.isEmpty()) {
-            errorMessage = "Please enter a recipient!";
-            return;
-        }
 
         if (subject.isEmpty()) {
             errorMessage = "Please enter a subject!";
@@ -129,8 +166,45 @@ public class MailComposeScreen extends StateCraftScreen {
             return;
         }
 
+        if (broadcastMode) {
+            // Broadcast to all nation members — no recipient or currency needed
+            NetworkHandler.sendToServer(new SendMailPacket("", subject, body, 0, true));
+            goBack();
+            return;
+        }
+
+        // Individual mail mode
+        String recipient = recipientField.getValue().trim();
+
+        if (recipient.isEmpty()) {
+            errorMessage = "Please enter a recipient!";
+            return;
+        }
+
+        // Parse currency attachment
+        double currency = 0;
+        String currencyText = currencyField.getValue().trim();
+        if (!currencyText.isEmpty()) {
+            try {
+                currency = Double.parseDouble(currencyText);
+                if (currency < 0) {
+                    errorMessage = "Currency amount cannot be negative!";
+                    return;
+                }
+                if (currency > 0 && currency < 0.01) {
+                    errorMessage = "Minimum attachment is $0.01!";
+                    return;
+                }
+                // Round to 2 decimal places
+                currency = Math.round(currency * 100.0) / 100.0;
+            } catch (NumberFormatException e) {
+                errorMessage = "Invalid currency amount!";
+                return;
+            }
+        }
+
         // Send to server
-        NetworkHandler.sendToServer(new SendMailPacket(recipient, subject, body));
+        NetworkHandler.sendToServer(new SendMailPacket(recipient, subject, body, currency));
 
         // Go back to inbox
         goBack();

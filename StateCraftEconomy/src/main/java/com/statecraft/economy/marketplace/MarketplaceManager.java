@@ -56,9 +56,10 @@ public class MarketplaceManager {
      * Result of a purchase operation.
      */
     public record PurchaseResult(boolean success, String message, double totalCost,
-                                  double itemCost, double salesTax, double importTariff) {
+                                  double itemCost, double salesTax, double importTariff,
+                                  double buyerSalesTax) {
         public static PurchaseResult fail(String message) {
-            return new PurchaseResult(false, message, 0, 0, 0, 0);
+            return new PurchaseResult(false, message, 0, 0, 0, 0, 0);
         }
     }
 
@@ -160,7 +161,7 @@ public class MarketplaceManager {
         return new PurchaseResult(true,
             String.format("Listed %dx %s at $%,.2f/ea. Listing fee: $%,.2f",
                 quantity, item.getHoverName().getString(), pricePerUnit, listingFee),
-            listingFee, 0, 0, 0);
+            listingFee, 0, 0, 0, 0);
     }
 
     /**
@@ -201,14 +202,19 @@ public class MarketplaceManager {
             }
         }
 
-        double totalCost = itemCost + importTariff;
+        // Calculate buyer's city/state/nation sales tax (charged on top of item cost + tariff)
+        UUID buyerCityId = StateCraftIntegration.getPlayerCityId(buyer);
+        SalesTaxInfo buyerTaxInfo = calculateSalesTax(itemCost, buyerCityId);
+        double buyerSalesTax = buyerTaxInfo.totalTax;
+
+        double totalCost = itemCost + importTariff + buyerSalesTax;
 
         // Validate buyer has enough funds
         EconomyManager econ = EconomyManager.getInstance();
         double buyerBalance = econ.getBalance(buyer.getUUID());
         if (buyerBalance < totalCost) {
-            return PurchaseResult.fail(String.format("Insufficient funds. Need $%,.2f (item: $%,.2f + tariff: $%,.2f), have $%,.2f",
-                totalCost, itemCost, importTariff, buyerBalance));
+            return PurchaseResult.fail(String.format("Insufficient funds. Need $%,.2f (item: $%,.2f + tariff: $%,.2f + sales tax: $%,.2f), have $%,.2f",
+                totalCost, itemCost, importTariff, buyerSalesTax, buyerBalance));
         }
 
         // ---- Execute the transaction ----
@@ -232,10 +238,17 @@ public class MarketplaceManager {
             econ.markDirty();
         }
 
+        // 4b. Distribute buyer's city/state/nation sales tax
+        if (buyerSalesTax > 0) {
+            distributeSalesTax(buyerTaxInfo);
+        }
+
         // 5. Record transactions for buyer and seller
         String itemDesc = buyQty + "x " + listing.getItemName();
+        String buyerTaxNote = buyerSalesTax > 0
+            ? String.format(" (sales tax: $%.2f)", buyerSalesTax) : "";
         econ.recordTransaction(buyer.getUUID(), Transaction.Type.MARKETPLACE_PURCHASE, itemCost, listing.getSellerId(),
-            "Bought " + itemDesc + " from " + listing.getSellerName(),
+            "Bought " + itemDesc + " from " + listing.getSellerName() + buyerTaxNote,
             buyer.getUUID(), buyer.getName().getString());
         if (importTariff > 0) {
             econ.recordTransaction(buyer.getUUID(), Transaction.Type.IMPORT_TARIFF, importTariff, buyerNationId,
@@ -269,14 +282,15 @@ public class MarketplaceManager {
         sendSaleMail(listing.getSellerId(), listing.getSellerName(), buyer.getName().getString(),
             itemDesc, sellerProceeds, salesTax, listing.getQuantity());
 
-        StateCraftEconomy.LOGGER.info("Player {} bought {}x {} from {} for ${} (tax: ${}, tariff: ${})",
+        StateCraftEconomy.LOGGER.info("Player {} bought {}x {} from {} for ${} (seller tax: ${}, tariff: ${}, buyer tax: ${})",
             buyer.getName().getString(), buyQty, listing.getItemName(), listing.getSellerName(),
-            String.format("%.2f", itemCost), String.format("%.2f", salesTax), String.format("%.2f", importTariff));
+            String.format("%.2f", itemCost), String.format("%.2f", salesTax),
+            String.format("%.2f", importTariff), String.format("%.2f", buyerSalesTax));
 
         return new PurchaseResult(true,
-            String.format("Purchased %s for $%,.2f (tax: $%,.2f, tariff: $%,.2f)",
-                itemDesc, totalCost, salesTax, importTariff),
-            totalCost, itemCost, salesTax, importTariff);
+            String.format("Purchased %s for $%,.2f (tax: $%,.2f, tariff: $%,.2f, sales tax: $%,.2f)",
+                itemDesc, totalCost, salesTax, importTariff, buyerSalesTax),
+            totalCost, itemCost, salesTax, importTariff, buyerSalesTax);
     }
 
     /**
@@ -301,7 +315,7 @@ public class MarketplaceManager {
         return new PurchaseResult(true,
             String.format("Cancelled listing for %dx %s. Items returned.",
                 listing.getQuantity(), listing.getItemName()),
-            0, 0, 0, 0);
+            0, 0, 0, 0, 0);
     }
 
     // ==================== Tax Calculation ====================

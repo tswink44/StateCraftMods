@@ -522,6 +522,25 @@ public class EconomyManager {
     }
 
     /**
+     * Force withdraw from nation treasury, allowing negative balance.
+     * Used for mandatory government actions like eminent domain where the
+     * nation must pay compensation even if treasury is insufficient.
+     */
+    public TransactionResult forceWithdrawFromNationTreasury(UUID nationId, double amount, String description) {
+        if (amount <= 0) {
+            return new TransactionResult(false, "Amount must be positive", 0);
+        }
+
+        BankAccount nationTreasury = getOrCreateNationTreasury(nationId);
+        nationTreasury.forceSubtract(amount);
+        String prefix = nationTreasury.getBalance() < 0 ? "[FORCED] " : "";
+        recordAccountTransaction(nationId, Transaction.Type.WITHDRAWAL, amount, null, prefix + description, null, "System");
+        dirty = true;
+
+        return new TransactionResult(true, "Withdrew " + formatCurrency(amount) + " from nation treasury (balance may be negative)", nationTreasury.getBalance());
+    }
+
+    /**
      * Deposit directly to nation treasury (no player involved)
      * Used for tax collection, contract payments, etc.
      */
@@ -657,6 +676,23 @@ public class EconomyManager {
     public double getCompanyBalance(UUID companyId) {
         BankAccount treasury = getOrCreateCompanyTreasury(companyId);
         return treasury.getBalance();
+    }
+
+    /**
+     * Deposit directly to company treasury (no player involved).
+     * Used for Trading Hub profit shares, contract payments, etc.
+     */
+    public TransactionResult depositToCompanyTreasury(UUID companyId, double amount, String description) {
+        if (amount <= 0) {
+            return new TransactionResult(false, "Amount must be positive", 0);
+        }
+
+        BankAccount treasury = getOrCreateCompanyTreasury(companyId);
+        treasury.add(amount);
+        recordAccountTransaction(companyId, Transaction.Type.DEPOSIT, amount, null, description, null, "System");
+        dirty = true;
+
+        return new TransactionResult(true, "Deposited " + formatCurrency(amount) + " to company treasury", treasury.getBalance());
     }
 
     public Map<UUID, BankAccount> getCompanyTreasuries() {

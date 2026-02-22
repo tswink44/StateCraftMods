@@ -110,6 +110,9 @@ public class ChunkCommand {
                 case INSUFFICIENT_FUNDS -> {
                     context.getSource().sendFailure(Component.literal("§cCity treasury has insufficient funds."));
                 }
+                case PLAYER_CHUNK_LIMIT -> {
+                    context.getSource().sendFailure(Component.literal("§cYou have reached your personal chunk ownership limit."));
+                }
             }
             return 0;
         } catch (Exception e) {
@@ -187,6 +190,9 @@ public class ChunkCommand {
                 }
                 case INSUFFICIENT_FUNDS -> {
                     context.getSource().sendFailure(Component.literal("§cCity treasury has insufficient funds."));
+                }
+                case PLAYER_CHUNK_LIMIT -> {
+                    context.getSource().sendFailure(Component.literal("§cYou have reached your personal chunk ownership limit."));
                 }
             }
             return 0;
@@ -270,6 +276,11 @@ public class ChunkCommand {
             if (chunk.getOwnershipType() == OwnershipType.PLAYER && chunk.getPlayerOwner() != null) {
                 // Try to get player name
                 context.getSource().sendSuccess(() -> Component.literal("§7Owner: §f" + chunk.getPlayerOwner().toString()), false);
+            } else if (chunk.getOwnershipType() == OwnershipType.COMPANY && chunk.getCompanyOwner() != null) {
+                com.statecraft.company.Company company =
+                    com.statecraft.company.CompanyManager.getInstance().getCompany(chunk.getCompanyOwner());
+                String companyName = company != null ? company.getName() : chunk.getCompanyOwner().toString();
+                context.getSource().sendSuccess(() -> Component.literal("§7Owner: §d" + companyName + " §8(Company)"), false);
             }
 
             // Show player's permission level
@@ -320,6 +331,15 @@ public class ChunkCommand {
             Nation targetNation = ChunkClaimManager.getInstance().getPlayerNation(target.getUUID());
             if (nation == null || targetNation == null || !nation.getId().equals(targetNation.getId())) {
                 context.getSource().sendFailure(Component.literal("You can only transfer chunks to players in your nation!"));
+                return 0;
+            }
+
+            // Check if target player has reached their personal chunk limit
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            if (!manager.canPlayerOwnMoreChunks(target.getUUID(), nation)) {
+                int limit = manager.getEffectiveMaxChunksPerPlayer(nation);
+                context.getSource().sendFailure(Component.literal(
+                    "§c" + target.getName().getString() + " has reached the personal chunk limit (" + limit + ")."));
                 return 0;
             }
 

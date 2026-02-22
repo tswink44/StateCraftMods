@@ -186,6 +186,15 @@ public class City {
         return chunk;
     }
 
+    /**
+     * Add an existing ClaimedChunk to this city's chunk map (used for transfers like peace treaties).
+     * Does NOT create a new chunk — re-uses the existing one.
+     */
+    public void claimChunkDirect(ClaimedChunk chunk, ChunkPos pos, ResourceKey<Level> dimension) {
+        String key = getChunkKey(pos, dimension);
+        chunks.put(key, chunk);
+    }
+
     public boolean unclaimChunk(ChunkPos pos, ResourceKey<Level> dimension) {
         String key = getChunkKey(pos, dimension);
         return chunks.remove(key) != null;

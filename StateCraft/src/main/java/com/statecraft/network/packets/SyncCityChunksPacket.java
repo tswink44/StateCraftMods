@@ -55,8 +55,8 @@ public class SyncCityChunksPacket {
         public final int x;
         public final int z;
         public final String dimension;
-        public final String ownershipType; // "HIERARCHY", "PLAYER"
-        public final String ownerName;     // Player name or "City"
+        public final String ownershipType; // "HIERARCHY", "PLAYER", "COMPANY"
+        public final String ownerName;     // Player name, Company name, or "City"
         public final boolean forSale;
         public final double salePrice;
 

@@ -194,8 +194,18 @@ Auto-generated periodic summary (like the tax mail) showing total income, total 
 #### 28. Auction System
 Time-limited auctions for rare items. Players bid, highest bidder wins. Could integrate with the contract system for government procurement.
 
-#### 29. Trading Hub Sales Tax per City
-Allow each city to set its own sales tax on Trading Hub transactions within its territory (on top of nation sales tax). Revenue goes to the city treasury.
+#### ~~29. Trading Hub Sales Tax per City~~ ✅ ALREADY IMPLEMENTED
+~~Allow each city to set its own sales tax on Trading Hub transactions within its territory (on top of nation sales tax). Revenue goes to the city treasury.~~
+
+**Already implemented:** Full per-city sales tax system is operational across both Trading Hub and Marketplace:
+
+- **`City.java`** — `salesTaxRate` field (default 5%), `getSalesTaxRate()`/`setSalesTaxRate()` (clamped 0–50%), persisted to NBT via `save()`/`load()`.
+- **`CitySettingsScreen`** — "Sales Tax" field (row 5) visible in the city settings GUI. Editable by the mayor, state governor, or nation admin. Displayed as percentage, max 50%. Sent to server via `UpdateEntitySettingsPacket` with `passThroughRate` field carrying the sales tax value.
+- **`ServerPacketHandler.handleUpdateEntitySettings()` CITY case** — Parses and saves the sales tax rate: `city.setSalesTaxRate(salesTaxRate / 100.0)`.
+- **`SyncCitySettingsPacket`** — Server syncs the current `salesTaxRate * 100` back to the client when the settings screen is opened.
+- **`TradingHubBlockEntity.calculateSalesTax()`** — Looks up city, state, and nation `getSalesTaxRate()` via reflection. Each level independently taxes the gross sale value. Priority capping (Nation > State > City) ensures total never exceeds 100%. Rates and shares stored in `SalesTaxInfo`.
+- **`TradingHubBlockEntity.distributeSalesTax()`** — Deposits city's share to city treasury (`econ.getOrCreateCityTreasury(cityId).add(cityShare)`), state's share to state treasury, nation's share to nation treasury. Sends tax report mails to mayor, governor, and nation leader.
+- **`MarketplaceManager.calculateSalesTax()`** — Identical pattern: reads city/state/nation sales tax rates, applies priority capping, distributes to treasuries. Marketplace purchases use the listing city's tax rates.
 
 ### Tax System
 
@@ -205,8 +215,23 @@ Allow cities to set different tax rates for different areas (commercial district
 #### 31. Tax Exemption Period for New Claims
 Give newly purchased chunks a grace period (configurable) before property tax kicks in, to encourage development.
 
-#### 32. Tax History Summary Command
-Command like `/eco tax history` that shows a player their tax payment history across all owned chunks.
+#### ~~32. Tax History Summary Command~~ ✅ IMPLEMENTED
+~~Command like `/eco tax history` that shows a player their tax payment history across all owned chunks.~~
+
+**Implemented:** Player-facing `/eco tax history` command available to all players (no permission required).
+
+- **Command registration** — The `/eco tax` node was restructured: `history` is available to all players, while `collect`, `status`, `enable`, `disable`, and `period` remain OP-only (permission level 2). Each admin subcommand now has its own `.requires(src -> src.hasPermission(2))` instead of the parent node.
+- **`EconomyCommands.showTaxHistory()`** — Gathers data from three sources:
+  1. **Current chunk ownership** — Calls `StateCraftIntegration.getAllTaxableChunks()`, filters for the player's UUID, groups by city. For each chunk, queries `ChunkValuationManager.getValuation()` for the current value and `TaxationManager.getTaxRateForCity()` for the applicable rate. Computes estimated next-period tax.
+  2. **Transaction history** — Scans `EconomyManager.getTransactionHistory(playerId)`, filters for entries whose description contains `"Property tax for chunk"`. Counts payments, sums total tax paid, and finds the oldest/newest timestamps for date range display.
+  3. **Affordability analysis** — Divides current balance by estimated next-period tax to compute how many tax periods the player can afford. Displays a warning (`§c⚠`) if funds are insufficient, a caution (`§e⚠`) for ≤3 periods, or a green confirmation for >3 periods.
+- **Display format:**
+  - Header: "=== Property Tax History ==="
+  - Summary: chunks owned, current balance, total tax paid (with payment count), date range of tax history, average per collection cycle
+  - Estimate: next-period estimated tax, affordability periods
+  - Per-city breakdown (max 5 cities shown): city name, chunk count, tax rate, estimated city-total tax. Under each city, up to 3 individual chunks showing coordinates, valuation, and estimated tax. Overflow counts shown ("+ N more cities/chunks...").
+- **`TaxationManager.getTaxRateForCity()`** — Changed from `private` to `public` so `EconomyCommands` can access it.
+- **`ChunkTaxEntry` record** — Helper record `(int chunkX, int chunkZ, double value, double taxRate, double estimatedTax)` for per-chunk display data.
 
 ### Persistence & Data
 
@@ -221,8 +246,26 @@ Write all transactions above a configurable threshold to a separate log file for
 #### 35. Share Transfer Market
 Add a share listing system where shareholders can list shares at a price and other players can buy them. Could be command-based (`/eco company shares list <count> <price>`, `/eco company shares buy <company> <count>`) or a GUI in the ATM. The `Company.transferShares()` method already supports both direct and market transfers.
 
-#### 36. Company Chunk Ownership
-Allow companies to claim and own chunks (land) via StateCraft integration. Would require a new owner type in `ClaimedChunk` and integration hooks for company-owned property tax collection. The `headquartersCityId` field already establishes the jurisdiction link.
+#### ~~36. Company Chunk Ownership~~ ✅ IMPLEMENTED
+~~Allow companies to claim and own chunks (land) via StateCraft integration. Would require a new owner type in `ClaimedChunk` and integration hooks for company-owned property tax collection. The `headquartersCityId` field already establishes the jurisdiction link.~~
+
+**Implemented:** Full company chunk ownership with tax collection, protection, and commands.
+
+- **`OwnershipType.COMPANY`** — New enum value alongside `HIERARCHY` and `PLAYER`.
+- **`ClaimedChunk`** — Added `companyOwner` UUID field, `getCompanyOwner()`/`setCompanyOwner()` (sets type to COMPANY, clears playerOwner), `isEffectiveOwner()` (returns true for company officers). Updated `hasPermission()` so company officers get full access, non-officers get OUTSIDER permissions. `save()`/`load()` persist `companyOwner` to NBT.
+- **`ChunkClaimManager`** — Added `getCompanyOwnedChunkCount(UUID companyId)` and `getCompanyOwnedChunks(UUID companyId)` methods.
+- **Commands:**
+  - `/eco company claim` — Claim the chunk you're standing on for your managed company. Chunk must be HIERARCHY (government-owned) and in the same nation as the company's HQ. Deducts the nation's chunk claim fee from company treasury.
+  - `/eco company claim <company>` — Claim for a specific company (must be officer).
+  - `/eco company unclaim` — Release a company-owned chunk back to government ownership.
+  - `/eco company chunks` — List all chunks owned by your managed company (max 15 shown).
+  - `/eco company chunks <company>` — List chunks for a specific company.
+- **Tax collection** — `ChunkTaxInfo` extended with `companyOwned` flag and `isCompanyOwned()`. `TaxationManager.collectAllTaxes()` routes company-owned chunks to `collectTaxFromCompany()` which withdraws from the company treasury (via `getOrCreateCompanyTreasury()`) instead of a player account. Records `Transaction.Type.TAX` on the company account. Force-withdraws if insufficient funds (treasury goes negative). Repossession after 3 consecutive negative periods reverts chunk to HIERARCHY and notifies company founder.
+- **Protection** — `ClaimedChunk.hasPermission()` grants full access to company officers on COMPANY-owned chunks. Non-officers get OUTSIDER-level permissions (same as player-owned private land).
+- **Display updates** — `ServerPacketHandler` chunk info and permits handlers show company name + "(Company)". `CityChunksScreen` uses purple (`§d`) color for company-owned chunks and "Corporate" status label. `ChunkCommand` info shows company name with "(Company)" tag. `SyncCityChunksPacket.ChunkEntry` documents "COMPANY" type.
+- **Government transfer** — `StateCraftIntegration.transferChunkToGovernment()` now also clears `companyOwner` alongside `playerOwner`.
+- **`StateCraftIntegration.getChunkClaimFee()`** — New helper to read a nation's chunk claim fee via reflection.
+- **`StateCraftIntegration.getAllTaxableChunks()`** — Now includes COMPANY-owned chunks in the taxable set alongside PLAYER-owned chunks.
 
 #### 37. Company Tax Rate via Legislation
 Allow states to set their own corporate tax rate via legislature policy, overriding the global config default. Similar to how `LEADER_SPENDING_LIMIT` overrides per-nation.
@@ -251,7 +294,9 @@ Track a per-player credit score based on loan repayment history. On-time payment
 9. ~~**Feature #22** — Spending limits~~ ✅ IMPLEMENTED
 10. **Feature #14** — Inflation / money supply dashboard (Low — admin tooling)
 11. ~~**Feature #19** — Confirmation dialog~~ ✅ IMPLEMENTED
-12. **Feature #35** — Share transfer market (Medium — user requested for future)
-13. **Feature #36** — Company chunk ownership (Medium — user requested for future)
-14. **Feature #37** — Company tax rate via legislation (Low — enhancement)
+12. ~~**Feature #29** — Trading Hub sales tax per city~~ ✅ ALREADY IMPLEMENTED (city/state/nation independent rates, mayor sets via settings GUI, priority capping, revenue to treasuries)
+13. ~~**Feature #32** — Tax history summary command~~ ✅ IMPLEMENTED (`/eco tax history` player command, chunk ownership + transaction history + valuation + affordability analysis)
+14. **Feature #35** — Share transfer market (Medium — user requested for future)
+14. ~~**Feature #36** — Company chunk ownership~~ ✅ IMPLEMENTED (COMPANY ownership type, claim/unclaim/chunks commands, tax from company treasury, officer permissions, repossession to founder)
+15. **Feature #37** — Company tax rate via legislation (Low — enhancement)
 

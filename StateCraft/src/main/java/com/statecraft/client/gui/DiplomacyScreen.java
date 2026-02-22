@@ -52,7 +52,7 @@ public class DiplomacyScreen extends StateCraftScreen {
         super(Component.literal("Diplomacy"));
         this.nationName = nationName;
         this.guiWidth = 320;
-        this.guiHeight = 280;
+        this.guiHeight = 230;
     }
 
     @Override
@@ -63,6 +63,12 @@ public class DiplomacyScreen extends StateCraftScreen {
     @Override
     protected void init() {
         super.init();
+
+        // Clamp height to fit on screen with padding
+        if (this.guiHeight > this.height - 10) {
+            this.guiHeight = this.height - 10;
+            this.guiTop = 5;
+        }
 
         // Request data from server
         NetworkHandler.sendToServer(new RequestDiplomacyDataPacket(nationName));
@@ -109,7 +115,8 @@ public class DiplomacyScreen extends StateCraftScreen {
             btn -> { currentTab = Tab.OUTBOUND; rebuildUI(); }));
 
         int contentY = guiTop + 42;
-        int contentH = guiHeight - 80;
+        int bottomReserved = isLeader && currentTab == Tab.RELATIONS ? 68 : 30;
+        int contentH = guiHeight - 42 - bottomReserved;
         maxVisible = contentH / ENTRY_HEIGHT;
 
         switch (currentTab) {
@@ -120,30 +127,29 @@ public class DiplomacyScreen extends StateCraftScreen {
 
         // Back button
         this.addRenderableWidget(createButton(
-            guiLeft + guiWidth / 2 - 30, guiTop + guiHeight - 28, 60, 20,
+            guiLeft + guiWidth / 2 - 30, guiTop + guiHeight - 24, 60, 18,
             Component.literal("Back"),
             btn -> goBack()));
 
         // Leader action bar (bottom area, above Back)
         if (isLeader && currentTab == Tab.RELATIONS) {
-            // Target input
-            int actionAreaY = guiTop + guiHeight - 78;
-            targetInput = new EditBox(this.font, guiLeft + 10, actionAreaY, 140, 16,
+            int actionAreaY = guiTop + guiHeight - 62;
+            targetInput = new EditBox(this.font, guiLeft + 10, actionAreaY, 140, 14,
                 Component.literal("Target Nation"));
             targetInput.setMaxLength(24);
             targetInput.setHint(Component.literal("Nation name..."));
             this.addRenderableWidget(targetInput);
 
-            // Action buttons - two rows next to the input
+            // Action buttons next to the input
             int btnX = guiLeft + 156;
             int btnY = actionAreaY - 1;
-            this.addRenderableWidget(createButton(btnX, btnY, 48, 16,
+            this.addRenderableWidget(createButton(btnX, btnY, 48, 14,
                 Component.literal("§cWar"), btn -> confirmDiplomacyAction("DECLARE_WAR")));
-            this.addRenderableWidget(createButton(btnX + 52, btnY, 48, 16,
-                Component.literal("§aPeace"), btn -> confirmDiplomacyAction("PROPOSE_PEACE")));
-            this.addRenderableWidget(createButton(btnX, btnY + 18, 48, 16,
+            this.addRenderableWidget(createButton(btnX + 52, btnY, 48, 14,
+                Component.literal("§aPeace"), btn -> openPeaceTerms()));
+            this.addRenderableWidget(createButton(btnX, btnY + 16, 48, 14,
                 Component.literal("§bAlly"), btn -> confirmDiplomacyAction("PROPOSE_ALLIANCE")));
-            this.addRenderableWidget(createButton(btnX + 52, btnY + 18, 48, 16,
+            this.addRenderableWidget(createButton(btnX + 52, btnY + 16, 48, 14,
                 Component.literal("§eBreak"), btn -> confirmDiplomacyAction("BREAK_ALLIANCE")));
         }
     }
@@ -163,7 +169,7 @@ public class DiplomacyScreen extends StateCraftScreen {
         if (!isLeader || inboundProposals.isEmpty()) return;
 
         int visible = Math.min(maxVisible, inboundProposals.size() - scrollOffset);
-        int btnWidth = 40;
+        int btnWidth = 32;
         for (int i = 0; i < visible; i++) {
             int idx = scrollOffset + i;
             if (idx >= inboundProposals.size()) break;
@@ -173,15 +179,23 @@ public class DiplomacyScreen extends StateCraftScreen {
 
             // Accept button
             this.addRenderableWidget(createButton(
-                guiLeft + guiWidth - 10 - btnWidth * 2 - 6, y, btnWidth, 14,
+                guiLeft + guiWidth - 10 - btnWidth * 3 - 10, y, btnWidth, 14,
                 Component.literal("§a✓"),
                 btn -> sendProposalAction(DiplomacyActionPacket.Action.ACCEPT_PROPOSAL, p.proposalId)));
 
             // Reject button
             this.addRenderableWidget(createButton(
-                guiLeft + guiWidth - 10 - btnWidth - 2, y, btnWidth, 14,
+                guiLeft + guiWidth - 10 - btnWidth * 2 - 6, y, btnWidth, 14,
                 Component.literal("§c✗"),
                 btn -> sendProposalAction(DiplomacyActionPacket.Action.REJECT_PROPOSAL, p.proposalId)));
+
+            // Counter button (only for peace proposals)
+            if (p.type.equals("PEACE")) {
+                this.addRenderableWidget(createButton(
+                    guiLeft + guiWidth - 10 - btnWidth - 2, y, btnWidth, 14,
+                    Component.literal("§e↩"),
+                    btn -> openCounterProposal(p.proposalId, p.otherNationName)));
+            }
         }
     }
 
@@ -211,10 +225,10 @@ public class DiplomacyScreen extends StateCraftScreen {
             case OUTBOUND -> renderOutboundTab(graphics, startX, endX, contentY);
         }
 
-        // Result message
+        // Result message (show above action area)
         if (!resultMessage.isEmpty() && System.currentTimeMillis() - resultMessageTime < 5000) {
-            graphics.drawCenteredString(this.font, resultMessage, guiLeft + guiWidth / 2,
-                guiTop + guiHeight - 96, 0xFFFFFF00);
+            int msgY = isLeader && currentTab == Tab.RELATIONS ? guiTop + guiHeight - 78 : guiTop + guiHeight - 38;
+            graphics.drawCenteredString(this.font, resultMessage, guiLeft + guiWidth / 2, msgY, 0xFFFFFF00);
         }
     }
 
@@ -291,17 +305,22 @@ public class DiplomacyScreen extends StateCraftScreen {
             String typeIcon = p.type.equals("PEACE") ? "☮" : "🤝";
             String typeText = p.type.equals("PEACE") ? "§ePeace" : "§aAlliance";
 
-            graphics.drawString(this.font, typeIcon + " " + p.otherNationName + " — " + typeText,
-                startX + 4, y + 4, 0xFFFFFFFF);
-
-            // Time remaining
-            long remaining = p.expiresAt - System.currentTimeMillis();
-            if (remaining > 0) {
-                long days = remaining / (1000 * 60 * 60 * 24);
-                long hours = (remaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60);
-                String timeStr = days > 0 ? days + "d " + hours + "h" : hours + "h";
-                graphics.drawString(this.font, "§7" + timeStr, startX + 4, y + 14, 0xFF888888);
+            // Build display string with terms summary if applicable
+            String displayText = typeIcon + " " + p.otherNationName + " — " + typeText;
+            if (p.hasTerms) {
+                List<String> termParts = new ArrayList<>();
+                if (p.currencyDemand > 0) {
+                    termParts.add(String.format("$%.0f", p.currencyDemand));
+                }
+                if (p.chunkDemandCount > 0) {
+                    termParts.add(p.chunkDemandCount + " chunk" + (p.chunkDemandCount > 1 ? "s" : ""));
+                }
+                if (!termParts.isEmpty()) {
+                    displayText += " §6(" + String.join(" + ", termParts) + ")";
+                }
             }
+
+            graphics.drawString(this.font, displayText, startX + 4, y + 4, 0xFFFFFFFF);
         }
     }
 
@@ -326,12 +345,40 @@ public class DiplomacyScreen extends StateCraftScreen {
             String typeIcon = p.type.equals("PEACE") ? "☮" : "🤝";
             String typeText = p.type.equals("PEACE") ? "§ePeace" : "§aAlliance";
 
-            graphics.drawString(this.font, typeIcon + " → " + p.otherNationName + " — " + typeText + " §7(Pending)",
-                startX + 4, y + 4, 0xFFFFFFFF);
+            String displayText = typeIcon + " → " + p.otherNationName + " — " + typeText + " §7(Pending)";
+            if (p.hasTerms) {
+                List<String> termParts = new ArrayList<>();
+                if (p.currencyDemand > 0) {
+                    termParts.add(String.format("$%.0f", p.currencyDemand));
+                }
+                if (p.chunkDemandCount > 0) {
+                    termParts.add(p.chunkDemandCount + " chunk" + (p.chunkDemandCount > 1 ? "s" : ""));
+                }
+                if (!termParts.isEmpty()) {
+                    displayText = typeIcon + " → " + p.otherNationName + " §6(" + String.join(" + ", termParts) + ") §7(Pending)";
+                }
+            }
+
+            graphics.drawString(this.font, displayText, startX + 4, y + 4, 0xFFFFFFFF);
         }
     }
 
     // ==================== Actions ====================
+
+    private void openPeaceTerms() {
+        if (targetInput == null || targetInput.getValue().trim().isEmpty()) {
+            resultMessage = "§cEnter a nation name first!";
+            resultMessageTime = System.currentTimeMillis();
+            return;
+        }
+        String targetName = targetInput.getValue().trim();
+        this.minecraft.setScreen(new PeaceTermsScreen(nationName, targetName, null));
+    }
+
+    private void openCounterProposal(String proposalId, String otherNationName) {
+        // Counter-proposal: we become the proposer, demanding from the OTHER nation
+        this.minecraft.setScreen(new PeaceTermsScreen(nationName, otherNationName, proposalId));
+    }
 
     private void confirmDiplomacyAction(String action) {
         if (targetInput == null || targetInput.getValue().trim().isEmpty()) {

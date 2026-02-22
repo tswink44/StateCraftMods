@@ -349,6 +349,44 @@ Set a player as the mayor of a city.
 ```
 Reload configuration (future feature).
 
+```
+/sc admin audit
+```
+Run data integrity check and orphan cleanup.
+- Scans for states referencing non-existent nations
+- Scans for cities referencing non-existent states
+- Scans for chunks referencing non-existent cities
+- Scans for player-nation index entries for players not in any nation's member list
+- Logs all orphans found and removes them automatically
+- Reports before/after statistics
+- Also runs automatically on every world load
+
+```
+/sc admin renamenation <nation> <newname>
+```
+Force rename a nation.
+- Validates name is 2-32 characters
+- Checks new name is not already taken
+- Note: Players must use a constitutional amendment via the legislature to rename nations
+
+```
+/sc admin renamestate <nation> <state> <newname>
+```
+Force rename a state within a nation.
+- Validates name is 2-32 characters
+- Checks new name is not already taken within the nation
+- Lists available states if state name is wrong
+- Note: Governors can also rename via the State Settings GUI
+
+```
+/sc admin renamecity <nation> <state> <city> <newname>
+```
+Force rename a city within a state.
+- Validates name is 2-32 characters
+- Checks new name is not already taken within the state
+- Lists available states/cities if names are wrong
+- Note: Mayors can also rename via the City Settings GUI
+
 ---
 
 ## ⌨️ Keybindings

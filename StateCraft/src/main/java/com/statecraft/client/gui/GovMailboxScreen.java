@@ -15,7 +15,7 @@ import java.util.List;
 public class GovMailboxScreen extends StateCraftScreen {
 
     public enum EntityType {
-        NATION, STATE, CITY
+        NATION, STATE, CITY, COMPANY
     }
 
     private final EntityType entityType;
@@ -45,6 +45,7 @@ public class GovMailboxScreen extends StateCraftScreen {
             case NATION -> "Nation Mailbox: " + name;
             case STATE -> "State Mailbox: " + name;
             case CITY -> "City Mailbox: " + name;
+            case COMPANY -> "Company Mailbox: " + name;
         };
     }
 
@@ -57,6 +58,7 @@ public class GovMailboxScreen extends StateCraftScreen {
             case NATION -> RequestGovMailDataPacket.EntityType.NATION;
             case STATE -> RequestGovMailDataPacket.EntityType.STATE;
             case CITY -> RequestGovMailDataPacket.EntityType.CITY;
+            case COMPANY -> RequestGovMailDataPacket.EntityType.COMPANY;
         };
         NetworkHandler.sendToServer(new RequestGovMailDataPacket(packetEntityType, entityName));
 
@@ -213,6 +215,7 @@ public class GovMailboxScreen extends StateCraftScreen {
             case NATION -> RequestGovMailDataPacket.EntityType.NATION;
             case STATE -> RequestGovMailDataPacket.EntityType.STATE;
             case CITY -> RequestGovMailDataPacket.EntityType.CITY;
+            case COMPANY -> RequestGovMailDataPacket.EntityType.COMPANY;
         };
         NetworkHandler.sendToServer(new RequestGovMailDataPacket(packetEntityType, entityName,
             RequestGovMailDataPacket.Action.MARK_ALL_READ));
@@ -243,6 +246,7 @@ public class GovMailboxScreen extends StateCraftScreen {
                     this.minecraft.setScreen(new MainMenuScreen());
                 }
             }
+            case COMPANY -> this.minecraft.setScreen(new CompanyScreen());
         }
     }
 

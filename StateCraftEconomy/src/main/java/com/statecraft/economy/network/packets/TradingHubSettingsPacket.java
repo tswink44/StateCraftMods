@@ -28,10 +28,16 @@ public class TradingHubSettingsPacket {
     public static class ShareData {
         public final String playerName;
         public final double percentage;
+        public final boolean isCompany;
 
         public ShareData(String playerName, double percentage) {
+            this(playerName, percentage, false);
+        }
+
+        public ShareData(String playerName, double percentage, boolean isCompany) {
             this.playerName = playerName;
             this.percentage = percentage;
+            this.isCompany = isCompany;
         }
     }
 
@@ -48,9 +54,10 @@ public class TradingHubSettingsPacket {
         int shareCount = buf.readVarInt();
         this.shares = new ArrayList<>(shareCount);
         for (int i = 0; i < shareCount; i++) {
-            String name = buf.readUtf(16);
+            String name = buf.readUtf(64);
             double percentage = buf.readDouble();
-            shares.add(new ShareData(name, percentage));
+            boolean isCompany = buf.readBoolean();
+            shares.add(new ShareData(name, percentage, isCompany));
         }
     }
 
@@ -60,8 +67,9 @@ public class TradingHubSettingsPacket {
 
         buf.writeVarInt(shares.size());
         for (ShareData share : shares) {
-            buf.writeUtf(share.playerName, 16);
+            buf.writeUtf(share.playerName, 64);
             buf.writeDouble(share.percentage);
+            buf.writeBoolean(share.isCompany);
         }
     }
 
@@ -91,28 +99,45 @@ public class TradingHubSettingsPacket {
             List<TradingHubBlockEntity.ProfitShare> newShares = new ArrayList<>();
 
             for (ShareData shareData : packet.shares) {
-                // Try to resolve player UUID from name
-                UUID playerUUID = resolvePlayerUUID(player.getServer(), shareData.playerName);
-
-                if (playerUUID != null) {
-                    newShares.add(new TradingHubBlockEntity.ProfitShare(
-                        playerUUID,
-                        shareData.playerName,
-                        shareData.percentage
-                    ));
+                if (shareData.isCompany) {
+                    // Resolve company by name
+                    com.statecraft.company.Company company =
+                        com.statecraft.company.CompanyManager.getInstance().getCompanyByName(shareData.playerName);
+                    if (company != null) {
+                        newShares.add(new TradingHubBlockEntity.ProfitShare(
+                            company.getId(),
+                            company.getName(),
+                            shareData.percentage,
+                            true
+                        ));
+                    } else {
+                        player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                            "§c[Trading Hub] Company '" + shareData.playerName + "' not found."));
+                    }
                 } else {
-                    // Player not found - use name-based UUID as fallback
-                    // This allows setting up shares for offline players
-                    playerUUID = UUID.nameUUIDFromBytes(shareData.playerName.toLowerCase().getBytes());
-                    newShares.add(new TradingHubBlockEntity.ProfitShare(
-                        playerUUID,
-                        shareData.playerName,
-                        shareData.percentage
-                    ));
+                    // Try to resolve player UUID from name
+                    UUID playerUUID = resolvePlayerUUID(player.getServer(), shareData.playerName);
 
-                    player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
-                        "§e[Trading Hub] Warning: Player '" + shareData.playerName +
-                        "' not found. Share will activate when they join."));
+                    if (playerUUID != null) {
+                        newShares.add(new TradingHubBlockEntity.ProfitShare(
+                            playerUUID,
+                            shareData.playerName,
+                            shareData.percentage
+                        ));
+                    } else {
+                        // Player not found - use name-based UUID as fallback
+                        // This allows setting up shares for offline players
+                        playerUUID = UUID.nameUUIDFromBytes(shareData.playerName.toLowerCase().getBytes());
+                        newShares.add(new TradingHubBlockEntity.ProfitShare(
+                            playerUUID,
+                            shareData.playerName,
+                            shareData.percentage
+                        ));
+
+                        player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                            "§e[Trading Hub] Warning: Player '" + shareData.playerName +
+                            "' not found. Share will activate when they join."));
+                    }
                 }
             }
 

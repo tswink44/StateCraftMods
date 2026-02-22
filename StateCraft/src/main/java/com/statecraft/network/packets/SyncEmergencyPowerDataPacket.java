@@ -14,12 +14,14 @@ public class SyncEmergencyPowerDataPacket {
     private final boolean isLeader;
     private final List<PowerEntry> powers;
     private final String resultMessage; // Non-empty if this is a response to an invoke/revoke
+    private final List<HistoryEntry> history; // Emergency power event history
 
-    public SyncEmergencyPowerDataPacket(String nationName, boolean isLeader, List<PowerEntry> powers, String resultMessage) {
+    public SyncEmergencyPowerDataPacket(String nationName, boolean isLeader, List<PowerEntry> powers, String resultMessage, List<HistoryEntry> history) {
         this.nationName = nationName;
         this.isLeader = isLeader;
         this.powers = powers;
         this.resultMessage = resultMessage != null ? resultMessage : "";
+        this.history = history != null ? history : new ArrayList<>();
     }
 
     public SyncEmergencyPowerDataPacket(FriendlyByteBuf buf) {
@@ -40,6 +42,17 @@ public class SyncEmergencyPowerDataPacket {
             ));
         }
         this.resultMessage = buf.readUtf();
+        int historyCount = buf.readVarInt();
+        this.history = new ArrayList<>(historyCount);
+        for (int i = 0; i < historyCount; i++) {
+            history.add(new HistoryEntry(
+                buf.readUtf(),   // powerDisplayName
+                buf.readUtf(),   // eventType
+                buf.readUtf(),   // actorName
+                buf.readUtf(),   // details
+                buf.readLong()   // timestamp
+            ));
+        }
     }
 
     public void encode(FriendlyByteBuf buf) {
@@ -57,12 +70,21 @@ public class SyncEmergencyPowerDataPacket {
             buf.writeBoolean(entry.requiresTarget);
         }
         buf.writeUtf(resultMessage);
+        buf.writeVarInt(history.size());
+        for (HistoryEntry entry : history) {
+            buf.writeUtf(entry.powerDisplayName);
+            buf.writeUtf(entry.eventType);
+            buf.writeUtf(entry.actorName);
+            buf.writeUtf(entry.details);
+            buf.writeLong(entry.timestamp);
+        }
     }
 
     public String getNationName() { return nationName; }
     public boolean isLeader() { return isLeader; }
     public List<PowerEntry> getPowers() { return powers; }
     public String getResultMessage() { return resultMessage; }
+    public List<HistoryEntry> getHistory() { return history; }
 
     public enum PowerStatus {
         AVAILABLE,  // Can be invoked
@@ -92,6 +114,22 @@ public class SyncEmergencyPowerDataPacket {
             this.status = status;
             this.remainingMs = remainingMs;
             this.requiresTarget = requiresTarget;
+        }
+    }
+
+    public static class HistoryEntry {
+        public final String powerDisplayName;
+        public final String eventType;
+        public final String actorName;
+        public final String details;
+        public final long timestamp;
+
+        public HistoryEntry(String powerDisplayName, String eventType, String actorName, String details, long timestamp) {
+            this.powerDisplayName = powerDisplayName;
+            this.eventType = eventType;
+            this.actorName = actorName;
+            this.details = details != null ? details : "";
+            this.timestamp = timestamp;
         }
     }
 }

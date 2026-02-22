@@ -24,6 +24,7 @@ public class ClaimedChunk {
     // Ownership
     private OwnershipType ownershipType;
     private UUID playerOwner; // Only set if ownershipType is PLAYER
+    private UUID companyOwner; // Only set if ownershipType is COMPANY
 
     // Sale information
     private boolean forSale;
@@ -121,6 +122,44 @@ public class ClaimedChunk {
         setPlayerOwner(ownerId);
     }
 
+    /**
+     * Get the company that owns this chunk (only valid when ownershipType is COMPANY)
+     */
+    @Nullable
+    public UUID getCompanyOwner() {
+        return companyOwner;
+    }
+
+    /**
+     * Set company ownership on this chunk.
+     * Pass non-null to set COMPANY ownership, null to revert to HIERARCHY.
+     */
+    public void setCompanyOwner(@Nullable UUID companyId) {
+        this.companyOwner = companyId;
+        if (companyId != null) {
+            this.ownershipType = OwnershipType.COMPANY;
+            this.playerOwner = null; // Clear player ownership
+        } else if (this.playerOwner == null) {
+            this.ownershipType = OwnershipType.HIERARCHY;
+        }
+    }
+
+    /**
+     * Check if a player can act as owner on this chunk (player-owned or company officer).
+     * Used for permission checks where company officers should have owner-level access.
+     */
+    public boolean isEffectiveOwner(UUID playerId) {
+        if (ownershipType == OwnershipType.PLAYER && playerId.equals(playerOwner)) {
+            return true;
+        }
+        if (ownershipType == OwnershipType.COMPANY && companyOwner != null) {
+            com.statecraft.company.Company company =
+                com.statecraft.company.CompanyManager.getInstance().getCompany(companyOwner);
+            return company != null && company.isOfficer(playerId);
+        }
+        return false;
+    }
+
     // ==================== Sale Methods ====================
 
     public boolean isForSale() {
@@ -176,15 +215,23 @@ public class ClaimedChunk {
             return true;
         }
 
+        // Check company ownership — officers have full permissions
+        if (ownershipType == OwnershipType.COMPANY && companyOwner != null) {
+            com.statecraft.company.Company company =
+                com.statecraft.company.CompanyManager.getInstance().getCompany(companyOwner);
+            if (company != null && company.isOfficer(playerId)) {
+                return true;
+            }
+        }
+
         // Check player-specific overrides (building permits)
         Set<Permission> playerPerms = playerPermissions.get(playerId);
         if (playerPerms != null && playerPerms.contains(permission)) {
             return true;
         }
 
-        // For privately owned chunks, non-owners without permits are treated as OUTSIDER
-        // Only the owner and explicit permit holders get access
-        if (ownershipType == OwnershipType.PLAYER) {
+        // For privately owned chunks (player or company), non-owners without permits are treated as OUTSIDER
+        if (ownershipType == OwnershipType.PLAYER || ownershipType == OwnershipType.COMPANY) {
             Set<Permission> outsiderPerms = rolePermissions.get(PermissionLevel.OUTSIDER);
             return outsiderPerms != null && outsiderPerms.contains(permission);
         }
@@ -285,6 +332,10 @@ public class ClaimedChunk {
             tag.putUUID("playerOwner", playerOwner);
         }
 
+        if (companyOwner != null) {
+            tag.putUUID("companyOwner", companyOwner);
+        }
+
         // Save sale information
         tag.putBoolean("forSale", forSale);
         if (forSale) {
@@ -329,6 +380,10 @@ public class ClaimedChunk {
 
         if (tag.hasUUID("playerOwner")) {
             chunk.playerOwner = tag.getUUID("playerOwner");
+        }
+
+        if (tag.hasUUID("companyOwner")) {
+            chunk.companyOwner = tag.getUUID("companyOwner");
         }
 
         // Load sale information

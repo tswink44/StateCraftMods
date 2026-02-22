@@ -72,6 +72,7 @@ public class StateCraftIntegration {
                         case "depositToPlayer" -> { return economyIntegrationImpl.depositToPlayer((UUID) args[0], (Double) args[1], (String) args[2]); }
                         case "getNationBalance" -> { return economyIntegrationImpl.getNationBalance((String) args[0]); }
                         case "withdrawFromNation" -> { return economyIntegrationImpl.withdrawFromNation((String) args[0], (Double) args[1], (String) args[2]); }
+                        case "forceWithdrawFromNation" -> { return economyIntegrationImpl.forceWithdrawFromNation((String) args[0], (Double) args[1], (String) args[2]); }
                         case "depositToNation" -> { return economyIntegrationImpl.depositToNation((String) args[0], (Double) args[1], (String) args[2]); }
                         case "formatCurrency" -> { return economyIntegrationImpl.formatCurrency((Double) args[0]); }
                         case "getChunkImprovementScore" -> { return economyIntegrationImpl.getChunkImprovementScore((Integer) args[0], (Integer) args[1], (String) args[2]); }
@@ -225,6 +226,30 @@ public class StateCraftIntegration {
             return false;
         }
 
+        public boolean forceWithdrawFromNation(String nationName, double amount, String description) {
+            try {
+                var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
+                var getInstance = managerClass.getMethod("getInstance");
+                var claimManager = getInstance.invoke(null);
+
+                var getNationByName = managerClass.getMethod("getNationByName", String.class);
+                var nation = getNationByName.invoke(claimManager, nationName);
+
+                if (nation != null) {
+                    var nationClass = Class.forName("com.statecraft.core.Nation");
+                    var getId = nationClass.getMethod("getId");
+                    UUID nationId = (UUID) getId.invoke(nation);
+
+                    EconomyManager manager = EconomyManager.getInstance();
+                    var result = manager.forceWithdrawFromNationTreasury(nationId, amount, description);
+                    return result.isSuccess();
+                }
+            } catch (Exception e) {
+                StateCraftEconomy.LOGGER.warn("Error force-withdrawing from nation '{}': {}", nationName, e.getMessage());
+            }
+            return false;
+        }
+
         public boolean depositToNation(String nationName, double amount, String description) {
             try {
                 var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
@@ -276,6 +301,11 @@ public class StateCraftIntegration {
         public void onCompanyCreated(UUID companyId) {
             EconomyManager.getInstance().getOrCreateCompanyTreasury(companyId);
             StateCraftEconomy.LOGGER.info("Created treasury account for company {}", companyId);
+        }
+
+        public void onBankCreated(UUID companyId) {
+            com.statecraft.economy.company.BankManager.getInstance().createBank(companyId);
+            StateCraftEconomy.LOGGER.info("Initialized bank for company {}", companyId);
         }
 
         public boolean onCompanyDissolving(UUID companyId, UUID founderId) {
@@ -1449,6 +1479,27 @@ public class StateCraftIntegration {
     }
 
     /**
+     * Check if a player can own more chunks (against the per-player limit).
+     * Uses reflection to call ChunkClaimManager.canPlayerOwnMoreChunks().
+     */
+    public static boolean canPlayerOwnMoreChunks(java.util.UUID playerId) {
+        if (!initialized) return true; // If not initialized, don't block
+        try {
+            var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
+            var getInstance = managerClass.getMethod("getInstance");
+            var manager = getInstance.invoke(null);
+            var nationClass = Class.forName("com.statecraft.core.Nation");
+            var canOwn = managerClass.getMethod("canPlayerOwnMoreChunks", java.util.UUID.class, nationClass);
+            var getPlayerNation = managerClass.getMethod("getPlayerNation", java.util.UUID.class);
+            Object playerNation = getPlayerNation.invoke(manager, playerId);
+            return (boolean) canOwn.invoke(manager, playerId, playerNation);
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.debug("Error checking player chunk limit: {}", e.getMessage());
+            return true; // Don't block on error
+        }
+    }
+
+    /**
      * Transfer chunk ownership to a new player
      */
     public static boolean transferChunkOwnership(int chunkX, int chunkZ,
@@ -1464,6 +1515,17 @@ public class StateCraftIntegration {
             var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
             var getInstance = managerClass.getMethod("getInstance");
             var manager = getInstance.invoke(null);
+
+            // Check player chunk limit before transferring
+            var canPlayerOwnMore = managerClass.getMethod("canPlayerOwnMoreChunks", UUID.class, Class.forName("com.statecraft.core.Nation"));
+            // Get player's nation for the limit check
+            var getPlayerNation = managerClass.getMethod("getPlayerNation", UUID.class);
+            Object playerNation = getPlayerNation.invoke(manager, newOwnerId);
+            boolean canOwn = (boolean) canPlayerOwnMore.invoke(manager, newOwnerId, playerNation);
+            if (!canOwn) {
+                StateCraftEconomy.LOGGER.warn("Player {} has reached their personal chunk limit", newOwnerId);
+                return false;
+            }
 
             var chunkPosClass = Class.forName("net.minecraft.world.level.ChunkPos");
             var chunkPos = chunkPosClass.getConstructor(int.class, int.class).newInstance(chunkX, chunkZ);
@@ -1536,6 +1598,10 @@ public class StateCraftIntegration {
             var setPlayerOwner = chunkClass.getMethod("setPlayerOwner", UUID.class);
             setPlayerOwner.invoke(chunk, (UUID) null);
 
+            // Also clear company owner if set
+            var setCompanyOwner = chunkClass.getMethod("setCompanyOwner", UUID.class);
+            setCompanyOwner.invoke(chunk, (UUID) null);
+
             // Remove from sale if listed
             var removeFromSale = chunkClass.getMethod("removeFromSale");
             removeFromSale.invoke(chunk);
@@ -1588,6 +1654,7 @@ public class StateCraftIntegration {
 
             var ownershipTypeClass = Class.forName("com.statecraft.core.OwnershipType");
             var playerType = Enum.valueOf((Class<Enum>) ownershipTypeClass, "PLAYER");
+            var companyType = Enum.valueOf((Class<Enum>) ownershipTypeClass, "COMPANY");
 
             for (Object nation : nations) {
                 @SuppressWarnings("unchecked")
@@ -1616,9 +1683,6 @@ public class StateCraftIntegration {
                                 int x = (int) chunkPosClass.getField("x").get(chunkPos);
                                 int z = (int) chunkPosClass.getField("z").get(chunkPos);
 
-                                // Get dimension string using location().toString() for consistency
-                                // ResourceKey.toString() returns "ResourceKey[minecraft:dimension / minecraft:overworld]"
-                                // but we need "minecraft:overworld" to match cache keys
                                 net.minecraft.resources.ResourceKey<?> dimKey = (net.minecraft.resources.ResourceKey<?>) dimension;
                                 String dimStr = dimKey.location().toString();
 
@@ -1627,6 +1691,28 @@ public class StateCraftIntegration {
                                     dimKey,
                                     cityId, ownerId, true, salePrice
                                 ));
+                            } else if (ownership.equals(companyType)) {
+                                // Company-owned chunks — taxed from company treasury
+                                var getCompanyOwner = chunkClass.getMethod("getCompanyOwner");
+                                UUID companyId = (UUID) getCompanyOwner.invoke(chunk);
+                                if (companyId != null) {
+                                    Object chunkPos = getChunkPos.invoke(chunk);
+                                    Object dimension = getDimension.invoke(chunk);
+                                    double salePrice = (Double) getSalePrice.invoke(chunk);
+
+                                    var chunkPosClass = Class.forName("net.minecraft.world.level.ChunkPos");
+                                    int x = (int) chunkPosClass.getField("x").get(chunkPos);
+                                    int z = (int) chunkPosClass.getField("z").get(chunkPos);
+
+                                    net.minecraft.resources.ResourceKey<?> dimKey = (net.minecraft.resources.ResourceKey<?>) dimension;
+                                    String dimStr = dimKey.location().toString();
+
+                                    result.add(new com.statecraft.economy.core.TaxationManager.ChunkTaxInfo(
+                                        x, z, dimStr,
+                                        dimKey,
+                                        cityId, companyId, true, salePrice, true
+                                    ));
+                                }
                             }
                         }
                     }
@@ -1690,6 +1776,29 @@ public class StateCraftIntegration {
         }
 
         return null;
+    }
+
+    /**
+     * Get a nation's chunk claim fee.
+     */
+    public static double getChunkClaimFee(UUID nationId) {
+        if (!initialized || nationId == null) return 0;
+
+        try {
+            var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
+            var manager = managerClass.getMethod("getInstance").invoke(null);
+            var getNation = managerClass.getMethod("getNation", UUID.class);
+            var nation = getNation.invoke(manager, nationId);
+
+            if (nation != null) {
+                var nationClass = Class.forName("com.statecraft.core.Nation");
+                return (double) nationClass.getMethod("getChunkClaimFee").invoke(nation);
+            }
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.debug("Error getting chunk claim fee: {}", e.getMessage());
+        }
+
+        return 0;
     }
 
     /**
@@ -2338,8 +2447,102 @@ public class StateCraftIntegration {
                 UUID.class, mailTypeClass, String.class, String.class);
             sendSystemMail.invoke(mailManager, founderId, mailType, subject, body);
 
+            // Also send to the company's own mailbox
+            sendCompanyMailboxNotification(companyName, "FINANCIAL", subject, body);
+
         } catch (Exception e) {
             StateCraftEconomy.LOGGER.debug("Error sending company dividend deferred mail: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Send a system mail to a company's own mailbox (accessed by officers/founders).
+     * @param companyName The company name to look up
+     * @param mailTypeName The MailType enum name (e.g., "FINANCIAL", "SYSTEM")
+     * @param subject Mail subject
+     * @param body Mail body
+     */
+    public static void sendCompanyMailboxNotification(String companyName, String mailTypeName,
+                                                       String subject, String body) {
+        if (!initialized) return;
+
+        try {
+            // Look up the company by name
+            var companyManagerClass = Class.forName("com.statecraft.company.CompanyManager");
+            var getCompanyManager = companyManagerClass.getMethod("getInstance");
+            var companyManager = getCompanyManager.invoke(null);
+            var getByName = companyManagerClass.getMethod("getCompanyByName", String.class);
+            Object company = getByName.invoke(companyManager, companyName);
+            if (company == null) return;
+            UUID companyId = (UUID) company.getClass().getMethod("getId").invoke(company);
+
+            var mailManagerClass = Class.forName("com.statecraft.mail.MailManager");
+            var getInstance = mailManagerClass.getMethod("getInstance");
+            var mailManager = getInstance.invoke(null);
+
+            var mailTypeClass = Class.forName("com.statecraft.mail.Mail$MailType");
+            Object mailType = null;
+            for (Object constant : mailTypeClass.getEnumConstants()) {
+                if (mailTypeName.equals(constant.toString())) {
+                    mailType = constant;
+                    break;
+                }
+            }
+            if (mailType == null) {
+                for (Object constant : mailTypeClass.getEnumConstants()) {
+                    if ("SYSTEM".equals(constant.toString())) {
+                        mailType = constant;
+                        break;
+                    }
+                }
+            }
+            if (mailType == null) mailType = mailTypeClass.getEnumConstants()[0];
+
+            var sendCompanyMail = mailManagerClass.getMethod("sendCompanySystemMail",
+                UUID.class, mailTypeClass, String.class, String.class);
+            sendCompanyMail.invoke(mailManager, companyId, mailType, subject, body);
+
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.debug("Error sending company mailbox notification: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Send a system mail to a company's own mailbox by company UUID.
+     */
+    public static void sendCompanyMailboxNotificationById(UUID companyId, String mailTypeName,
+                                                           String subject, String body) {
+        if (!initialized) return;
+
+        try {
+            var mailManagerClass = Class.forName("com.statecraft.mail.MailManager");
+            var getInstance = mailManagerClass.getMethod("getInstance");
+            var mailManager = getInstance.invoke(null);
+
+            var mailTypeClass = Class.forName("com.statecraft.mail.Mail$MailType");
+            Object mailType = null;
+            for (Object constant : mailTypeClass.getEnumConstants()) {
+                if (mailTypeName.equals(constant.toString())) {
+                    mailType = constant;
+                    break;
+                }
+            }
+            if (mailType == null) {
+                for (Object constant : mailTypeClass.getEnumConstants()) {
+                    if ("SYSTEM".equals(constant.toString())) {
+                        mailType = constant;
+                        break;
+                    }
+                }
+            }
+            if (mailType == null) mailType = mailTypeClass.getEnumConstants()[0];
+
+            var sendCompanyMail = mailManagerClass.getMethod("sendCompanySystemMail",
+                UUID.class, mailTypeClass, String.class, String.class);
+            sendCompanyMail.invoke(mailManager, companyId, mailType, subject, body);
+
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.debug("Error sending company mailbox notification by ID: {}", e.getMessage());
         }
     }
 

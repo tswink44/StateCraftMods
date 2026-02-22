@@ -564,6 +564,26 @@ public class NetworkHandler {
             .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncDiplomacyData(pkt, ctx), ctx))
             .add();
 
+        // Peace Terms packets (Client -> Server)
+        CHANNEL.messageBuilder(PeaceTermsProposalPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(PeaceTermsProposalPacket::encode)
+            .decoder(PeaceTermsProposalPacket::new)
+            .consumerMainThread(ServerPacketHandler::handlePeaceTermsProposal)
+            .add();
+
+        CHANNEL.messageBuilder(RequestTargetNationChunksPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestTargetNationChunksPacket::encode)
+            .decoder(RequestTargetNationChunksPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestTargetNationChunks)
+            .add();
+
+        // Peace Terms packets (Server -> Client)
+        CHANNEL.messageBuilder(SyncTargetNationChunksPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncTargetNationChunksPacket::encode)
+            .decoder(SyncTargetNationChunksPacket::new)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncTargetNationChunks(pkt, ctx), ctx))
+            .add();
+
         // Company packets (Client -> Server)
         CHANNEL.messageBuilder(RequestCompanyDataPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
             .encoder(RequestCompanyDataPacket::encode)
@@ -588,6 +608,19 @@ public class NetworkHandler {
             .encoder(SyncCompanyDataPacket::encode)
             .decoder(SyncCompanyDataPacket::new)
             .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncCompanyData(pkt, ctx), ctx))
+            .add();
+
+        // Shareholder voting packets
+        CHANNEL.messageBuilder(ShareholderVotePacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(ShareholderVotePacket::encode)
+            .decoder(ShareholderVotePacket::new)
+            .consumerMainThread(ServerPacketHandler::handleShareholderVote)
+            .add();
+
+        CHANNEL.messageBuilder(SyncShareholderVotesPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncShareholderVotesPacket::encode)
+            .decoder(SyncShareholderVotesPacket::new)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncShareholderVotes(pkt, ctx), ctx))
             .add();
 
         StateCraft.LOGGER.info("StateCraft network packets registered");

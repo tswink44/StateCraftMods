@@ -5,10 +5,15 @@ import com.statecraft.core.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.Container;
+import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.*;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraftforge.event.entity.player.AttackEntityEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.event.level.BlockEvent;
@@ -296,66 +301,95 @@ public class ProtectionHandler {
     }
 
     /**
-     * Check if the interaction is with a container block
+     * Check if the interaction is with a container block.
+     * Uses type-based checks (MenuProvider, Container interfaces, block entity hierarchy)
+     * instead of fragile string matching. This correctly catches:
+     * - All vanilla containers (chests, furnaces, hoppers, barrels, brewing stands, etc.)
+     * - Modded containers from other mods
+     * - StateCraft Economy blocks (trading hub, company vault, etc.)
      */
     private static boolean isContainer(PlayerInteractEvent.RightClickBlock event) {
         if (event.getLevel().isClientSide()) return false;
 
-        var state = event.getLevel().getBlockState(event.getPos());
-        var block = state.getBlock();
-        String blockName = block.getDescriptionId().toLowerCase();
+        BlockPos pos = event.getPos();
+        Level level = event.getLevel();
+        BlockState state = level.getBlockState(pos);
+        Block block = state.getBlock();
 
-        // Common container blocks
-        return blockName.contains("chest") ||
-               blockName.contains("barrel") ||
-               blockName.contains("shulker") ||
-               blockName.contains("hopper") ||
-               blockName.contains("dropper") ||
-               blockName.contains("dispenser") ||
-               blockName.contains("furnace") ||
-               blockName.contains("smoker") ||
-               blockName.contains("blast") ||
-               blockName.contains("brewing") ||
-               blockName.contains("anvil") ||
-               blockName.contains("enchanting") ||
-               blockName.contains("beacon") ||
-               blockName.contains("lectern") ||
-               blockName.contains("vault") ||
-               blockName.contains("trading_hub");
+        // Check block type directly for known container blocks
+        if (block instanceof ChestBlock ||
+            block instanceof BarrelBlock ||
+            block instanceof ShulkerBoxBlock ||
+            block instanceof HopperBlock ||
+            block instanceof DropperBlock ||
+            block instanceof DispenserBlock ||
+            block instanceof AbstractFurnaceBlock ||
+            block instanceof BrewingStandBlock ||
+            block instanceof AnvilBlock ||
+            block instanceof EnchantmentTableBlock ||
+            block instanceof BeaconBlock ||
+            block instanceof LecternBlock) {
+            return true;
+        }
+
+        // Check if the block entity implements MenuProvider or Container
+        // This catches all modded containers and any vanilla ones not covered above
+        BlockEntity blockEntity = level.getBlockEntity(pos);
+        if (blockEntity instanceof MenuProvider || blockEntity instanceof Container) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
      * Check if the interaction is with an interactable block (doors, buttons, levers, etc.)
      * These are blocks that have a use action when right-clicked, as opposed to
      * blocks that are just surfaces for placing other blocks against.
+     * Uses type-based checks instead of fragile string matching.
      */
     private static boolean isInteractable(PlayerInteractEvent.RightClickBlock event) {
         if (event.getLevel().isClientSide()) return false;
 
-        var state = event.getLevel().getBlockState(event.getPos());
-        var block = state.getBlock();
-        String blockName = block.getDescriptionId().toLowerCase();
+        BlockState state = event.getLevel().getBlockState(event.getPos());
+        Block block = state.getBlock();
 
-        return blockName.contains("door") ||
-               blockName.contains("button") ||
-               blockName.contains("lever") ||
-               blockName.contains("gate") ||
-               blockName.contains("trapdoor") ||
-               blockName.contains("bell") ||
-               blockName.contains("daylight") ||
-               blockName.contains("comparator") ||
-               blockName.contains("repeater") ||
-               blockName.contains("note_block") ||
-               blockName.contains("jukebox") ||
-               blockName.contains("cake") ||
-               blockName.contains("candle_cake") ||
-               blockName.contains("flower_pot") ||
-               blockName.contains("campfire") ||
-               blockName.contains("respawn_anchor") ||
-               blockName.contains("dragon_egg") ||
-               blockName.contains("command_block") ||
-               blockName.contains("structure_block") ||
-               blockName.contains("bed");
+        // Doors, trapdoors, fence gates
+        if (block instanceof DoorBlock ||
+            block instanceof TrapDoorBlock ||
+            block instanceof FenceGateBlock) {
+            return true;
+        }
+
+        // Buttons, levers
+        if (block instanceof ButtonBlock ||
+            block instanceof LeverBlock) {
+            return true;
+        }
+
+        // Redstone components
+        if (block instanceof DiodeBlock ||      // Covers RepeaterBlock and ComparatorBlock
+            block instanceof DaylightDetectorBlock ||
+            block instanceof NoteBlock) {
+            return true;
+        }
+
+        // Misc interactable blocks
+        if (block instanceof BellBlock ||
+            block instanceof BedBlock ||
+            block instanceof JukeboxBlock ||
+            block instanceof CakeBlock ||
+            block instanceof CandleCakeBlock ||
+            block instanceof FlowerPotBlock ||
+            block instanceof CampfireBlock ||
+            block instanceof RespawnAnchorBlock ||
+            block instanceof DragonEggBlock ||
+            block instanceof CommandBlock ||
+            block instanceof StructureBlock) {
+            return true;
+        }
+
+        return false;
     }
 
     /**

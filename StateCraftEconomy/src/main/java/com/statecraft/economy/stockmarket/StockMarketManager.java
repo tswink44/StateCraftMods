@@ -187,6 +187,23 @@ public class StockMarketManager {
             buyerName, quantity, company.getName(), listing.getSellerName(),
             ecoManager.formatCurrency(totalCost));
 
+        // Send notification to company mailbox
+        if (StateCraftEconomy.isStateCraftLoaded()) {
+            com.statecraft.economy.integration.StateCraftIntegration.sendCompanyMailboxNotificationById(
+                company.getId(), "FINANCIAL",
+                "Share Trade — " + company.getName(),
+                String.format(
+                    "§eA share trade has been executed.\n\n" +
+                    "§7Buyer: §f%s\n" +
+                    "§7Seller: §f%s\n" +
+                    "§7Shares: §f%d\n" +
+                    "§7Price: §f%s\n" +
+                    "§7Total: §f%s",
+                    buyerName, listing.getSellerName(), quantity,
+                    ecoManager.formatCurrency(listing.getPricePerShare()),
+                    ecoManager.formatCurrency(totalCost)));
+        }
+
         return "§aPurchased " + quantity + " shares of " + company.getName() +
                " for " + ecoManager.formatCurrency(totalCost) + ".";
     }

@@ -139,6 +139,29 @@ public class Company {
         shareholders.merge(to, count, Integer::sum);
     }
 
+    /**
+     * Buy back shares from a shareholder, reducing total shares.
+     * Shares are removed from circulation entirely.
+     * @param from The shareholder to buy shares from
+     * @param count Number of shares to buy back
+     * @return true if successful
+     */
+    public boolean buybackShares(UUID from, int count) {
+        if (count <= 0) return false;
+        int current = getShareCount(from);
+        if (current < count) return false;
+
+        int remaining = current - count;
+        if (remaining <= 0) {
+            shareholders.remove(from);
+        } else {
+            shareholders.put(from, remaining);
+        }
+        totalShares -= count;
+        if (totalShares < 0) totalShares = 0;
+        return true;
+    }
+
 
     // ==================== NBT Persistence ====================
 

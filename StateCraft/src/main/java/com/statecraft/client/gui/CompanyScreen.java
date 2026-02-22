@@ -39,7 +39,7 @@ public class CompanyScreen extends StateCraftScreen {
     private long resultMessageTime = 0;
 
     // View mode
-    private enum Tab { INFO, SHAREHOLDERS, OFFICERS, MANAGE }
+    private enum Tab { INFO, SHAREHOLDERS, OFFICERS, VOTES, MANAGE }
     private Tab currentTab = Tab.INFO;
 
     // Create mode
@@ -47,10 +47,26 @@ public class CompanyScreen extends StateCraftScreen {
     private EditBox nameInput;
     private EditBox sharesInput;
     private EditBox descInput;
+    private String selectedCompanyType = "GENERAL"; // "GENERAL" or "BANK"
 
     // Management action
     private EditBox actionInput;
     private String pendingAction = null; // track which action needs input
+
+    // Votes tab data
+    private List<SyncShareholderVotesPacket.ProposalInfo> voteProposals = new ArrayList<>();
+    private boolean votesDataLoaded = false;
+    private boolean proposalCreateMode = false;
+    private int selectedProposalTypeIndex = 0;
+    private EditBox proposalValueInput;
+    private static final String[] PROPOSAL_TYPE_NAMES = {
+        "SET_DIVIDEND_RATE", "ISSUE_SHARES", "SHARE_BUYBACK", "DISSOLVE_COMPANY",
+        "CONVERT_TO_BANK", "CONVERT_TO_GENERAL", "REMOVE_OFFICER", "SET_DIVIDEND_PERIOD"
+    };
+    private static final String[] PROPOSAL_TYPE_LABELS = {
+        "Dividend Rate", "Issue Shares", "Share Buyback", "Dissolve",
+        "Convert→Bank", "Convert→General", "Remove Officer", "Dividend Period"
+    };
 
     // Scroll
     private int scrollOffset = 0;
@@ -93,21 +109,24 @@ public class CompanyScreen extends StateCraftScreen {
         } else {
             // Tab buttons
             int tabY = guiTop + 22;
-            int tabW = 55;
+            int tabW = 45;
             int tabX = startX;
 
             this.addRenderableWidget(createButton(tabX, tabY, tabW, 14,
                 Component.literal(currentTab == Tab.INFO ? "§f§nInfo" : "Info"),
                 btn -> switchTab(Tab.INFO)));
-            this.addRenderableWidget(createButton(tabX + tabW + 3, tabY, tabW + 10, 14,
+            this.addRenderableWidget(createButton(tabX + tabW + 2, tabY, tabW + 5, 14,
                 Component.literal(currentTab == Tab.SHAREHOLDERS ? "§f§nShares" : "Shares"),
                 btn -> switchTab(Tab.SHAREHOLDERS)));
-            this.addRenderableWidget(createButton(tabX + (tabW + 3) * 2 + 10, tabY, tabW, 14,
+            this.addRenderableWidget(createButton(tabX + (tabW + 2) * 2 + 5, tabY, tabW + 5, 14,
                 Component.literal(currentTab == Tab.OFFICERS ? "§f§nOfficers" : "Officers"),
                 btn -> switchTab(Tab.OFFICERS)));
+            this.addRenderableWidget(createButton(tabX + (tabW + 2) * 3 + 10, tabY, tabW, 14,
+                Component.literal(currentTab == Tab.VOTES ? "§f§nVotes" : "Votes"),
+                btn -> switchTab(Tab.VOTES)));
 
             if (isFounder || isOfficer) {
-                this.addRenderableWidget(createButton(tabX + (tabW + 3) * 3 + 10, tabY, tabW, 14,
+                this.addRenderableWidget(createButton(tabX + (tabW + 2) * 4 + 10, tabY, tabW + 5, 14,
                     Component.literal(currentTab == Tab.MANAGE ? "§f§nManage" : "Manage"),
                     btn -> switchTab(Tab.MANAGE)));
             }
@@ -115,6 +134,11 @@ public class CompanyScreen extends StateCraftScreen {
             // Management tab input and action buttons
             if (currentTab == Tab.MANAGE && (isFounder || isOfficer)) {
                 buildManageUI();
+            }
+
+            // Votes tab UI
+            if (currentTab == Tab.VOTES) {
+                buildVotesUI();
             }
         }
 
@@ -124,6 +148,15 @@ public class CompanyScreen extends StateCraftScreen {
             Component.literal("Back"),
             btn -> goBack()
         ));
+
+        // Mail button (visible to officers/founders when company exists)
+        if (dataLoaded && hasCompany && (isFounder || isOfficer)) {
+            this.addRenderableWidget(createButton(
+                guiLeft + guiWidth - 55, guiTop + guiHeight - 28, 45, 20,
+                Component.literal("§e✉ Mail"),
+                btn -> openCompanyMail()
+            ));
+        }
     }
 
     private void buildCreateUI() {
@@ -142,6 +175,20 @@ public class CompanyScreen extends StateCraftScreen {
         sharesInput.setHint(Component.literal("Shares"));
         this.addRenderableWidget(sharesInput);
         y += 24;
+
+        // Company Type selector
+        int typeBtnW = (guiWidth - 34) / 2;
+        boolean isGeneral = "GENERAL".equals(selectedCompanyType);
+        boolean isBank = "BANK".equals(selectedCompanyType);
+
+        this.addRenderableWidget(createButton(startX, y, typeBtnW, 16,
+            Component.literal(isGeneral ? "§f§n⬛ Generic Company" : "§7⬜ Generic Company"),
+            btn -> { selectedCompanyType = "GENERAL"; buildUI(); }));
+
+        this.addRenderableWidget(createButton(startX + typeBtnW + 4, y, typeBtnW, 16,
+            Component.literal(isBank ? "§f§n⬛ Bank" : "§7⬜ Bank"),
+            btn -> { selectedCompanyType = "BANK"; buildUI(); }));
+        y += 22;
 
         descInput = new EditBox(this.font, startX, y, guiWidth - 30, 16, Component.literal("Description"));
         descInput.setMaxLength(100);
@@ -221,6 +268,12 @@ public class CompanyScreen extends StateCraftScreen {
         currentTab = tab;
         scrollOffset = 0;
         pendingAction = null;
+        proposalCreateMode = false;
+        if (tab == Tab.VOTES && !companyId.isEmpty()) {
+            // Request shareholder votes data by sending a vote packet with no action
+            // We'll use a dummy request — the server will respond with current data
+            NetworkHandler.sendToServer(ShareholderVotePacket.castVote(companyId, "", ""));
+        }
         buildUI();
     }
 
@@ -239,7 +292,7 @@ public class CompanyScreen extends StateCraftScreen {
         } catch (NumberFormatException ignored) {}
 
         String desc = descInput.getValue().trim();
-        NetworkHandler.sendToServer(new CreateCompanyPacket(name, shares, desc));
+        NetworkHandler.sendToServer(new CreateCompanyPacket(name, shares, desc, selectedCompanyType));
         createMode = false;
     }
 
@@ -352,6 +405,7 @@ public class CompanyScreen extends StateCraftScreen {
             case INFO -> renderInfoTab(graphics, startX, endX);
             case SHAREHOLDERS -> renderShareholdersTab(graphics, startX, endX);
             case OFFICERS -> renderOfficersTab(graphics, startX, endX);
+            case VOTES -> renderVotesTab(graphics, startX, endX);
             case MANAGE -> renderManageTab(graphics, startX, endX);
         }
 
@@ -464,6 +518,219 @@ public class CompanyScreen extends StateCraftScreen {
         }
     }
 
+    // ==================== Votes Tab ====================
+
+    private void buildVotesUI() {
+        int startX = guiLeft + 10;
+        int y = guiTop + 42;
+
+        if (proposalCreateMode) {
+            buildProposalCreateUI();
+            return;
+        }
+
+        // "New Proposal" button for officers/founders
+        if (isFounder || isOfficer) {
+            this.addRenderableWidget(createButton(guiLeft + guiWidth - 95, y, 85, 14,
+                Component.literal("§a+ New Proposal"),
+                btn -> { proposalCreateMode = true; buildUI(); }));
+        }
+
+        // Vote buttons for active proposals
+        y = guiTop + 60;
+        int maxVisible = 3;
+        int count = 0;
+        for (SyncShareholderVotesPacket.ProposalInfo proposal : voteProposals) {
+            if (count >= scrollOffset + maxVisible) break;
+            if (count < scrollOffset) { count++; continue; }
+
+            if (proposal.isActive() && !proposal.hasVoted()) {
+                int btnY = y + (count - scrollOffset) * 50 + 28;
+                int btnX = startX;
+                this.addRenderableWidget(createButton(btnX, btnY, 40, 12,
+                    Component.literal("§aYes"),
+                    btn -> submitVote(proposal.proposalId, "YES")));
+                this.addRenderableWidget(createButton(btnX + 44, btnY, 40, 12,
+                    Component.literal("§cNo"),
+                    btn -> submitVote(proposal.proposalId, "NO")));
+                this.addRenderableWidget(createButton(btnX + 88, btnY, 50, 12,
+                    Component.literal("§7Abstain"),
+                    btn -> submitVote(proposal.proposalId, "ABSTAIN")));
+            }
+            count++;
+        }
+    }
+
+    private void buildProposalCreateUI() {
+        int startX = guiLeft + 15;
+        int y = guiTop + 60;
+
+        // Type selector buttons (cycle through types)
+        String typeLabel = PROPOSAL_TYPE_LABELS[selectedProposalTypeIndex];
+        this.addRenderableWidget(createButton(startX, y, 20, 14,
+            Component.literal("§7◄"),
+            btn -> { selectedProposalTypeIndex = (selectedProposalTypeIndex - 1 + PROPOSAL_TYPE_NAMES.length) % PROPOSAL_TYPE_NAMES.length; buildUI(); }));
+        this.addRenderableWidget(createButton(startX + 22, y, guiWidth - 72, 14,
+            Component.literal("§e" + typeLabel),
+            btn -> { selectedProposalTypeIndex = (selectedProposalTypeIndex + 1) % PROPOSAL_TYPE_NAMES.length; buildUI(); }));
+        this.addRenderableWidget(createButton(startX + guiWidth - 48, y, 20, 14,
+            Component.literal("§7►"),
+            btn -> { selectedProposalTypeIndex = (selectedProposalTypeIndex + 1) % PROPOSAL_TYPE_NAMES.length; buildUI(); }));
+        y += 20;
+
+        // Value input (context-dependent)
+        String currentType = PROPOSAL_TYPE_NAMES[selectedProposalTypeIndex];
+        boolean needsInput = !currentType.equals("DISSOLVE_COMPANY") && !currentType.equals("CONVERT_TO_BANK") && !currentType.equals("CONVERT_TO_GENERAL");
+        if (needsInput) {
+            String hint = switch (currentType) {
+                case "SET_DIVIDEND_RATE" -> "Rate (e.g. 0.05 = 5%)";
+                case "ISSUE_SHARES" -> "Number of shares";
+                case "SHARE_BUYBACK" -> "Shares to buy back";
+                case "REMOVE_OFFICER" -> "Officer player name";
+                case "SET_DIVIDEND_PERIOD" -> "Period in ticks (72000=1hr)";
+                default -> "Value";
+            };
+            proposalValueInput = new EditBox(this.font, startX, y, guiWidth - 30, 14, Component.literal("Value"));
+            proposalValueInput.setMaxLength(30);
+            proposalValueInput.setHint(Component.literal(hint));
+            this.addRenderableWidget(proposalValueInput);
+            y += 20;
+        }
+
+        // Submit / Cancel
+        this.addRenderableWidget(createButton(startX, y, 70, 16,
+            Component.literal("§aSubmit"),
+            btn -> submitProposal()));
+        this.addRenderableWidget(createButton(startX + 78, y, 70, 16,
+            Component.literal("Cancel"),
+            btn -> { proposalCreateMode = false; buildUI(); }));
+    }
+
+    private void renderVotesTab(GuiGraphics graphics, int startX, int endX) {
+        int y = guiTop + 44;
+
+        if (proposalCreateMode) {
+            graphics.drawString(this.font, "§6New Shareholder Proposal", startX + 4, y, 0xFFFFAA00);
+            y += 12;
+            graphics.drawString(this.font, "§7Select type and enter value:", startX + 4, y, 0xFFAAAAAA);
+            renderResultMessage(graphics);
+            return;
+        }
+
+        if (!votesDataLoaded) {
+            graphics.drawCenteredString(this.font, "§7Loading votes...", this.width / 2, guiTop + 100, 0xFFAAAAAA);
+            return;
+        }
+
+        if (voteProposals.isEmpty()) {
+            graphics.drawCenteredString(this.font, "§7No proposals yet.", this.width / 2, guiTop + 80, 0xFFAAAAAA);
+            if (isFounder || isOfficer) {
+                graphics.drawCenteredString(this.font, "§8Create one to get started!", this.width / 2, guiTop + 95, 0xFF888888);
+            }
+            return;
+        }
+
+        y = guiTop + 60;
+        int maxVisible = 3;
+        int count = 0;
+        for (SyncShareholderVotesPacket.ProposalInfo p : voteProposals) {
+            if (count >= scrollOffset + maxVisible) break;
+            if (count < scrollOffset) { count++; continue; }
+
+            int cardY = y + (count - scrollOffset) * 50;
+
+            // Card background
+            int statusColor = p.isActive() ? 0x40FFAA00 : (p.status.equals("PASSED") ? 0x4000AA00 : 0x40AA0000);
+            graphics.fill(startX, cardY, endX, cardY + 46, statusColor);
+            graphics.fill(startX, cardY, endX, cardY + 1, 0xFF606060);
+            graphics.fill(startX, cardY + 45, endX, cardY + 46, 0xFF404040);
+
+            // Title line
+            String statusIcon = p.isActive() ? "§e⏳" : (p.status.equals("PASSED") ? "§a✔" : "§c✘");
+            graphics.drawString(this.font, statusIcon + " §f" + p.summary, startX + 4, cardY + 3, 0xFFFFFFFF);
+
+            // Stats line
+            String yesStr = String.format("§aYes:%.0f%%", p.yesPercentage());
+            String quorumStr = String.format("§7Quorum:%.0f%%/25%%", p.quorumPercentage());
+            String timeStr = p.isActive() ? "§e" + p.getTimeRemaining() : "§7" + p.status;
+            graphics.drawString(this.font, yesStr + "  " + quorumStr + "  " + timeStr, startX + 4, cardY + 15, 0xFFFFFFFF);
+
+            // Proposer
+            graphics.drawString(this.font, "§7by " + p.proposerName, startX + 4, cardY + 27, 0xFFAAAAAA);
+
+            // Player vote status
+            if (p.hasVoted()) {
+                String voteStr = switch (p.playerVote) {
+                    case "YES" -> "§aVoted YES";
+                    case "NO" -> "§cVoted NO";
+                    case "ABSTAIN" -> "§7Abstained";
+                    default -> "";
+                };
+                int voteWidth = this.font.width(voteStr.replaceAll("§.", ""));
+                graphics.drawString(this.font, voteStr, endX - voteWidth - 4, cardY + 27, 0xFFFFFFFF);
+            }
+
+            count++;
+        }
+
+        // Scroll indicators
+        if (scrollOffset > 0) {
+            graphics.drawCenteredString(this.font, "§7▲ Scroll up", this.width / 2, guiTop + 53, 0xFF888888);
+        }
+        if (scrollOffset + maxVisible < voteProposals.size()) {
+            graphics.drawCenteredString(this.font, "§7▼ Scroll down", this.width / 2, guiTop + guiHeight - 52, 0xFF888888);
+        }
+    }
+
+    public void updateVotesData(SyncShareholderVotesPacket packet) {
+        this.voteProposals = packet.getProposals();
+        this.votesDataLoaded = true;
+
+        if (!packet.getResultMessage().isEmpty()) {
+            this.resultMessage = packet.getResultMessage();
+            this.resultMessageTime = System.currentTimeMillis();
+        }
+
+        if (currentTab == Tab.VOTES) {
+            buildUI();
+        }
+    }
+
+    private void submitVote(String proposalId, String voteChoice) {
+        NetworkHandler.sendToServer(ShareholderVotePacket.castVote(companyId, proposalId, voteChoice));
+    }
+
+    private void submitProposal() {
+        String typeName = PROPOSAL_TYPE_NAMES[selectedProposalTypeIndex];
+        double doubleVal = 0;
+        int intVal = 0;
+        long longVal = 0;
+        String strVal = "";
+
+        boolean needsInput = !typeName.equals("DISSOLVE_COMPANY") && !typeName.equals("CONVERT_TO_BANK") && !typeName.equals("CONVERT_TO_GENERAL");
+        if (needsInput && proposalValueInput != null) {
+            String val = proposalValueInput.getValue().trim();
+            if (val.isEmpty()) return;
+
+            try {
+                switch (typeName) {
+                    case "SET_DIVIDEND_RATE" -> doubleVal = Double.parseDouble(val);
+                    case "ISSUE_SHARES", "SHARE_BUYBACK" -> intVal = Integer.parseInt(val);
+                    case "SET_DIVIDEND_PERIOD" -> longVal = Long.parseLong(val);
+                    case "REMOVE_OFFICER" -> strVal = val;
+                }
+            } catch (NumberFormatException e) {
+                resultMessage = "§cInvalid number format.";
+                resultMessageTime = System.currentTimeMillis();
+                return;
+            }
+        }
+
+        NetworkHandler.sendToServer(ShareholderVotePacket.createProposal(
+            companyId, typeName, doubleVal, intVal, longVal, strVal));
+        proposalCreateMode = false;
+    }
+
     private void renderResultMessage(GuiGraphics graphics) {
         if (!resultMessage.isEmpty() && System.currentTimeMillis() - resultMessageTime < 5000) {
             int msgWidth = this.font.width(resultMessage.replaceAll("§.", ""));
@@ -482,11 +749,23 @@ public class CompanyScreen extends StateCraftScreen {
             else scrollOffset = Math.min(maxScroll, scrollOffset + 1);
             return true;
         }
+        if (currentTab == Tab.VOTES) {
+            int maxScroll = Math.max(0, voteProposals.size() - 3);
+            if (delta > 0) scrollOffset = Math.max(0, scrollOffset - 1);
+            else scrollOffset = Math.min(maxScroll, scrollOffset + 1);
+            buildUI();
+            return true;
+        }
         return super.mouseScrolled(mouseX, mouseY, delta);
     }
 
     private void goBack() {
         this.minecraft.setScreen(new MainMenuScreen());
+    }
+
+    private void openCompanyMail() {
+        this.minecraft.setScreen(new GovMailboxScreen(
+            GovMailboxScreen.EntityType.COMPANY, companyName, "company"));
     }
 
     @Override

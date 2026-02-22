@@ -77,14 +77,20 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
      * Represents a profit share entry
      */
     public static class ProfitShare {
-        public final UUID playerUUID;
-        public String playerName;
-        public double percentage; // 0.0 to 1.0
+        public final UUID playerUUID;  // Player UUID or Company UUID
+        public String playerName;      // Player name or Company name
+        public double percentage;      // 0.0 to 1.0
+        public final boolean isCompany; // true if this share goes to a company treasury
 
         public ProfitShare(UUID playerUUID, String playerName, double percentage) {
+            this(playerUUID, playerName, percentage, false);
+        }
+
+        public ProfitShare(UUID playerUUID, String playerName, double percentage, boolean isCompany) {
             this.playerUUID = playerUUID;
             this.playerName = playerName;
             this.percentage = Math.max(0.0, Math.min(1.0, percentage));
+            this.isCompany = isCompany;
         }
 
         public CompoundTag toNBT() {
@@ -92,6 +98,7 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
             tag.putUUID("uuid", playerUUID);
             tag.putString("name", playerName);
             tag.putDouble("percentage", percentage);
+            tag.putBoolean("isCompany", isCompany);
             return tag;
         }
 
@@ -99,7 +106,8 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
             UUID uuid = tag.getUUID("uuid");
             String name = tag.getString("name");
             double percentage = tag.getDouble("percentage");
-            return new ProfitShare(uuid, name, percentage);
+            boolean isCompany = tag.getBoolean("isCompany");
+            return new ProfitShare(uuid, name, percentage, isCompany);
         }
     }
 
@@ -630,7 +638,12 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
             double shareValue = netValue * (share.percentage / totalPercentage);
             if (shareValue <= 0) continue;
 
-            if (depositToATM) {
+            if (share.isCompany) {
+                // Company share — deposit to company treasury
+                com.statecraft.economy.core.EconomyManager.getInstance().depositToCompanyTreasury(
+                    share.playerUUID, shareValue,
+                    "Trading Hub profit share (" + (int)sharePercentage + "%)");
+            } else if (depositToATM) {
                 EconomyManager.getInstance().deposit(share.playerUUID, shareValue,
                     "Trading Hub profit share (" + (int)sharePercentage + "%)");
             } else {
@@ -645,9 +658,11 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
                 }
             }
 
-            // Send mail notification to this share recipient
-            sendSaleMail(share.playerUUID, share.playerName, grossValue, taxInfo, netValue,
-                sharePercentage, shareValue, itemsSold, locationStr);
+            // Send mail notification to this share recipient (skip for companies)
+            if (!share.isCompany) {
+                sendSaleMail(share.playerUUID, share.playerName, grossValue, taxInfo, netValue,
+                    sharePercentage, shareValue, itemsSold, locationStr);
+            }
         }
     }
 

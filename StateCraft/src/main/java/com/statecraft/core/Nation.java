@@ -24,6 +24,7 @@ public class Nation {
     // Nation settings
     private int maxStates;
     private int maxChunksPerCity;
+    private int maxChunksPerPlayer; // 0 = use server config (which 0 = unlimited)
     private int defaultMaxCitiesPerState; // Default max cities for new states
     private String description;
     private String tag; // Short tag/prefix for chat
@@ -35,6 +36,7 @@ public class Nation {
     private double chunkClaimFee; // Fee cities pay to nation when claiming chunks
     private double salesTaxRate; // Nation's sales tax rate (e.g., 0.20 = 20%) - set via legislature
     private double importTariffRate; // Import tariff on cross-nation marketplace purchases (buyer-side, 0-50%)
+    private double emergencyTaxRate; // Nation's emergency tax rate (0 = use server config, e.g. 0.10 = 10%)
 
     // Constitutional settings (can only be changed via constitutional amendment)
     private int leaderTermDays = 7;       // Default: 7 days term for leader
@@ -53,6 +55,7 @@ public class Nation {
         this.enemies = new HashSet<>();
         this.maxStates = 5; // Default max states
         this.maxChunksPerCity = 50; // Default max chunks per city
+        this.maxChunksPerPlayer = 0; // Default: use server config
         this.defaultMaxCitiesPerState = 10; // Default max cities per state
         this.description = "";
         this.tag = "";
@@ -64,6 +67,7 @@ public class Nation {
         this.chunkClaimFee = 0.0; // Default: no fee
         this.salesTaxRate = 0.0; // Default: no nation sales tax (set via legislature)
         this.importTariffRate = 0.0; // Default: no import tariff (set via legislature)
+        this.emergencyTaxRate = 0.0; // Default: use server config (set via legislature)
     }
 
     public UUID getId() {
@@ -142,6 +146,18 @@ public class Nation {
 
     public void setMaxChunksPerCity(int maxChunksPerCity) {
         this.maxChunksPerCity = maxChunksPerCity;
+    }
+
+    /**
+     * Get the max chunks per player for this nation.
+     * 0 means use the server config value. Config 0 means unlimited.
+     */
+    public int getMaxChunksPerPlayer() {
+        return maxChunksPerPlayer;
+    }
+
+    public void setMaxChunksPerPlayer(int maxChunksPerPlayer) {
+        this.maxChunksPerPlayer = Math.max(0, maxChunksPerPlayer);
     }
 
     public int getDefaultMaxCitiesPerState() {
@@ -278,6 +294,22 @@ public class Nation {
     public void setImportTariffRate(double importTariffRate) {
         // Clamp between 0 and 0.5 (0% to 50%)
         this.importTariffRate = Math.max(0, Math.min(0.5, importTariffRate));
+    }
+
+    /**
+     * Get the nation's emergency tax rate. 0 = use server config default.
+     */
+    public double getEmergencyTaxRate() {
+        return emergencyTaxRate;
+    }
+
+    /**
+     * Set the nation's emergency tax rate. Clamped to server max.
+     * 0 = use server default.
+     */
+    public void setEmergencyTaxRate(double rate) {
+        double maxRate = StateCraftConfig.MAX_EMERGENCY_TAX_RATE.get();
+        this.emergencyTaxRate = Math.max(0, Math.min(maxRate, rate));
     }
 
     // Constitutional settings getters and setters
@@ -486,6 +518,7 @@ public class Nation {
         tag.putUUID("leaderId", leaderId);
         tag.putInt("maxStates", maxStates);
         tag.putInt("maxChunksPerCity", maxChunksPerCity);
+        tag.putInt("maxChunksPerPlayer", maxChunksPerPlayer);
         tag.putInt("defaultMaxCitiesPerState", defaultMaxCitiesPerState);
         tag.putString("description", description);
         tag.putString("tag", this.tag);
@@ -497,6 +530,7 @@ public class Nation {
         tag.putDouble("chunkClaimFee", chunkClaimFee);
         tag.putDouble("salesTaxRate", salesTaxRate);
         tag.putDouble("importTariffRate", importTariffRate);
+        tag.putDouble("emergencyTaxRate", emergencyTaxRate);
 
         // Constitutional settings
         tag.putInt("leaderTermDays", leaderTermDays);
@@ -558,6 +592,7 @@ public class Nation {
         Nation nation = new Nation(id, name, leaderId);
         nation.maxStates = tag.getInt("maxStates");
         nation.maxChunksPerCity = tag.getInt("maxChunksPerCity");
+        nation.maxChunksPerPlayer = tag.contains("maxChunksPerPlayer") ? tag.getInt("maxChunksPerPlayer") : 0;
         nation.defaultMaxCitiesPerState = tag.contains("defaultMaxCitiesPerState") ? tag.getInt("defaultMaxCitiesPerState") : 10;
         nation.description = tag.getString("description");
         nation.tag = tag.getString("tag");
@@ -570,6 +605,7 @@ public class Nation {
         nation.chunkClaimFee = tag.contains("chunkClaimFee") ? tag.getDouble("chunkClaimFee") : 0.0;
         nation.salesTaxRate = tag.contains("salesTaxRate") ? tag.getDouble("salesTaxRate") : 0.0;
         nation.importTariffRate = tag.contains("importTariffRate") ? tag.getDouble("importTariffRate") : 0.0;
+        nation.emergencyTaxRate = tag.contains("emergencyTaxRate") ? tag.getDouble("emergencyTaxRate") : 0.0;
 
         // Constitutional settings (with defaults for backwards compatibility)
         nation.leaderTermDays = tag.contains("leaderTermDays") ? tag.getInt("leaderTermDays") : 7;

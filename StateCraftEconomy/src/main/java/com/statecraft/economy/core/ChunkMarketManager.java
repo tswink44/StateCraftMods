@@ -172,6 +172,11 @@ public class ChunkMarketManager {
                 return new MarketResult(false, "You cannot buy your own chunk");
             }
 
+            // Check if buyer has reached their personal chunk limit
+            if (!StateCraftIntegration.canPlayerOwnMoreChunks(buyerId)) {
+                return new MarketResult(false, "You have reached your personal chunk ownership limit");
+            }
+
             // Check if buyer can afford it
             EconomyManager ecoManager = EconomyManager.getInstance();
             double bankBalance = ecoManager.getBalance(buyerId);

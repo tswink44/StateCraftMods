@@ -55,9 +55,12 @@ public class SyncMailDataPacket {
         public final String timeAgo;
         public final Mail.MailType type;
         public final boolean read;
+        public final double attachedCurrency;
+        public final boolean currencyClaimed;
 
         public MailInfo(String mailId, String subject, String body, String senderName,
-                       String timeAgo, Mail.MailType type, boolean read) {
+                       String timeAgo, Mail.MailType type, boolean read,
+                       double attachedCurrency, boolean currencyClaimed) {
             this.mailId = mailId;
             this.subject = subject;
             this.body = body;
@@ -65,6 +68,8 @@ public class SyncMailDataPacket {
             this.timeAgo = timeAgo;
             this.type = type;
             this.read = read;
+            this.attachedCurrency = attachedCurrency;
+            this.currencyClaimed = currencyClaimed;
         }
 
         public MailInfo(FriendlyByteBuf buf) {
@@ -75,6 +80,8 @@ public class SyncMailDataPacket {
             this.timeAgo = buf.readUtf(32);
             this.type = buf.readEnum(Mail.MailType.class);
             this.read = buf.readBoolean();
+            this.attachedCurrency = buf.readDouble();
+            this.currencyClaimed = buf.readBoolean();
         }
 
         public void encode(FriendlyByteBuf buf) {
@@ -85,6 +92,8 @@ public class SyncMailDataPacket {
             buf.writeUtf(timeAgo, 32);
             buf.writeEnum(type);
             buf.writeBoolean(read);
+            buf.writeDouble(attachedCurrency);
+            buf.writeBoolean(currencyClaimed);
         }
     }
 }

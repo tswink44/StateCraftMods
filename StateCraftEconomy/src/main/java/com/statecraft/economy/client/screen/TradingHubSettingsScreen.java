@@ -65,17 +65,24 @@ public class TradingHubSettingsScreen extends Screen {
         UUID playerUUID;
         String playerName;
         double percentage;
+        boolean isCompany;
 
         ProfitShareEntry(UUID uuid, String name, double percentage) {
+            this(uuid, name, percentage, false);
+        }
+
+        ProfitShareEntry(UUID uuid, String name, double percentage, boolean isCompany) {
             this.playerUUID = uuid;
             this.playerName = name;
             this.percentage = percentage;
+            this.isCompany = isCompany;
         }
 
         ProfitShareEntry(TradingHubBlockEntity.ProfitShare share) {
             this.playerUUID = share.playerUUID;
             this.playerName = share.playerName;
             this.percentage = share.percentage;
+            this.isCompany = share.isCompany;
         }
     }
 
@@ -108,9 +115,9 @@ public class TradingHubSettingsScreen extends Screen {
         int shareY = guiTop + 130;
 
         // Player name input
-        playerNameInput = new EditBox(this.font, guiLeft + 20, shareY, 100, 18, Component.literal("Player Name"));
-        playerNameInput.setMaxLength(16);
-        playerNameInput.setHint(Component.literal("Player name"));
+        playerNameInput = new EditBox(this.font, guiLeft + 20, shareY, 100, 18, Component.literal("Name"));
+        playerNameInput.setMaxLength(64);
+        playerNameInput.setHint(Component.literal("Name or @Company"));
         addRenderableWidget(playerNameInput);
 
         // Percentage input
@@ -171,16 +178,25 @@ public class TradingHubSettingsScreen extends Screen {
     }
 
     private void addProfitShare() {
-        String playerName = playerNameInput.getValue().trim();
+        String rawName = playerNameInput.getValue().trim();
         String percentStr = percentageInput.getValue().trim();
 
-        if (playerName.isEmpty()) {
-            setErrorMessage("Please enter a player name");
+        if (rawName.isEmpty()) {
+            setErrorMessage("Enter a player name or @CompanyName");
             return;
         }
 
         if (percentStr.isEmpty()) {
             setErrorMessage("Please enter a percentage");
+            return;
+        }
+
+        // Detect company entries via @ prefix
+        boolean isCompany = rawName.startsWith("@");
+        String displayName = isCompany ? rawName.substring(1).trim() : rawName;
+
+        if (displayName.isEmpty()) {
+            setErrorMessage("Enter a name after @");
             return;
         }
 
@@ -195,11 +211,11 @@ public class TradingHubSettingsScreen extends Screen {
                 return;
             }
 
-            // Calculate current total excluding this player if updating
+            // Calculate current total excluding this entry if updating
             double currentTotal = 0;
             ProfitShareEntry existingEntry = null;
             for (ProfitShareEntry entry : profitShares) {
-                if (entry.playerName.equalsIgnoreCase(playerName)) {
+                if (entry.playerName.equalsIgnoreCase(displayName) && entry.isCompany == isCompany) {
                     existingEntry = entry;
                 } else {
                     currentTotal += entry.percentage;
@@ -212,7 +228,7 @@ public class TradingHubSettingsScreen extends Screen {
                 return;
             }
 
-            // Check if player already exists in list
+            // Check if entry already exists in list
             if (existingEntry != null) {
                 // Update existing entry
                 existingEntry.percentage = percentage;
@@ -224,8 +240,8 @@ public class TradingHubSettingsScreen extends Screen {
 
             // For new entries, we'll use a placeholder UUID
             // The server will resolve the actual UUID when saving
-            UUID placeholderUUID = UUID.nameUUIDFromBytes(playerName.toLowerCase().getBytes());
-            profitShares.add(new ProfitShareEntry(placeholderUUID, playerName, percentage));
+            UUID placeholderUUID = UUID.nameUUIDFromBytes(displayName.toLowerCase().getBytes());
+            profitShares.add(new ProfitShareEntry(placeholderUUID, displayName, percentage, isCompany));
 
             playerNameInput.setValue("");
             percentageInput.setValue("");
@@ -258,11 +274,11 @@ public class TradingHubSettingsScreen extends Screen {
             return;
         }
 
-        // Build packet data
-        List<TradingHubSettingsPacket.ShareData> shareData = new ArrayList<>();
-        for (ProfitShareEntry entry : profitShares) {
-            shareData.add(new TradingHubSettingsPacket.ShareData(entry.playerName, entry.percentage));
-        }
+    // Build packet data
+    List<TradingHubSettingsPacket.ShareData> shareData = new ArrayList<>();
+    for (ProfitShareEntry entry : profitShares) {
+        shareData.add(new TradingHubSettingsPacket.ShareData(entry.playerName, entry.percentage, entry.isCompany));
+    }
 
         // Send settings to server
         NetworkHandler.sendToServer(new TradingHubSettingsPacket(
@@ -317,7 +333,8 @@ public class TradingHubSettingsScreen extends Screen {
                 ProfitShareEntry entry = profitShares.get(shareIndex);
                 int y = startY + i * 14;
 
-                String text = String.format("§f%s: §a%.0f%%", entry.playerName, entry.percentage * 100);
+                String namePrefix = entry.isCompany ? "§d@" : "§f";
+                String text = String.format("%s%s: §a%.0f%%", namePrefix, entry.playerName, entry.percentage * 100);
                 graphics.drawString(this.font, text, guiLeft + 25, y + 2, COLOR_TEXT);
             }
 

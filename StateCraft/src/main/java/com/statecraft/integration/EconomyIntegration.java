@@ -101,6 +101,18 @@ public interface EconomyIntegration {
     }
 
     /**
+     * Force withdraw funds from a nation's treasury, allowing negative balance.
+     * Used for mandatory government actions like eminent domain where payment is required.
+     * @param nationName The name of the nation
+     * @param amount The amount to withdraw
+     * @param description Description of the withdrawal
+     * @return true if successful, false on error
+     */
+    default boolean forceWithdrawFromNation(String nationName, double amount, String description) {
+        return false;
+    }
+
+    /**
      * Deposit funds to a nation's treasury
      * @param nationName The name of the nation
      * @param amount The amount to deposit
@@ -149,6 +161,12 @@ public interface EconomyIntegration {
      * @param companyId The UUID of the new company
      */
     default void onCompanyCreated(UUID companyId) {}
+
+    /**
+     * Called when a company is set as a bank — economy mod should initialize bank data.
+     * @param companyId The UUID of the company being made into a bank
+     */
+    default void onBankCreated(UUID companyId) {}
 
     /**
      * Called before a company is dissolved — economy mod should distribute balance

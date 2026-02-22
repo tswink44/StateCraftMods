@@ -21,6 +21,8 @@ public enum PolicyType {
         "Maximum number of cities each state can have"),
     MAX_CHUNKS_PER_CITY("Max Chunks per City", Category.TERRITORY, 1, 10000, ValueType.INTEGER,
         "Maximum chunks each city can claim"),
+    MAX_CHUNKS_PER_PLAYER("Max Chunks per Player", Category.TERRITORY, 0, 10000, ValueType.INTEGER,
+        "Maximum chunks a player can personally own (0 = use server default)"),
     OPEN_BORDERS("Open Borders", Category.TERRITORY, 0, 1, ValueType.BOOLEAN,
         "Allow foreign players to interact in nation territory"),
 
@@ -49,6 +51,8 @@ public enum PolicyType {
         "Repossess a privately owned chunk. Owner receives 10x the tax valuation from nation treasury."),
     LEADER_SPENDING_LIMIT("Leader Spending Limit", Category.ECONOMY, 0, 100000000, ValueType.CURRENCY,
         "Daily spending limit for the nation leader on the nation treasury (0 = unlimited). Overrides server default."),
+    EMERGENCY_TAX_RATE("Emergency Tax Rate", Category.ECONOMY, 0.01, 0.20, ValueType.PERCENTAGE,
+        "Rate for emergency tax levy (0.01 = 1%, 0.20 = 20%). Capped at server max (default 20%). 0 = use server default."),
 
     // Constitutional policies (require constitutional amendment to change)
     LEADER_TERM_DURATION("Leader Term Duration", Category.CONSTITUTIONAL, 1, 365, ValueType.INTEGER,
@@ -61,6 +65,17 @@ public enum PolicyType {
         "Official name of the nation. Requires constitutional amendment."),
     NATION_FLAG("Nation Flag", Category.CONSTITUTIONAL, 0, 0, ValueType.TEXT,
         "URL to the nation's flag image. Requires constitutional amendment."),
+    IMPEACH_LEADER("Impeach Leader", Category.CONSTITUTIONAL, 0, 0, ValueType.TEXT,
+        "Remove the current nation leader from power and trigger an immediate election. " +
+        "Requires 2/3 majority vote and cannot be vetoed. Provide a reason for impeachment."),
+
+    // Emergency power ratification (auto-created, not player-proposable)
+    RATIFY_EMERGENCY_POWER("Ratify Emergency Power", Category.EMERGENCY, 0, 0, ValueType.TEXT,
+        "Legislature vote to ratify the leader's use of an emergency power. " +
+        "If the legislature votes NO, the power is reversed. Auto-created when a power is invoked."),
+    OVERRIDE_EMERGENCY_POWER("Override Emergency Power", Category.EMERGENCY, 0, 0, ValueType.TEXT,
+        "Legislature vote to immediately cancel an active emergency power. " +
+        "Requires simple majority. The leader cannot veto this."),
 
     // Custom laws (roleplay)
     CUSTOM_LAW("Custom Law", Category.CUSTOM, 0, 0, ValueType.TEXT,
@@ -144,6 +159,7 @@ public enum PolicyType {
         DIPLOMACY("Diplomacy"),
         ECONOMY("Economy"),
         CONSTITUTIONAL("Constitutional"),
+        EMERGENCY("Emergency Powers"),
         CUSTOM("Custom Laws");
 
         private final String displayName;

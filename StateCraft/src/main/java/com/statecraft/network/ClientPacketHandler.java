@@ -55,7 +55,8 @@ public class ClientPacketHandler {
                     packet.isInNation() ? packet.getNationName() : "",
                     packet.isInNation() ? packet.getStateName() : "",
                     packet.isInNation() ? packet.getCityName() : "",
-                    nickname
+                    nickname,
+                    packet.getCompanyNames()
                 );
             } else if (mc.screen instanceof NationInfoScreen screen) {
                 if (packet.isDetailedData()) {
@@ -461,7 +462,9 @@ public class ClientPacketHandler {
                         info.senderName,
                         info.timeAgo,
                         info.type,
-                        info.read
+                        info.read,
+                        info.attachedCurrency,
+                        info.currencyClaimed
                     ));
                 }
                 screen.updateMailData(entries, packet.getUnreadCount(), packet.getTotalCount());
@@ -636,11 +639,31 @@ public class ClientPacketHandler {
         ctx.get().setPacketHandled(true);
     }
 
+    public static void handleSyncTargetNationChunks(SyncTargetNationChunksPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof com.statecraft.client.gui.PeaceTermsScreen screen) {
+                screen.updateChunkData(packet);
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
     public static void handleSyncCompanyData(SyncCompanyDataPacket packet, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
             Minecraft mc = Minecraft.getInstance();
             if (mc.screen instanceof com.statecraft.client.gui.CompanyScreen screen) {
                 screen.updateData(packet);
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncShareholderVotes(SyncShareholderVotesPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof com.statecraft.client.gui.CompanyScreen screen) {
+                screen.updateVotesData(packet);
             }
         });
         ctx.get().setPacketHandled(true);

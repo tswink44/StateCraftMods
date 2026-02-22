@@ -33,6 +33,7 @@ public class SyncNationDataPacket {
     private final List<String> stateNames;
     private final List<String> allyNames;
     private final List<String> enemyNames;
+    private final List<String> companyNames; // Companies the player is a member of
 
     // No nation constructor
     public SyncNationDataPacket() {
@@ -56,13 +57,21 @@ public class SyncNationDataPacket {
         this.stateNames = new ArrayList<>();
         this.allyNames = new ArrayList<>();
         this.enemyNames = new ArrayList<>();
+        this.companyNames = new ArrayList<>();
     }
 
     // Basic data constructor
     public SyncNationDataPacket(String nationName, String stateName, String cityName,
                                  int chunks, int members, boolean isLeader, boolean isOfficer) {
-        this.inNation = true;
-        this.nationName = nationName;
+        this(nationName, stateName, cityName, chunks, members, isLeader, isOfficer, new ArrayList<>());
+    }
+
+    // Basic data constructor with company names
+    public SyncNationDataPacket(String nationName, String stateName, String cityName,
+                                 int chunks, int members, boolean isLeader, boolean isOfficer,
+                                 List<String> companyNames) {
+        this.inNation = nationName != null && !nationName.isEmpty();
+        this.nationName = nationName != null ? nationName : "";
         this.stateName = stateName;
         this.cityName = cityName;
         this.chunks = chunks;
@@ -81,6 +90,7 @@ public class SyncNationDataPacket {
         this.stateNames = new ArrayList<>();
         this.allyNames = new ArrayList<>();
         this.enemyNames = new ArrayList<>();
+        this.companyNames = companyNames != null ? companyNames : new ArrayList<>();
     }
 
     // Detailed data constructor
@@ -108,6 +118,7 @@ public class SyncNationDataPacket {
         this.stateNames = stateNames;
         this.allyNames = allyNames;
         this.enemyNames = enemyNames;
+        this.companyNames = new ArrayList<>();
     }
 
     public SyncNationDataPacket(FriendlyByteBuf buf) {
@@ -146,6 +157,12 @@ public class SyncNationDataPacket {
         for (int i = 0; i < enemyCount; i++) {
             enemyNames.add(buf.readUtf(24));
         }
+
+        int companyCount = buf.readInt();
+        this.companyNames = new ArrayList<>();
+        for (int i = 0; i < companyCount; i++) {
+            companyNames.add(buf.readUtf(64));
+        }
     }
 
     public void encode(FriendlyByteBuf buf) {
@@ -181,6 +198,11 @@ public class SyncNationDataPacket {
         for (String name : enemyNames) {
             buf.writeUtf(name, 24);
         }
+
+        buf.writeInt(companyNames.size());
+        for (String name : companyNames) {
+            buf.writeUtf(name, 64);
+        }
     }
 
     // Getters
@@ -204,5 +226,6 @@ public class SyncNationDataPacket {
     public List<String> getStateNames() { return stateNames; }
     public List<String> getAllyNames() { return allyNames; }
     public List<String> getEnemyNames() { return enemyNames; }
+    public List<String> getCompanyNames() { return companyNames; }
 }
 

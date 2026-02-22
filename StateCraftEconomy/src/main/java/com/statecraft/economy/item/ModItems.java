@@ -42,6 +42,9 @@ public class ModItems {
     public static final RegistryObject<Item> BANK_CARD = ITEMS.register("bank_card",
         () -> new BankCardItem(new Item.Properties().stacksTo(1)));
 
+    public static final RegistryObject<Item> RECIPE_GUIDE = ITEMS.register("recipe_guide",
+        () -> new RecipeGuideItem(new Item.Properties().stacksTo(1)));
+
     public static void register(IEventBus eventBus) {
         ITEMS.register(eventBus);
     }

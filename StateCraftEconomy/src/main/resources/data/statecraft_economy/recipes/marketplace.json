@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "SES",
+    "SCS",
+    "III"
+  ],
+  "key": {
+    "S": {
+      "tag": "minecraft:signs"
+    },
+    "E": {
+      "item": "minecraft:emerald"
+    },
+    "C": {
+      "item": "minecraft:chest"
+    },
+    "I": {
+      "item": "minecraft:iron_ingot"
+    }
+  },
+  "result": {
+    "item": "statecraft_economy:marketplace",
+    "count": 1
+  }
+}
+

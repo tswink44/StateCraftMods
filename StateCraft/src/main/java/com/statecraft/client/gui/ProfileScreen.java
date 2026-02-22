@@ -24,6 +24,7 @@ public class ProfileScreen extends StateCraftScreen {
     private String cityName = "";
     private String stateName = "";
     private String nationName = "";
+    private List<String> companyNames = new ArrayList<>();
     private boolean dataLoaded = false;
 
     // Menu entries for custom row rendering
@@ -87,8 +88,15 @@ public class ProfileScreen extends StateCraftScreen {
         // Gap before territory section
         row++;
 
-        // Company row (W-I-P placeholder)
-        entries.add(new ProfileEntry("Company: W-I-P", startY + spacing * row, false, false));
+        // Company row
+        String companyDisplay = companyNames.isEmpty() ? "None" : String.join(", ", companyNames);
+        entries.add(new ProfileEntry("Company: " + companyDisplay, startY + spacing * row, !companyNames.isEmpty(), !companyNames.isEmpty()));
+        if (!companyNames.isEmpty()) {
+            this.addRenderableWidget(createCompactArrowButton(
+                arrowX, startY + spacing * row, arrowBtnWidth, buttonHeight,
+                btn -> openCompanyScreen()
+            ));
+        }
         row++;
 
         // City row
@@ -208,6 +216,10 @@ public class ProfileScreen extends StateCraftScreen {
         }
     }
 
+    private void openCompanyScreen() {
+        this.minecraft.setScreen(new CompanyScreen());
+    }
+
     private void openStateScreen() {
         if (!stateName.isEmpty() && !nationName.isEmpty()) {
             this.minecraft.setScreen(new StateInfoScreen(nationName, stateName));
@@ -236,11 +248,13 @@ public class ProfileScreen extends StateCraftScreen {
     }
 
     // Called by network handler when data is received
-    public void updateProfileData(String nationName, String stateName, String cityName, String nickname) {
+    public void updateProfileData(String nationName, String stateName, String cityName, String nickname,
+                                   List<String> companyNames) {
         this.nationName = nationName != null ? nationName : "";
         this.stateName = stateName != null ? stateName : "";
         this.cityName = cityName != null ? cityName : "";
         this.nickname = nickname != null ? nickname : "";
+        this.companyNames = companyNames != null ? companyNames : new ArrayList<>();
         this.dataLoaded = true;
 
         // Rebuild entries with new data
@@ -269,8 +283,9 @@ public class ProfileScreen extends StateCraftScreen {
         // Gap
         row++;
 
-        // Company row (W-I-P)
-        entries.add(new ProfileEntry("Company: W-I-P", startY + spacing * row, false, false));
+        // Company row
+        String companyDisplay = companyNames.isEmpty() ? "None" : String.join(", ", companyNames);
+        entries.add(new ProfileEntry("Company: " + companyDisplay, startY + spacing * row, !companyNames.isEmpty(), !companyNames.isEmpty()));
         row++;
 
         // City row

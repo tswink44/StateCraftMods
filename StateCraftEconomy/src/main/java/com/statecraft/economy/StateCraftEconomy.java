@@ -108,6 +108,7 @@ public class StateCraftEconomy {
             event.accept(ModItems.BILL_100000);
             event.accept(ModItems.BILL_1000000);
             event.accept(ModItems.BANK_CARD);
+            event.accept(ModItems.RECIPE_GUIDE);
         }
     }
 

@@ -79,8 +79,17 @@ public class NationSavedData extends SavedData {
             StateCraft.LOGGER.info("Loaded company data");
         }
 
+        // Load shareholder vote data
+        if (tag.contains("shareholderVotes")) {
+            com.statecraft.company.ShareholderVoteManager.getInstance().load(tag.getCompound("shareholderVotes"));
+            StateCraft.LOGGER.info("Loaded shareholder vote data");
+        }
+
         StateCraft.LOGGER.info("Loaded {} nations with {} total claimed chunks",
             manager.getTotalNationCount(), manager.getTotalClaimedChunks());
+
+        // Run orphan cleanup to detect and remove stale/orphaned data
+        manager.runOrphanCleanup();
 
         return data;
     }
@@ -146,12 +155,16 @@ public class NationSavedData extends SavedData {
         // Save company data
         tag.put("companies", CompanyManager.getInstance().save());
 
+        // Save shareholder vote data
+        tag.put("shareholderVotes", com.statecraft.company.ShareholderVoteManager.getInstance().save());
+
         manager.clearDirty();
         InvitationManager.getInstance().clearDirty();
         ElectionManager.getInstance().clearDirty();
         LegislatureManager.getInstance().clearDirty();
         ContractManager.getInstance().clearDirty();
         CompanyManager.getInstance().clearDirty();
+        com.statecraft.company.ShareholderVoteManager.getInstance().clearDirty();
 
         StateCraft.LOGGER.debug("Saved {} nations", manager.getTotalNationCount());
 

@@ -34,7 +34,8 @@ public class Bill {
      */
     public enum BillType {
         REGULAR,            // Standard bill: simple majority, can be vetoed
-        CONSTITUTIONAL      // Constitutional amendment: 2/3 majority required, cannot be vetoed
+        CONSTITUTIONAL,     // Constitutional amendment: 2/3 majority required, cannot be vetoed
+        EMERGENCY_RATIFICATION  // Ratification of emergency power: simple majority, cannot be vetoed by leader
     }
 
     private final UUID billId;
@@ -130,11 +131,18 @@ public class Bill {
     }
 
     /**
+     * Check if this bill is an emergency power ratification vote
+     */
+    public boolean isEmergencyRatification() {
+        return billType == BillType.EMERGENCY_RATIFICATION;
+    }
+
+    /**
      * Check if this bill can be vetoed
-     * Constitutional amendments cannot be vetoed
+     * Constitutional amendments and emergency ratification votes cannot be vetoed
      */
     public boolean canBeVetoed() {
-        return billType != BillType.CONSTITUTIONAL && !vetoProof;
+        return billType == BillType.REGULAR && !vetoProof;
     }
 
     public Map<PolicyType, String> getPolicyChanges() {
@@ -261,6 +269,15 @@ public class Bill {
                 status = Status.ENACTED;
                 enactedTime = System.currentTimeMillis();
                 vetoProof = true; // Mark as veto-proof for records
+            } else {
+                status = Status.FAILED;
+            }
+        } else if (billType == BillType.EMERGENCY_RATIFICATION) {
+            // Emergency ratification: simple majority, bypasses leader (goes directly to ENACTED/FAILED)
+            if (yesPercent > 50) {
+                status = Status.ENACTED;
+                enactedTime = System.currentTimeMillis();
+                vetoProof = true; // Cannot be vetoed
             } else {
                 status = Status.FAILED;
             }

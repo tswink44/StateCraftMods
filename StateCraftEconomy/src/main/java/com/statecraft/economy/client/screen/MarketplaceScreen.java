@@ -224,11 +224,13 @@ public class MarketplaceScreen extends Screen {
         // Tabs
         renderTabs(graphics, mouseX, mouseY);
 
-        // Tab content
-        switch (currentTab) {
-            case BROWSE -> renderBrowseTab(graphics, mouseX, mouseY);
-            case MY_LISTINGS -> renderMyListingsTab(graphics, mouseX, mouseY);
-            case SELL -> renderSellTab(graphics, mouseX, mouseY);
+        // Tab content — skip when buy dialog is open to prevent text bleed-through
+        if (!showBuyDialog) {
+            switch (currentTab) {
+                case BROWSE -> renderBrowseTab(graphics, mouseX, mouseY);
+                case MY_LISTINGS -> renderMyListingsTab(graphics, mouseX, mouseY);
+                case SELL -> renderSellTab(graphics, mouseX, mouseY);
+            }
         }
 
         // Buy dialog overlay

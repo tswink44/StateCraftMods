@@ -98,6 +98,7 @@ public class LegislatureManager {
             case STATE_PASS_THROUGH_RATE -> nation.getStatePassThroughRate();
             case BASE_CHUNK_VALUE -> nation.getBaseChunkValue();
             case CHUNK_CLAIM_FEE -> nation.getChunkClaimFee();
+            case EMERGENCY_TAX_RATE -> nation.getEmergencyTaxRate();
             default -> null;
         };
     }
@@ -176,6 +177,13 @@ public class LegislatureManager {
                                 "Constitutional Amendment " + bill.getBillNumber() + " (" + bill.getTitle() +
                                 ") passed with a 2/3 majority and has been enacted. As a constitutional amendment, it cannot be vetoed.");
                             toArchive.add(bill.getBillId());
+                        } else if (bill.getStatus() == Bill.Status.ENACTED && bill.isEmergencyRatification()) {
+                            // Emergency ratification PASSED — power is ratified
+                            applyPolicyChanges(nation, bill.getPolicyChanges());
+                            notifyLegislatureMembers(legislature, nation, server,
+                                "§6[Legislature] §a§lEmergency Power Ratified: §f" + bill.getTitle() +
+                                " §7(Yes: " + bill.getYesVotes() + ", No: " + bill.getNoVotes() + ")");
+                            toArchive.add(bill.getBillId());
                         } else if (bill.getStatus() == Bill.Status.PASSED) {
                             if (bill.isVetoProof()) {
                                 // Auto-enact veto-proof bills
@@ -193,11 +201,28 @@ public class LegislatureManager {
                                     ") has passed the legislature. You may sign it into law or veto it.");
                             }
                         } else if (bill.getStatus() == Bill.Status.FAILED) {
-                            String failReason = bill.isConstitutionalAmendment() ?
-                                " §7(Did not achieve 2/3 majority)" : "";
-                            notifyLegislatureMembers(legislature, nation, server,
-                                "§6[Legislature] §cBill failed: §f" + bill.getTitle() +
-                                " §7(Yes: " + bill.getYesVotes() + ", No: " + bill.getNoVotes() + ")" + failReason);
+                            // Check if this is a failed emergency ratification — reverse the power
+                            if (bill.isEmergencyRatification()) {
+                                String powerName = bill.getPolicyChanges().get(PolicyType.RATIFY_EMERGENCY_POWER);
+                                if (powerName != null) {
+                                    try {
+                                        EmergencyPower failedPower = EmergencyPower.valueOf(powerName);
+                                        EmergencyPowerManager.getInstance().reverseUnratifiedPower(nation, failedPower, server);
+                                        notifyLegislatureMembers(legislature, nation, server,
+                                            "§6[Legislature] §c§lRatification FAILED: §f" + bill.getTitle() +
+                                            " §7(Yes: " + bill.getYesVotes() + ", No: " + bill.getNoVotes() +
+                                            ") — §cEmergency power reversed!");
+                                    } catch (IllegalArgumentException e) {
+                                        StateCraft.LOGGER.warn("Invalid emergency power in failed ratification bill: {}", powerName);
+                                    }
+                                }
+                            } else {
+                                String failReason = bill.isConstitutionalAmendment() ?
+                                    " §7(Did not achieve 2/3 majority)" : "";
+                                notifyLegislatureMembers(legislature, nation, server,
+                                    "§6[Legislature] §cBill failed: §f" + bill.getTitle() +
+                                    " §7(Yes: " + bill.getYesVotes() + ", No: " + bill.getNoVotes() + ")" + failReason);
+                            }
                             toArchive.add(bill.getBillId());
                         }
                         markDirty();
@@ -363,6 +388,12 @@ public class LegislatureManager {
                     StateCraft.LOGGER.info("Policy change: Max chunks per city set to {} for nation {}",
                         maxChunks, nation.getName());
                     break;
+                case MAX_CHUNKS_PER_PLAYER:
+                    int maxPlayerChunks = Integer.parseInt(value);
+                    nation.setMaxChunksPerPlayer(maxPlayerChunks);
+                    StateCraft.LOGGER.info("Policy change: Max chunks per player set to {} for nation {}",
+                        maxPlayerChunks, nation.getName());
+                    break;
                 case OPEN_NATION:
                     nation.setOpen(Boolean.parseBoolean(value));
                     break;
@@ -475,15 +506,25 @@ public class LegislatureManager {
 
                     // Always pay the previous owner — eminent domain requires compensation
                     boolean nationPaid = false;
+                    boolean wentNegative = false;
                     if (com.statecraft.integration.IntegrationRegistry.hasEconomyIntegration()) {
-                        // Try to withdraw from nation treasury
+                        // Try normal withdraw first
                         nationPaid = com.statecraft.integration.IntegrationRegistry.withdrawFromNation(
                             nation.getName(), compensation,
                             "Eminent domain compensation for chunk (" + edChunkX + ", " + edChunkZ + ")");
 
                         if (!nationPaid) {
-                            StateCraft.LOGGER.warn("Eminent domain: Nation '{}' treasury has insufficient funds (${}) — compensation still owed to player",
-                                nation.getName(), String.format("%.2f", compensation));
+                            // Nation has insufficient funds — force withdraw (treasury goes negative)
+                            nationPaid = com.statecraft.integration.IntegrationRegistry.forceWithdrawFromNation(
+                                nation.getName(), compensation,
+                                "Eminent domain compensation for chunk (" + edChunkX + ", " + edChunkZ + ")");
+                            wentNegative = nationPaid;
+                            if (nationPaid) {
+                                StateCraft.LOGGER.warn("Eminent domain: Nation '{}' treasury went negative to pay ${} compensation",
+                                    nation.getName(), String.format("%.2f", compensation));
+                            } else {
+                                StateCraft.LOGGER.error("Eminent domain: Failed to force-withdraw from nation '{}' treasury", nation.getName());
+                            }
                         }
 
                         // Always deposit compensation to the previous owner
@@ -506,9 +547,8 @@ public class LegislatureManager {
                         edChunkX + ", " + edChunkZ + ").\n\n" +
                         "Chunk valuation: " + com.statecraft.integration.IntegrationRegistry.formatCurrency(chunkValuation) + "\n" +
                         "Compensation (10x valuation): " + edCompensationStr + "\n" +
-                        (nationPaid ?
-                            "The compensation has been deposited to your account." :
-                            "NOTE: The nation treasury had insufficient funds. The compensation has still been credited to your account.") +
+                        "The compensation has been deposited to your account." +
+                        (wentNegative ? "\n\nNote: The nation treasury went into debt to pay this compensation." : "") +
                         "\n\nThe chunk has been returned to government ownership.";
                     try {
                         MailManager mailManager = MailManager.getInstance();
@@ -519,7 +559,7 @@ public class LegislatureManager {
 
                     StateCraft.LOGGER.info("Eminent domain enacted: Chunk ({}, {}) repossessed from player {} in nation {}. Compensation: {}{}",
                         edChunkX, edChunkZ, previousOwner, nation.getName(), edCompensationStr,
-                        nationPaid ? "" : " (nation treasury insufficient — player still compensated)");
+                        wentNegative ? " (nation treasury went negative)" : "");
                     break;
                 case NATION_SALES_TAX_RATE:
                     nation.setSalesTaxRate(Double.parseDouble(value));
@@ -530,6 +570,12 @@ public class LegislatureManager {
                     nation.setImportTariffRate(Double.parseDouble(value));
                     StateCraft.LOGGER.info("Policy change: Import tariff rate set to {}% for nation {}",
                         Double.parseDouble(value) * 100, nation.getName());
+                    break;
+                case EMERGENCY_TAX_RATE:
+                    double emergencyRate = Double.parseDouble(value);
+                    nation.setEmergencyTaxRate(emergencyRate); // Setter clamps to server max
+                    StateCraft.LOGGER.info("Policy change: Emergency tax rate set to {}% for nation {}",
+                        nation.getEmergencyTaxRate() * 100, nation.getName());
                     break;
                 case LEADER_SPENDING_LIMIT:
                     double spendingLimit = Double.parseDouble(value);
@@ -593,6 +639,41 @@ public class LegislatureManager {
                     StateCraft.LOGGER.info("Constitutional amendment: Nation flag updated for nation {}",
                         nation.getName());
                     break;
+                case IMPEACH_LEADER:
+                    handleImpeachment(nation, value);
+                    break;
+                case RATIFY_EMERGENCY_POWER:
+                    // Ratification PASSED — the power is ratified, no reversal needed
+                    try {
+                        EmergencyPower ratifiedPower = EmergencyPower.valueOf(value);
+                        StateCraft.LOGGER.info("Legislature ratified emergency power {} for nation {}",
+                            ratifiedPower.name(), nation.getName());
+                        EmergencyPowerManager.getInstance().recordEvent(
+                            nation.getId(), ratifiedPower, EmergencyPowerManager.EventType.RATIFIED,
+                            "Legislature", "Legislature vote passed — power ratified");
+                        if (server != null) {
+                            notifyLegislatureMembers(
+                                getOrCreateLegislature(nation.getId()), nation, server,
+                                "§a[Legislature] §f" + ratifiedPower.getDisplayName() +
+                                " §ahas been ratified by the legislature.");
+                        }
+                    } catch (IllegalArgumentException e) {
+                        StateCraft.LOGGER.warn("Invalid emergency power name in ratification: {}", value);
+                    }
+                    break;
+                case OVERRIDE_EMERGENCY_POWER:
+                    // Override PASSED — cancel the active emergency power
+                    try {
+                        EmergencyPower overriddenPower = EmergencyPower.valueOf(value);
+                        if (server != null) {
+                            EmergencyPowerManager.getInstance().overrideActivePower(nation, overriddenPower, server);
+                        }
+                        StateCraft.LOGGER.info("Legislature overrode emergency power {} for nation {}",
+                            overriddenPower.name(), nation.getName());
+                    } catch (IllegalArgumentException e) {
+                        StateCraft.LOGGER.warn("Invalid emergency power name in override: {}", value);
+                    }
+                    break;
                 // Custom laws don't need direct application
                 default:
                     StateCraft.LOGGER.info("Policy change (roleplay): {} = {}", policy.getDisplayName(), value);
@@ -626,6 +707,115 @@ public class LegislatureManager {
             return leader.getName().getString();
         }
         return "Leader";
+    }
+
+    /**
+     * Handle impeachment of a nation leader.
+     * Removes the leader, appoints a temporary caretaker (first officer),
+     * and triggers an immediate election.
+     */
+    private void handleImpeachment(Nation nation, String reason) {
+        UUID oldLeaderId = nation.getLeaderId();
+        String oldLeaderName = server != null ? getLeaderName(nation, server) : "Unknown";
+
+        // Appoint a temporary caretaker leader
+        // Priority: first officer, then first governor, then leave as-is for election
+        UUID caretakerId = null;
+        String caretakerName = "Unknown";
+
+        // Try officers first
+        if (!nation.getOfficers().isEmpty()) {
+            caretakerId = nation.getOfficers().iterator().next();
+        }
+
+        // Try governors if no officers
+        if (caretakerId == null) {
+            for (State state : nation.getAllStates()) {
+                UUID govId = state.getGovernorId();
+                if (govId != null && !govId.equals(oldLeaderId)) {
+                    caretakerId = govId;
+                    break;
+                }
+            }
+        }
+
+        // Set the caretaker as temporary leader
+        if (caretakerId != null) {
+            nation.setLeaderId(caretakerId);
+            if (server != null) {
+                ServerPlayer caretaker = server.getPlayerList().getPlayer(caretakerId);
+                if (caretaker != null) {
+                    caretakerName = caretaker.getName().getString();
+                    caretaker.sendSystemMessage(Component.literal(
+                        "§6§l[Impeachment] §eYou have been appointed as caretaker leader of §f" +
+                        nation.getName() + "§e pending an emergency election."));
+                }
+            }
+        }
+
+        ChunkClaimManager.getInstance().markDirty();
+
+        // Trigger an immediate election
+        if (server != null) {
+            com.statecraft.core.ElectionManager electionManager = com.statecraft.core.ElectionManager.getInstance();
+            com.statecraft.core.Election election = electionManager.startElection(nation, server);
+            if (election != null) {
+                StateCraft.LOGGER.info("Impeachment: Emergency election started for nation '{}'", nation.getName());
+            }
+        }
+
+        // Notify all online members
+        if (server != null) {
+            String announcement = "§c§l[IMPEACHMENT] §f" + oldLeaderName +
+                " §chas been removed as leader of §f" + nation.getName() + "§c!";
+            if (!reason.isEmpty()) {
+                announcement += "\n§7Reason: §f" + reason;
+            }
+            if (caretakerId != null) {
+                announcement += "\n§e" + caretakerName + " §7serves as caretaker leader pending election.";
+            }
+
+            for (UUID memberId : nation.getAllMembers()) {
+                ServerPlayer member = server.getPlayerList().getPlayer(memberId);
+                if (member != null) {
+                    member.sendSystemMessage(Component.literal(announcement));
+                }
+            }
+        }
+
+        // Send mail to the impeached leader
+        try {
+            MailManager mailManager = MailManager.getInstance();
+            String mailBody = "You have been impeached as leader of " + nation.getName() +
+                " by a 2/3 supermajority vote of the legislature.\n\n" +
+                "Reason: " + (reason.isEmpty() ? "No reason provided." : reason) + "\n\n" +
+                (caretakerId != null ?
+                    caretakerName + " has been appointed as caretaker leader. " : "") +
+                "An emergency election has been called.";
+            mailManager.sendSystemMail(oldLeaderId, Mail.MailType.GOV_ANNOUNCEMENT,
+                "You Have Been Impeached", mailBody);
+        } catch (Exception e) {
+            StateCraft.LOGGER.warn("Failed to send impeachment mail: {}", e.getMessage());
+        }
+
+        // Send mail to the caretaker
+        if (caretakerId != null) {
+            try {
+                MailManager mailManager = MailManager.getInstance();
+                String mailBody = "Following the impeachment of " + oldLeaderName +
+                    ", you have been appointed as caretaker leader of " + nation.getName() +
+                    " pending an emergency election.\n\n" +
+                    "An election is now active. You may run as a candidate or simply serve until the election concludes.";
+                mailManager.sendSystemMail(caretakerId, Mail.MailType.GOV_ANNOUNCEMENT,
+                    "Appointed Caretaker Leader", mailBody);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Failed to send caretaker appointment mail: {}", e.getMessage());
+            }
+        }
+
+        StateCraft.LOGGER.info("Impeachment: {} removed as leader of '{}'. Reason: {}. Caretaker: {}",
+            oldLeaderName, nation.getName(), reason.isEmpty() ? "none" : reason,
+            caretakerId != null ? caretakerName : "none");
     }
 
     /**

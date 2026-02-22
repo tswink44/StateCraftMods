@@ -142,6 +142,13 @@ public class Legislature {
     }
 
     /**
+     * Add a bill to the drafts (used for system-generated bills)
+     */
+    public void addDraftBill(Bill bill) {
+        draftBills.put(bill.getBillId(), bill);
+    }
+
+    /**
      * Submit a draft for debate
      */
     public boolean submitForDebate(UUID billId, long debateDurationMs) {
@@ -160,6 +167,13 @@ public class Legislature {
      */
     public Bill getActiveBill(UUID billId) {
         return activeBills.get(billId);
+    }
+
+    /**
+     * Add an active bill directly (used for system-generated bills like ratification votes)
+     */
+    public void addActiveBill(Bill bill) {
+        activeBills.put(bill.getBillId(), bill);
     }
 
     /**

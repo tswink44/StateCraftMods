@@ -129,12 +129,27 @@ public class DiplomacyManager {
     // ==================== Peace ====================
 
     /**
-     * Propose peace to a nation you are at war with.
-     * Creates a pending proposal that the target leader must accept.
-     *
-     * @return A result message
+     * Propose peace with no terms (backward compatible shortcut).
      */
     public String proposePeace(Nation proposer, Nation target, MinecraftServer server) {
+        return proposePeaceWithTerms(proposer, target, server, 0, new ArrayList<>(), null);
+    }
+
+    /**
+     * Propose peace with negotiated terms (currency demand, chunk demands).
+     *
+     * @param currencyDemand  Amount the proposer demands from the target's treasury
+     * @param chunkDemands    Chunks the proposer demands from the target
+     * @param receivingCityId City in the proposer's nation to receive demanded chunks (nullable if no chunks)
+     * @return A result message
+     */
+    public String proposePeaceWithTerms(Nation proposer, Nation target, MinecraftServer server,
+                                         double currencyDemand, List<ChunkDemand> chunkDemands,
+                                         UUID receivingCityId) {
+        if (proposer.getId().equals(target.getId())) {
+            return "§cCannot propose peace with yourself.";
+        }
+
         if (!proposer.isEnemy(target.getId())) {
             return "§cYou are not at war with " + target.getName() + ".";
         }
@@ -149,29 +164,139 @@ public class DiplomacyManager {
             return "§cA peace proposal to " + target.getName() + " is already pending.";
         }
 
+        // Validate currency demand against config cap
+        if (currencyDemand > 0) {
+            try {
+                int maxPercent = com.statecraft.config.StateCraftConfig.PEACE_MAX_CURRENCY_PERCENT.get();
+                double targetBalance = com.statecraft.integration.IntegrationRegistry.getNationBalance(target.getName());
+                double maxCurrency = targetBalance * (maxPercent / 100.0);
+                if (maxPercent > 0 && currencyDemand > maxCurrency) {
+                    return "§cCurrency demand exceeds the maximum (" + maxPercent + "% of target treasury = " +
+                        com.statecraft.integration.IntegrationRegistry.formatCurrency(maxCurrency) + ").";
+                }
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error validating peace currency demand: {}", e.getMessage());
+            }
+        }
+
+        // Validate chunk demands against config caps
+        if (chunkDemands != null && !chunkDemands.isEmpty()) {
+            try {
+                int maxChunks = com.statecraft.config.StateCraftConfig.PEACE_MAX_CHUNK_COUNT.get();
+                int maxImprovementScore = com.statecraft.config.StateCraftConfig.PEACE_MAX_CHUNK_IMPROVEMENT_SCORE.get();
+
+                if (chunkDemands.size() > maxChunks) {
+                    return "§cToo many chunks demanded (max " + maxChunks + ").";
+                }
+
+                int totalImprovementScore = 0;
+                ChunkClaimManager claimManager = ChunkClaimManager.getInstance();
+                for (ChunkDemand demand : chunkDemands) {
+                    net.minecraft.world.level.ChunkPos chunkPos = new net.minecraft.world.level.ChunkPos(demand.chunkX, demand.chunkZ);
+                    net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimKey =
+                        net.minecraft.resources.ResourceKey.create(
+                            net.minecraft.core.registries.Registries.DIMENSION,
+                            new net.minecraft.resources.ResourceLocation(demand.dimension));
+                    ClaimedChunk chunk = claimManager.getClaimedChunk(chunkPos, dimKey);
+                    if (chunk == null) {
+                        return "§cChunk (" + demand.chunkX + ", " + demand.chunkZ + ") is not claimed.";
+                    }
+                    City city = claimManager.getCity(chunk.getCityId());
+                    if (city == null) {
+                        return "§cChunk (" + demand.chunkX + ", " + demand.chunkZ + ") has no city.";
+                    }
+                    State state = claimManager.getState(city.getStateId());
+                    if (state == null || !state.getNationId().equals(target.getId())) {
+                        return "§cChunk (" + demand.chunkX + ", " + demand.chunkZ + ") does not belong to " + target.getName() + ".";
+                    }
+
+                    int score = com.statecraft.integration.IntegrationRegistry.getChunkImprovementScore(
+                        demand.chunkX, demand.chunkZ, demand.dimension);
+                    totalImprovementScore += score;
+                }
+
+                if (maxImprovementScore > 0 && totalImprovementScore > maxImprovementScore) {
+                    return "§cTotal improvement score of demanded chunks (" + totalImprovementScore +
+                        ") exceeds maximum (" + maxImprovementScore + ").";
+                }
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error validating peace chunk demands: {}", e.getMessage());
+                return "§cError validating chunk demands.";
+            }
+
+            // Validate receiving city belongs to proposer
+            if (receivingCityId == null) {
+                return "§cYou must select a city to receive the demanded chunks.";
+            }
+            City receivingCity = ChunkClaimManager.getInstance().getCity(receivingCityId);
+            if (receivingCity == null) {
+                return "§cReceiving city not found.";
+            }
+            State receivingState = ChunkClaimManager.getInstance().getState(receivingCity.getStateId());
+            if (receivingState == null || !receivingState.getNationId().equals(proposer.getId())) {
+                return "§cReceiving city does not belong to your nation.";
+            }
+        }
+
         DiplomacyProposal proposal = new DiplomacyProposal(
             UUID.randomUUID(), ProposalType.PEACE,
             proposer.getId(), target.getId(),
             System.currentTimeMillis(),
-            System.currentTimeMillis() + PROPOSAL_EXPIRY_MS
+            System.currentTimeMillis() + PROPOSAL_EXPIRY_MS,
+            currencyDemand,
+            chunkDemands != null ? chunkDemands : new ArrayList<>(),
+            receivingCityId
         );
         proposals.put(proposal.id, proposal);
         markDirty();
 
+        // Build terms summary for notifications
+        String termsSummary = buildTermsSummary(currencyDemand, chunkDemands);
+
         // Notify target nation leader
-        notifyLeader(target, server, "§e§l[DIPLOMACY] §f" + proposer.getName() + " has proposed a peace treaty!");
+        notifyLeader(target, server, "§e§l[DIPLOMACY] §f" + proposer.getName() + " has proposed a peace treaty!" +
+            (termsSummary.isEmpty() ? "" : " " + termsSummary));
 
         // Send mail
+        String termsMailSection = termsSummary.isEmpty() ? "" :
+            "\n\n=== Treaty Terms ===\n" + buildTermsMailBody(currencyDemand, chunkDemands);
+
         sendDiplomacyMail(target.getLeaderId(), "Peace Proposal from " + proposer.getName(),
-            "The nation of " + proposer.getName() + " has proposed a peace treaty.\n\n" +
-            "Use the Diplomacy screen to accept or reject this proposal.\n" +
+            "The nation of " + proposer.getName() + " has proposed a peace treaty." + termsMailSection +
+            "\n\nUse the Diplomacy screen to accept, reject, or counter-propose.\n" +
             "This proposal expires in 7 days.");
         sendDiplomacyMail(proposer.getLeaderId(), "Peace Proposal Sent to " + target.getName(),
-            "Your peace proposal has been sent to " + target.getName() + ".\n" +
-            "Their leader must accept for peace to take effect.");
+            "Your peace proposal has been sent to " + target.getName() + "." + termsMailSection +
+            "\nTheir leader must accept for peace to take effect.");
 
-        StateCraft.LOGGER.info("Peace proposed: {} -> {}", proposer.getName(), target.getName());
+        StateCraft.LOGGER.info("Peace proposed: {} -> {}{}", proposer.getName(), target.getName(),
+            termsSummary.isEmpty() ? "" : " [" + termsSummary + "]");
         return "§aPeace proposal sent to " + target.getName() + ". Their leader must accept.";
+    }
+
+    private String buildTermsSummary(double currencyDemand, List<ChunkDemand> chunkDemands) {
+        List<String> parts = new ArrayList<>();
+        if (currencyDemand > 0) {
+            parts.add(com.statecraft.integration.IntegrationRegistry.formatCurrency(currencyDemand));
+        }
+        if (chunkDemands != null && !chunkDemands.isEmpty()) {
+            parts.add(chunkDemands.size() + " chunk" + (chunkDemands.size() > 1 ? "s" : ""));
+        }
+        return parts.isEmpty() ? "" : "§6(Demands: " + String.join(" + ", parts) + ")";
+    }
+
+    private String buildTermsMailBody(double currencyDemand, List<ChunkDemand> chunkDemands) {
+        StringBuilder sb = new StringBuilder();
+        if (currencyDemand > 0) {
+            sb.append("Currency: ").append(com.statecraft.integration.IntegrationRegistry.formatCurrency(currencyDemand)).append("\n");
+        }
+        if (chunkDemands != null && !chunkDemands.isEmpty()) {
+            sb.append("Chunks (").append(chunkDemands.size()).append("):\n");
+            for (ChunkDemand d : chunkDemands) {
+                sb.append("  - (").append(d.chunkX).append(", ").append(d.chunkZ).append(")\n");
+            }
+        }
+        return sb.toString();
     }
 
     // ==================== Alliance ====================
@@ -303,6 +428,80 @@ public class DiplomacyManager {
                     markDirty();
                     return "§cYou are no longer at war with " + proposer.getName() + ".";
                 }
+
+                // Execute peace terms if any
+                StringBuilder termsLog = new StringBuilder();
+                if (proposal.hasTerms()) {
+                    // Currency transfer: target pays proposer
+                    if (proposal.currencyDemand > 0 && com.statecraft.integration.IntegrationRegistry.hasEconomyIntegration()) {
+                        boolean withdrew = com.statecraft.integration.IntegrationRegistry.forceWithdrawFromNation(
+                            target.getName(), proposal.currencyDemand,
+                            "Peace treaty reparations to " + proposer.getName());
+                        com.statecraft.integration.IntegrationRegistry.depositToNation(
+                            proposer.getName(), proposal.currencyDemand,
+                            "Peace treaty reparations from " + target.getName());
+                        termsLog.append("Currency: ").append(
+                            com.statecraft.integration.IntegrationRegistry.formatCurrency(proposal.currencyDemand));
+                        if (!withdrew) {
+                            termsLog.append(" (target treasury went into debt)");
+                        }
+                        termsLog.append("\n");
+                    }
+
+                    // Chunk transfers: move chunks from target nation to proposer's receiving city
+                    if (!proposal.chunkDemands.isEmpty() && proposal.receivingCityId != null) {
+                        City receivingCity = ChunkClaimManager.getInstance().getCity(proposal.receivingCityId);
+                        if (receivingCity != null) {
+                            int transferred = 0;
+                            for (ChunkDemand demand : proposal.chunkDemands) {
+                                try {
+                                    net.minecraft.world.level.ChunkPos chunkPos =
+                                        new net.minecraft.world.level.ChunkPos(demand.chunkX, demand.chunkZ);
+                                    net.minecraft.resources.ResourceKey<Level> dimKey =
+                                        net.minecraft.resources.ResourceKey.create(
+                                            net.minecraft.core.registries.Registries.DIMENSION,
+                                            new net.minecraft.resources.ResourceLocation(demand.dimension));
+                                    ClaimedChunk chunk = ChunkClaimManager.getInstance().getClaimedChunk(chunkPos, dimKey);
+                                    if (chunk != null) {
+                                        // Remove from old city
+                                        City oldCity = ChunkClaimManager.getInstance().getCity(chunk.getCityId());
+                                        if (oldCity != null) {
+                                            oldCity.unclaimChunk(chunkPos, dimKey);
+                                        }
+                                        // Clear private ownership — land reverts to government
+                                        UUID previousOwner = chunk.getPlayerOwner();
+                                        chunk.setPlayerOwner(null);
+                                        chunk.setOwnershipType(OwnershipType.HIERARCHY);
+                                        chunk.setForSale(false);
+                                        // Re-assign to receiving city
+                                        chunk.setCityId(proposal.receivingCityId);
+                                        // Add to receiving city using its internal claim method pattern
+                                        // We directly put the existing chunk into the new city
+                                        ChunkClaimManager.getInstance().transferChunkToCity(chunk, receivingCity, chunkPos, dimKey);
+                                        transferred++;
+
+                                        // Notify displaced private owner via mail
+                                        if (previousOwner != null) {
+                                            sendDiplomacyMail(previousOwner,
+                                                "Land Ceded in Peace Treaty",
+                                                "Your privately owned chunk at (" + demand.chunkX + ", " + demand.chunkZ +
+                                                ") has been ceded to " + proposer.getName() +
+                                                " as part of a peace treaty with " + target.getName() + ".\n" +
+                                                "The chunk is now government-owned territory of " + proposer.getName() + ".");
+                                        }
+                                    }
+                                } catch (Exception e) {
+                                    StateCraft.LOGGER.warn("Failed to transfer chunk ({}, {}) in peace treaty: {}",
+                                        demand.chunkX, demand.chunkZ, e.getMessage());
+                                }
+                            }
+                            termsLog.append("Chunks transferred: ").append(transferred).append("\n");
+                        } else {
+                            termsLog.append("Chunk transfer failed: receiving city no longer exists\n");
+                        }
+                    }
+                }
+
                 // Remove enemy status from both sides
                 proposer.removeEnemy(target.getId());
                 target.removeEnemy(proposer.getId());
@@ -314,6 +513,9 @@ public class DiplomacyManager {
 
                 ChunkClaimManager.getInstance().markDirty();
 
+                String termsSection = termsLog.length() > 0 ?
+                    "\n\n=== Treaty Terms Executed ===\n" + termsLog : "";
+
                 String peaceMsg = "§a§l[PEACE TREATY] §f" + proposer.getName() + " and " + target.getName() +
                     " have signed a peace treaty! §7(48-hour truce in effect)";
                 notifyNationMembers(proposer, server, peaceMsg);
@@ -321,13 +523,14 @@ public class DiplomacyManager {
 
                 sendDiplomacyMail(proposer.getLeaderId(), "Peace Treaty Accepted by " + target.getName(),
                     target.getName() + " has accepted your peace proposal.\n" +
-                    "A 48-hour truce is now in effect between your nations.");
+                    "A 48-hour truce is now in effect between your nations." + termsSection);
                 sendDiplomacyMail(target.getLeaderId(), "Peace Treaty Signed with " + proposer.getName(),
                     "You have signed a peace treaty with " + proposer.getName() + ".\n" +
-                    "A 48-hour truce is now in effect between your nations.");
+                    "A 48-hour truce is now in effect between your nations." + termsSection);
 
                 result = "§aPeace treaty signed with " + proposer.getName() + "! 48-hour truce in effect.";
-                StateCraft.LOGGER.info("Peace treaty signed: {} <-> {}", proposer.getName(), target.getName());
+                StateCraft.LOGGER.info("Peace treaty signed: {} <-> {}{}", proposer.getName(), target.getName(),
+                    termsLog.length() > 0 ? " [" + termsLog.toString().trim() + "]" : "");
                 break;
 
             case ALLIANCE:
@@ -597,6 +800,24 @@ public class DiplomacyManager {
             pTag.putUUID("targetNationId", proposal.targetNationId);
             pTag.putLong("timestamp", proposal.timestamp);
             pTag.putLong("expiresAt", proposal.expiresAt);
+
+            // Save peace terms
+            if (proposal.type == ProposalType.PEACE && proposal.hasTerms()) {
+                pTag.putDouble("currencyDemand", proposal.currencyDemand);
+                if (proposal.receivingCityId != null) {
+                    pTag.putUUID("receivingCityId", proposal.receivingCityId);
+                }
+                ListTag chunksList = new ListTag();
+                for (ChunkDemand cd : proposal.chunkDemands) {
+                    CompoundTag cTag = new CompoundTag();
+                    cTag.putInt("chunkX", cd.chunkX);
+                    cTag.putInt("chunkZ", cd.chunkZ);
+                    cTag.putString("dimension", cd.dimension);
+                    chunksList.add(cTag);
+                }
+                pTag.put("chunkDemands", chunksList);
+            }
+
             proposalsList.add(pTag);
         }
         tag.put("proposals", proposalsList);
@@ -628,13 +849,26 @@ public class DiplomacyManager {
             for (int i = 0; i < proposalsList.size(); i++) {
                 CompoundTag pTag = proposalsList.getCompound(i);
                 try {
+                    double currencyDemand = pTag.getDouble("currencyDemand");
+                    UUID receivingCityId = pTag.contains("receivingCityId") ? pTag.getUUID("receivingCityId") : null;
+                    List<ChunkDemand> chunkDemands = new ArrayList<>();
+                    if (pTag.contains("chunkDemands")) {
+                        ListTag chunksList = pTag.getList("chunkDemands", Tag.TAG_COMPOUND);
+                        for (int j = 0; j < chunksList.size(); j++) {
+                            CompoundTag cTag = chunksList.getCompound(j);
+                            chunkDemands.add(new ChunkDemand(
+                                cTag.getInt("chunkX"), cTag.getInt("chunkZ"), cTag.getString("dimension")));
+                        }
+                    }
+
                     DiplomacyProposal proposal = new DiplomacyProposal(
                         pTag.getUUID("id"),
                         ProposalType.valueOf(pTag.getString("type")),
                         pTag.getUUID("proposerNationId"),
                         pTag.getUUID("targetNationId"),
                         pTag.getLong("timestamp"),
-                        pTag.getLong("expiresAt")
+                        pTag.getLong("expiresAt"),
+                        currencyDemand, chunkDemands, receivingCityId
                     );
                     // Only load non-expired proposals
                     if (System.currentTimeMillis() <= proposal.expiresAt) {
@@ -694,14 +928,47 @@ public class DiplomacyManager {
         public final long timestamp;
         public final long expiresAt;
 
+        // Peace treaty terms (only used when type == PEACE)
+        public final double currencyDemand;           // Currency proposer demands from target
+        public final List<ChunkDemand> chunkDemands;  // Chunks proposer demands from target
+        public final UUID receivingCityId;             // City in proposer's nation to receive chunks (nullable)
+
         public DiplomacyProposal(UUID id, ProposalType type, UUID proposerNationId, UUID targetNationId,
                                   long timestamp, long expiresAt) {
+            this(id, type, proposerNationId, targetNationId, timestamp, expiresAt, 0, new ArrayList<>(), null);
+        }
+
+        public DiplomacyProposal(UUID id, ProposalType type, UUID proposerNationId, UUID targetNationId,
+                                  long timestamp, long expiresAt,
+                                  double currencyDemand, List<ChunkDemand> chunkDemands, UUID receivingCityId) {
             this.id = id;
             this.type = type;
             this.proposerNationId = proposerNationId;
             this.targetNationId = targetNationId;
             this.timestamp = timestamp;
             this.expiresAt = expiresAt;
+            this.currencyDemand = currencyDemand;
+            this.chunkDemands = chunkDemands != null ? new ArrayList<>(chunkDemands) : new ArrayList<>();
+            this.receivingCityId = receivingCityId;
+        }
+
+        public boolean hasTerms() {
+            return currencyDemand > 0 || !chunkDemands.isEmpty();
+        }
+    }
+
+    /**
+     * Represents a chunk demanded in a peace treaty
+     */
+    public static class ChunkDemand {
+        public final int chunkX;
+        public final int chunkZ;
+        public final String dimension;
+
+        public ChunkDemand(int chunkX, int chunkZ, String dimension) {
+            this.chunkX = chunkX;
+            this.chunkZ = chunkZ;
+            this.dimension = dimension;
         }
     }
 
