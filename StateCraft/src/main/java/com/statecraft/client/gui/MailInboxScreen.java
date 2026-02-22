@@ -226,7 +226,8 @@ public class MailInboxScreen extends StateCraftScreen {
     private void openMailView(MailEntry entry) {
         this.minecraft.setScreen(new MailViewScreen(entry.mailId, entry.subject, entry.body,
             entry.senderName, entry.timeAgo, entry.type,
-            entry.attachedCurrency, entry.currencyClaimed));
+            entry.attachedCurrency, entry.currencyClaimed,
+            entry.actionData, entry.actionTaken));
     }
 
     private void goBack() {
@@ -263,10 +264,13 @@ public class MailInboxScreen extends StateCraftScreen {
         public boolean read;
         public final double attachedCurrency;
         public final boolean currencyClaimed;
+        public final String actionData;
+        public final boolean actionTaken;
 
         public MailEntry(String mailId, String subject, String body, String senderName,
                         String timeAgo, Mail.MailType type, boolean read,
-                        double attachedCurrency, boolean currencyClaimed) {
+                        double attachedCurrency, boolean currencyClaimed,
+                        String actionData, boolean actionTaken) {
             this.mailId = mailId;
             this.subject = subject;
             this.body = body;
@@ -276,6 +280,16 @@ public class MailInboxScreen extends StateCraftScreen {
             this.read = read;
             this.attachedCurrency = attachedCurrency;
             this.currencyClaimed = currencyClaimed;
+            this.actionData = actionData;
+            this.actionTaken = actionTaken;
+        }
+
+        /** Backward-compatible constructor */
+        public MailEntry(String mailId, String subject, String body, String senderName,
+                        String timeAgo, Mail.MailType type, boolean read,
+                        double attachedCurrency, boolean currencyClaimed) {
+            this(mailId, subject, body, senderName, timeAgo, type, read,
+                 attachedCurrency, currencyClaimed, "", false);
         }
     }
 }

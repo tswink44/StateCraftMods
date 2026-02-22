@@ -10,6 +10,7 @@ import com.statecraft.core.InvitationManager;
 import com.statecraft.core.Nation;
 import com.statecraft.data.NationSavedData;
 import com.statecraft.integration.IntegrationRegistry;
+import com.statecraft.mail.MailManager;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
@@ -230,12 +231,21 @@ public class NationCommand {
                 "§aInvited §e" + target.getName().getString() + "§a to " + nationName + "!"
             ), false);
 
-            // Notify target
+            // Send mail to target with accept/deny buttons
+            MailManager.getInstance().sendNationInviteMail(
+                target.getUUID(),
+                sender.getUUID(),
+                sender.getName().getString(),
+                nation.getId(),
+                nationName
+            );
+
+            // Notify target in chat as well
             target.displayClientMessage(Component.literal(
                 "§6You've been invited to join §e" + nationName + "§6!"
             ), false);
             target.displayClientMessage(Component.literal(
-                "§7Use §e/nation accept §7to join, or §e/nation deny §7to decline."
+                "§7Check your mail to accept or deny, or use §e/nation accept §7/ §e/nation deny§7."
             ), false);
             target.displayClientMessage(Component.literal(
                 "§7This invite expires in 5 minutes."

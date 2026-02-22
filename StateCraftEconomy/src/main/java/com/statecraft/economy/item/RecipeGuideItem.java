@@ -9,6 +9,8 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.level.Level;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.fml.DistExecutor;
 
 import javax.annotation.Nullable;
 import java.util.List;
@@ -26,14 +28,20 @@ public class RecipeGuideItem extends Item {
     @Override
     public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
         if (level.isClientSide()) {
-            openGuideScreen();
+            // Use DistExecutor with a supplier that returns a SafeRunnable
+            // The class reference inside the lambda won't be loaded until the lambda is executed
+            DistExecutor.safeRunWhenOn(Dist.CLIENT, () -> ClientProxy::openGuideScreen);
         }
         return InteractionResultHolder.sidedSuccess(player.getItemInHand(hand), level.isClientSide());
     }
 
-    private void openGuideScreen() {
-        net.minecraft.client.Minecraft.getInstance().setScreen(
-            new com.statecraft.economy.client.gui.RecipeGuideScreen());
+    /**
+     * Client proxy class - referenced by name only, won't cause class loading on server
+     */
+    public static class ClientProxy {
+        public static DistExecutor.SafeRunnable openGuideScreen() {
+            return () -> com.statecraft.economy.client.ClientGuideHelper.openGuideScreen();
+        }
     }
 
     @Override

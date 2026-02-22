@@ -464,7 +464,9 @@ public class ClientPacketHandler {
                         info.type,
                         info.read,
                         info.attachedCurrency,
-                        info.currencyClaimed
+                        info.currencyClaimed,
+                        info.actionData,
+                        info.actionTaken
                     ));
                 }
                 screen.updateMailData(entries, packet.getUnreadCount(), packet.getTotalCount());

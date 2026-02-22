@@ -1718,7 +1718,9 @@ public class ServerPacketHandler {
                             mail.getType(),
                             mail.isRead(),
                             mail.getAttachedCurrency(),
-                            mail.isCurrencyClaimed()
+                            mail.isCurrencyClaimed(),
+                            mail.getActionData(),
+                            mail.isActionTaken()
                         ));
                     }
 
@@ -1780,9 +1782,129 @@ public class ServerPacketHandler {
                         }
                     }
                 }
+                case ACCEPT_INVITE -> {
+                    handleMailInviteAction(player, mailbox, mailManager, packet, true);
+                }
+                case DENY_INVITE -> {
+                    handleMailInviteAction(player, mailbox, mailManager, packet, false);
+                }
             }
         });
         ctx.get().setPacketHandled(true);
+    }
+
+    /**
+     * Handle accept/deny actions for invite mail
+     */
+    private static void handleMailInviteAction(ServerPlayer player, Mailbox mailbox,
+                                                MailManager mailManager, RequestMailDataPacket packet,
+                                                boolean accept) {
+        String mailId = packet.getMailId();
+        String actionData = packet.getActionData();
+
+        if (mailId.isEmpty() || actionData.isEmpty()) {
+            player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§cInvalid invite data."));
+            return;
+        }
+
+        Mail mail = mailbox.getMessage(UUID.fromString(mailId));
+        if (mail == null) {
+            player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§cMail not found."));
+            return;
+        }
+
+        if (mail.isActionTaken()) {
+            player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§cYou have already responded to this invite."));
+            return;
+        }
+
+        // Handle based on mail type
+        if (mail.getType() == Mail.MailType.NATION_INVITE) {
+            try {
+                UUID nationId = UUID.fromString(actionData);
+                Nation nation = ChunkClaimManager.getInstance().getNation(nationId);
+
+                if (nation == null) {
+                    player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§cThis nation no longer exists."));
+                    mail.setActionTaken(true);
+                    mailManager.markDirty();
+                    return;
+                }
+
+                // Check if player is already in a nation
+                if (ChunkClaimManager.getInstance().getPlayerNation(player.getUUID()) != null) {
+                    player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§cYou are already in a nation!"));
+                    mail.setActionTaken(true);
+                    mailManager.markDirty();
+                    return;
+                }
+
+                // Check if invite is still valid in the InvitationManager
+                List<Invitation> invites = InvitationManager.getInstance().getInvitationsForPlayer(player.getUUID());
+                Invitation validInvite = null;
+                for (Invitation inv : invites) {
+                    if (inv.getType() == Invitation.InvitationType.NATION && inv.getEntityId().equals(nationId)) {
+                        validInvite = inv;
+                        break;
+                    }
+                }
+
+                if (accept) {
+                    if (validInvite != null) {
+                        // Accept via InvitationManager to use existing logic
+                        nation.addMember(player.getUUID());
+                        InvitationManager.getInstance().removeInvitation(validInvite);
+                        player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                            "§aYou have joined §e" + nation.getName() + "§a!"));
+
+                        // Notify the nation leader if online
+                        MinecraftServer server = player.getServer();
+                        if (server != null) {
+                            ServerPlayer leader = server.getPlayerList().getPlayer(nation.getLeaderId());
+                            if (leader != null) {
+                                leader.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                    "§a" + player.getName().getString() + " has joined your nation!"));
+                            }
+                        }
+                    } else {
+                        // Invite expired but we can still try to accept if the nation is open
+                        if (nation.isOpen()) {
+                            nation.addMember(player.getUUID());
+                            player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                "§aYou have joined §e" + nation.getName() + "§a!"));
+                        } else {
+                            player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                "§cThis invite has expired. Ask for a new invite from a nation officer."));
+                        }
+                    }
+                } else {
+                    // Deny
+                    if (validInvite != null) {
+                        InvitationManager.getInstance().removeInvitation(validInvite);
+                    }
+                    player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                        "§7You have declined the invitation to join §e" + nation.getName() + "§7."));
+
+                    // Notify the sender if online
+                    if (mail.getSenderId() != null) {
+                        MinecraftServer server = player.getServer();
+                        if (server != null) {
+                            ServerPlayer sender = server.getPlayerList().getPlayer(mail.getSenderId());
+                            if (sender != null) {
+                                sender.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                    "§c" + player.getName().getString() + " has declined your nation invite."));
+                            }
+                        }
+                    }
+                }
+
+                mail.setActionTaken(true);
+                mailManager.markDirty();
+
+            } catch (IllegalArgumentException e) {
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§cInvalid nation ID in invite."));
+            }
+        }
     }
 
     public static void handleRequestGovMailData(RequestGovMailDataPacket packet, Supplier<NetworkEvent.Context> ctx) {
@@ -2895,6 +3017,13 @@ public class ServerPacketHandler {
                 return;
             }
 
+            // Anti-corruption: Contract creators cannot bid on their own contracts
+            if (contract.getCreatorId().equals(player.getUUID())) {
+                NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                    "You cannot bid on a contract you created!"), player);
+                return;
+            }
+
             // Validate bid amount
             if (packet.getBidAmount() <= 0) {
                 NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Bid amount must be greater than 0!"), player);
@@ -3406,6 +3535,9 @@ public class ServerPacketHandler {
             // Check if current player is the contractor
             boolean isPlayerContractor = player.getUUID().equals(contract.getContractorId());
 
+            // Check if current player is the contract creator
+            boolean isPlayerCreator = player.getUUID().equals(contract.getCreatorId());
+
             // Get milestone completion status
             java.util.Map<Integer, Boolean> milestonesCompleted = new java.util.HashMap<>(contract.getMilestonesCompleted());
 
@@ -3435,6 +3567,7 @@ public class ServerPacketHandler {
                 contract.getProgressPercent(),
                 playerHasBid,
                 isPlayerContractor,
+                isPlayerCreator,
                 bidSummaries,
                 milestonesCompleted,
                 pendingMilestoneApprovals,

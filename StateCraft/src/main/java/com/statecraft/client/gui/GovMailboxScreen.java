@@ -110,7 +110,10 @@ public class GovMailboxScreen extends StateCraftScreen {
 
         if (mailEntries.isEmpty()) {
             graphics.drawCenteredString(this.font, "§8No messages", this.width / 2, y + 40, 0xFF888888);
-            graphics.drawCenteredString(this.font, "§7Government mail will appear here", this.width / 2, y + 55, COLOR_SECONDARY);
+            String emptyMessage = entityType == EntityType.COMPANY
+                ? "§7Corporate mail will appear here"
+                : "§7Government mail will appear here";
+            graphics.drawCenteredString(this.font, emptyMessage, this.width / 2, y + 55, COLOR_SECONDARY);
             return;
         }
 

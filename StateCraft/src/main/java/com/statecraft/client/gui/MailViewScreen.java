@@ -22,6 +22,8 @@ public class MailViewScreen extends StateCraftScreen {
     private final Mail.MailType mailType;
     private final double attachedCurrency;
     private final boolean currencyClaimed;
+    private final String actionData;      // For actionable mail (nation ID for invites)
+    private final boolean actionTaken;    // Whether action already taken
 
     private List<String> wrappedBody;
     private int scrollOffset = 0;
@@ -29,7 +31,8 @@ public class MailViewScreen extends StateCraftScreen {
 
     public MailViewScreen(String mailId, String subject, String body,
                           String senderName, String timeAgo, Mail.MailType mailType,
-                          double attachedCurrency, boolean currencyClaimed) {
+                          double attachedCurrency, boolean currencyClaimed,
+                          String actionData, boolean actionTaken) {
         super(Component.literal("View Mail"));
         this.mailId = mailId;
         this.subject = subject;
@@ -39,14 +42,23 @@ public class MailViewScreen extends StateCraftScreen {
         this.mailType = mailType;
         this.attachedCurrency = attachedCurrency;
         this.currencyClaimed = currencyClaimed;
+        this.actionData = actionData;
+        this.actionTaken = actionTaken;
         this.guiWidth = 320;
         this.guiHeight = 240;
+    }
+
+    /** Backward-compatible constructor for code that doesn't pass action fields */
+    public MailViewScreen(String mailId, String subject, String body,
+                          String senderName, String timeAgo, Mail.MailType mailType,
+                          double attachedCurrency, boolean currencyClaimed) {
+        this(mailId, subject, body, senderName, timeAgo, mailType, attachedCurrency, currencyClaimed, null, false);
     }
 
     /** Backward-compatible constructor for code that doesn't pass currency fields */
     public MailViewScreen(String mailId, String subject, String body,
                           String senderName, String timeAgo, Mail.MailType mailType) {
-        this(mailId, subject, body, senderName, timeAgo, mailType, 0, false);
+        this(mailId, subject, body, senderName, timeAgo, mailType, 0, false, null, false);
     }
 
     @Override
@@ -99,6 +111,31 @@ public class MailViewScreen extends StateCraftScreen {
                 Component.literal("§a💰 Claim $" + String.format("%.2f", attachedCurrency)),
                 btn -> claimCurrency()
             ));
+        }
+
+        // Accept/Deny buttons for actionable mail (nation invites, etc.)
+        if (isActionableMail() && !actionTaken && actionData != null) {
+            int actionButtonY = buttonY - 24;
+            if (attachedCurrency > 0 && !currencyClaimed) {
+                actionButtonY -= 24; // Move up if currency claim button exists
+            }
+
+            // Accept button
+            this.addRenderableWidget(createButton(
+                guiLeft + 10, actionButtonY, (guiWidth - 30) / 2, 20,
+                Component.literal("§a✓ Accept"),
+                btn -> acceptInvite()
+            ));
+
+            // Deny button
+            this.addRenderableWidget(createButton(
+                guiLeft + 15 + (guiWidth - 30) / 2, actionButtonY, (guiWidth - 30) / 2, 20,
+                Component.literal("§c✗ Deny"),
+                btn -> denyInvite()
+            ));
+        } else if (isActionableMail() && actionTaken) {
+            // Show status that action was already taken
+            // This is handled in renderContent
         }
     }
 
@@ -230,9 +267,37 @@ public class MailViewScreen extends StateCraftScreen {
         this.minecraft.setScreen(new MailInboxScreen());
     }
 
+    /**
+     * Check if this mail type supports actions (accept/deny buttons)
+     */
+    private boolean isActionableMail() {
+        return mailType == Mail.MailType.NATION_INVITE || mailType == Mail.MailType.CITIZENSHIP_INVITE;
+    }
+
+    /**
+     * Accept the invite action
+     */
+    private void acceptInvite() {
+        if (actionData != null && !actionData.isEmpty()) {
+            NetworkHandler.sendToServer(new RequestMailDataPacket(
+                RequestMailDataPacket.Action.ACCEPT_INVITE, mailId, actionData));
+            goBack();
+        }
+    }
+
+    /**
+     * Deny the invite action
+     */
+    private void denyInvite() {
+        if (actionData != null && !actionData.isEmpty()) {
+            NetworkHandler.sendToServer(new RequestMailDataPacket(
+                RequestMailDataPacket.Action.DENY_INVITE, mailId, actionData));
+            goBack();
+        }
+    }
+
     @Override
     public void onClose() {
         goBack();
     }
 }
-

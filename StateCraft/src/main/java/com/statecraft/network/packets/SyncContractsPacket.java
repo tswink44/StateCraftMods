@@ -110,6 +110,7 @@ public class SyncContractsPacket {
         private final int progressPercent;
         private final boolean playerHasBid;
         private final boolean isPlayerContractor;  // Is the current player the contractor?
+        private final boolean isPlayerCreator;     // Is the current player the contract creator?
         private final List<BidSummary> bids;  // Only populated for pending approval
         private final java.util.Map<Integer, Boolean> milestonesCompleted;  // Milestone completion status
         private final java.util.Set<Integer> pendingMilestoneApprovals;  // Milestones waiting for approval
@@ -119,7 +120,7 @@ public class SyncContractsPacket {
         public ContractSummary(String contractId, String contractNumber, String title, String description,
                                String creatorName, String status, String compensationType, double budget, double bondAmount,
                                int chunkCount, int bidCount, long timeRemaining, String contractorName,
-                               int progressPercent, boolean playerHasBid, boolean isPlayerContractor,
+                               int progressPercent, boolean playerHasBid, boolean isPlayerContractor, boolean isPlayerCreator,
                                List<BidSummary> bids, java.util.Map<Integer, Boolean> milestonesCompleted,
                                java.util.Set<Integer> pendingMilestoneApprovals,
                                java.util.List<int[]> chunkCoordinates, String dimension) {
@@ -139,6 +140,7 @@ public class SyncContractsPacket {
             this.progressPercent = progressPercent;
             this.playerHasBid = playerHasBid;
             this.isPlayerContractor = isPlayerContractor;
+            this.isPlayerCreator = isPlayerCreator;
             this.bids = bids;
             this.milestonesCompleted = milestonesCompleted;
             this.pendingMilestoneApprovals = pendingMilestoneApprovals;
@@ -163,6 +165,7 @@ public class SyncContractsPacket {
             buf.writeVarInt(progressPercent);
             buf.writeBoolean(playerHasBid);
             buf.writeBoolean(isPlayerContractor);
+            buf.writeBoolean(isPlayerCreator);
 
             buf.writeVarInt(bids.size());
             for (BidSummary bid : bids) {
@@ -208,6 +211,7 @@ public class SyncContractsPacket {
             int progressPercent = buf.readVarInt();
             boolean playerHasBid = buf.readBoolean();
             boolean isPlayerContractor = buf.readBoolean();
+            boolean isPlayerCreator = buf.readBoolean();
 
             int bidListSize = buf.readVarInt();
             List<BidSummary> bids = new ArrayList<>(bidListSize);
@@ -241,7 +245,7 @@ public class SyncContractsPacket {
 
             return new ContractSummary(contractId, contractNumber, title, description, creatorName,
                 status, compensationType, budget, bondAmount, chunkCount, bidCount, timeRemaining, contractorName,
-                progressPercent, playerHasBid, isPlayerContractor, bids, milestonesCompleted, pendingMilestoneApprovals,
+                progressPercent, playerHasBid, isPlayerContractor, isPlayerCreator, bids, milestonesCompleted, pendingMilestoneApprovals,
                 chunkCoordinates, dimension);
         }
 
@@ -262,6 +266,7 @@ public class SyncContractsPacket {
         public int getProgressPercent() { return progressPercent; }
         public boolean hasPlayerBid() { return playerHasBid; }
         public boolean isPlayerContractor() { return isPlayerContractor; }
+        public boolean isPlayerCreator() { return isPlayerCreator; }
         public List<BidSummary> getBids() { return bids; }
         public java.util.Map<Integer, Boolean> getMilestonesCompleted() { return milestonesCompleted; }
         public java.util.Set<Integer> getPendingMilestoneApprovals() { return pendingMilestoneApprovals; }

@@ -20,6 +20,7 @@ public class ContractDetailScreen extends StateCraftScreen {
     private final boolean isLegislatureMember;
     private final boolean isNationLeader;
     private final boolean isContractor;
+    private final boolean isCreator;
 
     // Tab for different detail views
     private DetailTab currentTab = DetailTab.INFO;
@@ -50,8 +51,9 @@ public class ContractDetailScreen extends StateCraftScreen {
         this.isLegislatureMember = isLegislatureMember;
         this.isNationLeader = isNationLeader;
         this.isContractor = contract.isPlayerContractor();
-        this.guiWidth = 360;
-        this.guiHeight = 280;
+        this.isCreator = contract.isPlayerCreator();
+        this.guiWidth = 320;
+        this.guiHeight = 240;
     }
 
     @Override
@@ -59,9 +61,9 @@ public class ContractDetailScreen extends StateCraftScreen {
         super.init();
 
         int tabY = guiTop + 25;
-        int tabWidth = 60;
-        int tabSpacing = 3;
-        int startX = guiLeft + 15;
+        int tabWidth = 55;
+        int tabSpacing = 2;
+        int startX = guiLeft + 12;
         int nextTabX = startX;
 
         // Tab buttons - only show relevant tabs
@@ -119,14 +121,17 @@ public class ContractDetailScreen extends StateCraftScreen {
     }
 
     private void addActionButtons(int buttonY) {
-        int btnX = guiLeft + 15;
+        int btnX = guiLeft + 12;
+
+        // Check if player can manage this contract (legislature, leader, or creator)
+        boolean canManageContract = isLegislatureMember || isNationLeader || isCreator;
 
         switch (contract.getStatus()) {
             case "BIDDING":
-                if (isLegislatureMember || isNationLeader) {
+                if (canManageContract) {
                     // Close bidding early
                     this.addRenderableWidget(createButton(
-                        btnX, buttonY, 90, 20,
+                        btnX, buttonY, 85, 20,
                         Component.literal("§cClose Bidding"),
                         btn -> closeBidding()
                     ));
@@ -134,10 +139,10 @@ public class ContractDetailScreen extends StateCraftScreen {
                 break;
 
             case "PENDING_APPROVAL":
-                if (isLegislatureMember || isNationLeader) {
+                if (canManageContract) {
                     // Approve selected bid (only enabled when a bid is selected)
                     Button approveBtn = this.addRenderableWidget(createButton(
-                        btnX, buttonY, 90, 20,
+                        btnX, buttonY, 85, 20,
                         Component.literal("§aApprove Bid"),
                         btn -> approveSelectedBid()
                     ));
@@ -146,21 +151,21 @@ public class ContractDetailScreen extends StateCraftScreen {
                 break;
 
             case "ACTIVE":
-                // For legislature: cancel contract, approve pending milestones
-                if (isLegislatureMember || isNationLeader) {
+                // For legislature/creator: cancel contract, approve pending milestones
+                if (canManageContract) {
                     this.addRenderableWidget(createButton(
-                        btnX, buttonY, 90, 20,
+                        btnX, buttonY, 70, 20,
                         Component.literal("§cCancel"),
                         btn -> cancelContract()
                     ));
-                    btnX += 95;
+                    btnX += 75;
 
                     // Show approve milestone button if there are pending approvals
                     if (!contract.getPendingMilestoneApprovals().isEmpty()) {
                         int nextPendingMilestone = contract.getPendingMilestoneApprovals().stream()
                             .min(Integer::compareTo).orElse(0);
                         this.addRenderableWidget(createButton(
-                            btnX, buttonY, 100, 20,
+                            btnX, buttonY, 90, 20,
                             Component.literal("§aApprove " + nextPendingMilestone + "%"),
                             btn -> approveMilestone(nextPendingMilestone)
                         ));
@@ -169,9 +174,9 @@ public class ContractDetailScreen extends StateCraftScreen {
                 break;
 
             case "DRAFT":
-                if (isLegislatureMember || isNationLeader) {
+                if (canManageContract) {
                     this.addRenderableWidget(createButton(
-                        btnX, buttonY, 90, 20,
+                        btnX, buttonY, 85, 20,
                         Component.literal("§aOpen Bidding"),
                         btn -> openForBidding()
                     ));
@@ -330,8 +335,9 @@ public class ContractDetailScreen extends StateCraftScreen {
         }
         y += 14;
 
-        // Clickable area for selection (for legislature)
-        if ((isLegislatureMember || isNationLeader) && contract.getStatus().equals("PENDING_APPROVAL")) {
+        // Clickable area for selection (for legislature, leaders, or contract creator)
+        boolean canManage = isLegislatureMember || isNationLeader || isCreator;
+        if (canManage && contract.getStatus().equals("PENDING_APPROVAL")) {
             int entryTop = y - 36;
             int entryBottom = y;
             if (mouseX >= x - 2 && mouseX <= guiLeft + guiWidth - 15 &&
@@ -515,8 +521,9 @@ public class ContractDetailScreen extends StateCraftScreen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        // Handle bid selection for pending approval
-        if ((isLegislatureMember || isNationLeader) && contract.getStatus().equals("PENDING_APPROVAL")
+        // Handle bid selection for pending approval (legislature, leader, or creator can approve)
+        boolean canManage = isLegislatureMember || isNationLeader || isCreator;
+        if (canManage && contract.getStatus().equals("PENDING_APPROVAL")
             && currentTab == DetailTab.BIDS) {
 
             int startY = guiTop + 62; // Approximate start of bid entries
@@ -526,7 +533,7 @@ public class ContractDetailScreen extends StateCraftScreen {
             int y = startY;
             for (int i = bidScrollOffset; i < endIndex; i++) {
                 int entryHeight = 48; // Approximate height per entry
-                if (mouseX >= guiLeft + 15 && mouseX <= guiLeft + guiWidth - 15 &&
+                if (mouseX >= guiLeft + 12 && mouseX <= guiLeft + guiWidth - 12 &&
                     mouseY >= y && mouseY <= y + entryHeight) {
                     selectedBidId = bids.get(i).getBidId();
 

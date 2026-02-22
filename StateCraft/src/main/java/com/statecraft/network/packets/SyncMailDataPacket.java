@@ -57,10 +57,13 @@ public class SyncMailDataPacket {
         public final boolean read;
         public final double attachedCurrency;
         public final boolean currencyClaimed;
+        public final String actionData;
+        public final boolean actionTaken;
 
         public MailInfo(String mailId, String subject, String body, String senderName,
                        String timeAgo, Mail.MailType type, boolean read,
-                       double attachedCurrency, boolean currencyClaimed) {
+                       double attachedCurrency, boolean currencyClaimed,
+                       String actionData, boolean actionTaken) {
             this.mailId = mailId;
             this.subject = subject;
             this.body = body;
@@ -70,6 +73,16 @@ public class SyncMailDataPacket {
             this.read = read;
             this.attachedCurrency = attachedCurrency;
             this.currencyClaimed = currencyClaimed;
+            this.actionData = actionData != null ? actionData : "";
+            this.actionTaken = actionTaken;
+        }
+
+        /** Backward-compatible constructor */
+        public MailInfo(String mailId, String subject, String body, String senderName,
+                       String timeAgo, Mail.MailType type, boolean read,
+                       double attachedCurrency, boolean currencyClaimed) {
+            this(mailId, subject, body, senderName, timeAgo, type, read,
+                 attachedCurrency, currencyClaimed, "", false);
         }
 
         public MailInfo(FriendlyByteBuf buf) {
@@ -82,6 +95,8 @@ public class SyncMailDataPacket {
             this.read = buf.readBoolean();
             this.attachedCurrency = buf.readDouble();
             this.currencyClaimed = buf.readBoolean();
+            this.actionData = buf.readUtf(64);
+            this.actionTaken = buf.readBoolean();
         }
 
         public void encode(FriendlyByteBuf buf) {
@@ -94,6 +109,8 @@ public class SyncMailDataPacket {
             buf.writeBoolean(read);
             buf.writeDouble(attachedCurrency);
             buf.writeBoolean(currencyClaimed);
+            buf.writeUtf(actionData, 64);
+            buf.writeBoolean(actionTaken);
         }
     }
 }

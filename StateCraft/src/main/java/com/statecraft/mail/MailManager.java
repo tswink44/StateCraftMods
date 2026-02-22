@@ -196,6 +196,33 @@ public class MailManager {
     }
 
     /**
+     * Send a nation invite mail to a player.
+     * The mail will contain action data (nation ID) so the player can accept/deny from the mail view.
+     *
+     * @param recipientId    UUID of the player being invited
+     * @param senderId       UUID of the player sending the invite
+     * @param senderName     Display name of the sender
+     * @param nationId       UUID of the nation they're being invited to
+     * @param nationName     Display name of the nation
+     */
+    public void sendNationInviteMail(UUID recipientId, UUID senderId, String senderName,
+                                      UUID nationId, String nationName) {
+        String subject = "Invitation to join " + nationName;
+        String body = String.format(
+            "§6You've been invited to join §e%s§6!\n\n" +
+            "§fInvited by: §e%s\n\n" +
+            "§7Use the buttons below to accept or decline this invitation.\n" +
+            "§7This invite will expire in 5 minutes.",
+            nationName, senderName
+        );
+
+        Mail mail = new Mail(senderId, senderName, recipientId, Mail.RecipientType.PLAYER,
+            Mail.MailType.NATION_INVITE, subject, body);
+        mail.setActionData(nationId.toString()); // Store nation ID for accept/deny actions
+        deliverMail(mail);
+    }
+
+    /**
      * Deliver a mail to its recipient's mailbox
      */
     private void deliverMail(Mail mail) {
@@ -590,6 +617,11 @@ public class MailManager {
             obj.addProperty("attachedCurrency", mail.getAttachedCurrency());
             obj.addProperty("currencyClaimed", mail.isCurrencyClaimed());
         }
+        // Action data for invites
+        if (mail.getActionData() != null && !mail.getActionData().isEmpty()) {
+            obj.addProperty("actionData", mail.getActionData());
+            obj.addProperty("actionTaken", mail.isActionTaken());
+        }
         return obj;
     }
 
@@ -616,6 +648,12 @@ public class MailManager {
             if (obj.has("attachedCurrency")) {
                 mail.setAttachedCurrency(obj.get("attachedCurrency").getAsDouble());
                 mail.setCurrencyClaimed(obj.has("currencyClaimed") && obj.get("currencyClaimed").getAsBoolean());
+            }
+
+            // Load action data (backward compatible)
+            if (obj.has("actionData")) {
+                mail.setActionData(obj.get("actionData").getAsString());
+                mail.setActionTaken(obj.has("actionTaken") && obj.get("actionTaken").getAsBoolean());
             }
 
             return mail;

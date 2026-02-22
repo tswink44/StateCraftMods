@@ -24,8 +24,8 @@ import java.util.function.Consumer;
 public class ContractChunkSelectScreen extends StateCraftScreen {
 
     private static final int MAP_SIZE = 17; // 17x17 chunk grid
-    private static final int MIN_CELL_SIZE = 12;
-    private static final int MAX_CELL_SIZE = 20;
+    private static final int MIN_CELL_SIZE = 10;
+    private static final int MAX_CELL_SIZE = 16;
     private static final int TERRAIN_RESOLUTION = 8;
 
     private int cellSize = 14;
@@ -86,16 +86,21 @@ public class ContractChunkSelectScreen extends StateCraftScreen {
     @Override
     protected void init() {
         // Calculate cell size based on available screen space
-        int availableWidth = this.width - 80 - 100;
-        int availableHeight = this.height - 100;
+        // Leave margins for buttons on right and top/bottom content (same as ChunkMapScreen)
+        int availableWidth = this.width - 60 - 84; // 60 for left/right margins, 84 for buttons panel
+        int availableHeight = this.height - 90; // 90 for top header + bottom legend/close
 
+        // Calculate the cell size that fits
         int maxCellsWidth = availableWidth / MAP_SIZE;
         int maxCellsHeight = availableHeight / MAP_SIZE;
         cellSize = Math.min(maxCellsWidth, maxCellsHeight);
+
+        // Clamp to min/max
         cellSize = Math.max(MIN_CELL_SIZE, Math.min(MAX_CELL_SIZE, cellSize));
 
-        this.guiWidth = MAP_SIZE * cellSize + 100;
-        this.guiHeight = MAP_SIZE * cellSize + 90;
+        // Now calculate GUI dimensions based on cell size
+        this.guiWidth = MAP_SIZE * cellSize + 84; // 84 for buttons on right
+        this.guiHeight = MAP_SIZE * cellSize + 80; // 80 for top header + bottom legend/close button
 
         super.init();
 
@@ -109,13 +114,13 @@ public class ContractChunkSelectScreen extends StateCraftScreen {
         // Request chunk map data
         NetworkHandler.sendToServer(new RequestChunkMapPacket(MAP_SIZE));
 
-        int buttonX = guiLeft + 15 + MAP_SIZE * cellSize + 10;
-        int buttonY = guiTop + 35;
-        int buttonWidth = 70;
+        int mapRight = guiLeft + 10 + MAP_SIZE * cellSize + 8;
+        int buttonY = guiTop + 28;
+        int buttonWidth = 56;
 
         // Toggle mode button
         toggleModeButton = this.addRenderableWidget(createButton(
-            buttonX, buttonY, buttonWidth, 18,
+            mapRight, buttonY, buttonWidth, 18,
             Component.literal(terrainMode ? "Grid" : "Terrain"),
             btn -> toggleMapMode()
         ));
@@ -123,21 +128,21 @@ public class ContractChunkSelectScreen extends StateCraftScreen {
 
         // Selection helper buttons
         select3x3Button = this.addRenderableWidget(createButton(
-            buttonX, buttonY, buttonWidth, 18,
+            mapRight, buttonY, buttonWidth, 18,
             Component.literal("3x3 Area"),
             btn -> selectArea(3)
         ));
         buttonY += 22;
 
         select5x5Button = this.addRenderableWidget(createButton(
-            buttonX, buttonY, buttonWidth, 18,
+            mapRight, buttonY, buttonWidth, 18,
             Component.literal("5x5 Area"),
             btn -> selectArea(5)
         ));
         buttonY += 22;
 
         clearButton = this.addRenderableWidget(createButton(
-            buttonX, buttonY, buttonWidth, 18,
+            mapRight, buttonY, buttonWidth, 18,
             Component.literal("§cClear All"),
             btn -> clearSelection()
         ));

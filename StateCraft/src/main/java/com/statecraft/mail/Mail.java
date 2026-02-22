@@ -22,6 +22,10 @@ public class Mail {
     private double attachedCurrency;  // Currency attachment (0 = none)
     private boolean currencyClaimed;  // Whether the currency has been claimed by recipient
 
+    // Action data for actionable mail (invites, etc.)
+    private String actionData;        // JSON or simple string for action parameters (e.g., nation ID)
+    private boolean actionTaken;      // Whether the action has been taken (accept/deny)
+
     /**
      * Types of mail recipients
      */
@@ -58,6 +62,9 @@ public class Mail {
         CITIZENSHIP_INVITE("Citizenship Invite", "§d"),
         CITIZENSHIP_APPROVED("Citizenship Approved", "§a"),
         CITIZENSHIP_REVOKED("Citizenship Revoked", "§c"),
+
+        // Nation invites
+        NATION_INVITE("Nation Invite", "§d"),
 
         // System
         SYSTEM("System", "§7"),
@@ -100,6 +107,8 @@ public class Mail {
         this.archived = false;
         this.attachedCurrency = 0;
         this.currencyClaimed = false;
+        this.actionData = null;
+        this.actionTaken = false;
     }
 
     /**
@@ -120,6 +129,8 @@ public class Mail {
         this.archived = archived;
         this.attachedCurrency = 0;
         this.currencyClaimed = false;
+        this.actionData = null;
+        this.actionTaken = false;
     }
 
     // Getters
@@ -147,6 +158,26 @@ public class Mail {
     public boolean isCurrencyClaimed() { return currencyClaimed; }
     public void setCurrencyClaimed(boolean claimed) { this.currencyClaimed = claimed; }
     public boolean hasUnclaimedCurrency() { return attachedCurrency > 0 && !currencyClaimed; }
+
+    // Action data for invites and other actionable mail
+    public String getActionData() { return actionData; }
+    public void setActionData(String data) { this.actionData = data; }
+    public boolean isActionTaken() { return actionTaken; }
+    public void setActionTaken(boolean taken) { this.actionTaken = taken; }
+
+    /**
+     * Check if this mail has a pending action (invite that hasn't been accepted/denied)
+     */
+    public boolean hasActionPending() {
+        return isActionableMail() && !actionTaken;
+    }
+
+    /**
+     * Check if this mail type supports actions (accept/deny buttons)
+     */
+    public boolean isActionableMail() {
+        return type == MailType.NATION_INVITE || type == MailType.CITIZENSHIP_INVITE;
+    }
 
     /**
      * Get formatted timestamp for display

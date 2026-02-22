@@ -61,8 +61,8 @@ public class ContractsMainScreen extends StateCraftScreen {
     public ContractsMainScreen(String nationName) {
         super(Component.literal("Government Contracts"));
         this.nationName = nationName;
-        this.guiWidth = 340;
-        this.guiHeight = 260;
+        this.guiWidth = 320;
+        this.guiHeight = 240;
     }
 
     @Override
@@ -73,9 +73,9 @@ public class ContractsMainScreen extends StateCraftScreen {
         NetworkHandler.sendToServer(new RequestContractsPacket(nationName));
 
         int tabY = guiTop + 25;
-        int tabWidth = 58;
-        int tabSpacing = 3;
-        int startX = guiLeft + 15;
+        int tabWidth = 54;
+        int tabSpacing = 2;
+        int startX = guiLeft + 12;
 
         // Tab buttons
         for (int i = 0; i < Tab.values().length; i++) {
@@ -89,7 +89,7 @@ public class ContractsMainScreen extends StateCraftScreen {
         }
 
         // Search field
-        searchField = new EditBox(this.font, guiLeft + guiWidth - 130, guiTop + 44, 115, 14, Component.literal("Search"));
+        searchField = new EditBox(this.font, guiLeft + guiWidth - 120, guiTop + 44, 105, 14, Component.literal("Search"));
         searchField.setMaxLength(30);
         searchField.setHint(Component.literal("Search contracts..."));
         searchField.setResponder(this::onSearchChanged);
@@ -101,7 +101,7 @@ public class ContractsMainScreen extends StateCraftScreen {
 
         // Create Contract button (only for legislature members/leaders)
         Button createButton = this.addRenderableWidget(createButton(
-            guiLeft + 15, buttonY, 100, 20,
+            guiLeft + 12, buttonY, 90, 20,
             Component.literal("§a+ New Contract"),
             btn -> openCreateContractScreen()
         ));
@@ -109,14 +109,14 @@ public class ContractsMainScreen extends StateCraftScreen {
 
         // Refresh button
         this.addRenderableWidget(createButton(
-            guiLeft + 120, buttonY, 60, 20,
+            guiLeft + 107, buttonY, 55, 20,
             Component.literal("Refresh"),
             btn -> refreshData()
         ));
 
         // Back button
         this.addRenderableWidget(createButton(
-            guiLeft + guiWidth - 70, buttonY, 55, 20,
+            guiLeft + guiWidth - 60, buttonY, 48, 20,
             Component.literal("Back"),
             btn -> goBack()
         ));
@@ -182,7 +182,14 @@ public class ContractsMainScreen extends StateCraftScreen {
             switch (currentTab) {
                 case OPEN_BIDDING:
                     // View Details / Submit Bid button
-                    if (!contract.hasPlayerBid()) {
+                    // Contract creators cannot bid on their own contracts (anti-corruption)
+                    if (contract.isPlayerCreator()) {
+                        Button viewBtn = createButton(btnX, btnY, 75, 14,
+                            Component.literal("§7View Details"),
+                            btn -> openContractDetailScreen(contract));
+                        this.addRenderableWidget(viewBtn);
+                        contractButtons.add(viewBtn);
+                    } else if (!contract.hasPlayerBid()) {
                         Button bidBtn = createButton(btnX, btnY, 75, 14,
                             Component.literal("§aSubmit Bid"),
                             btn -> openSubmitBidScreen(contract));
