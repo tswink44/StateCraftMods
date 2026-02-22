@@ -1,6 +1,7 @@
 package com.statecraft.client;
 
 import com.statecraft.StateCraft;
+import com.statecraft.client.integration.MinimapIntegrationLoader;
 import com.statecraft.client.render.ChunkBorderRenderer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -11,13 +12,15 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 /**
- * Handles client-side tick events for cache updates and chunk entry notifications
+ * Handles client-side tick events for cache updates, chunk entry notifications,
+ * and minimap integration loading.
  */
 @Mod.EventBusSubscriber(modid = StateCraft.MOD_ID, value = Dist.CLIENT)
 public class ClientEventHandler {
 
     private static int lastChunkX = Integer.MIN_VALUE;
     private static int lastChunkZ = Integer.MIN_VALUE;
+    private static boolean minimapIntegrationLoaded = false;
 
     @SubscribeEvent
     public static void onClientTick(TickEvent.ClientTickEvent event) {
@@ -25,6 +28,12 @@ public class ClientEventHandler {
 
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return;
+
+        // Load minimap integrations once (after client is fully ready)
+        if (!minimapIntegrationLoaded) {
+            minimapIntegrationLoaded = true;
+            MinimapIntegrationLoader.load();
+        }
 
         // Update chunk border cache
         ChunkBorderCache.tick();

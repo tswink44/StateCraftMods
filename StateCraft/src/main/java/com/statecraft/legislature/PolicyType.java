@@ -6,9 +6,9 @@ package com.statecraft.legislature;
 public enum PolicyType {
     // Taxation policies
     STATE_PASS_THROUGH_RATE("State Pass-Through Rate", Category.TAXATION, 0.0, 1.0, ValueType.PERCENTAGE,
-        "Percentage of state revenue that must be passed to nation treasury"),
-    IMPORT_TARIFF("Import Tariff", Category.TAXATION, 0.0, 1.0, ValueType.PERCENTAGE,
-        "Tax rate on trade with other nations"),
+        "Percentage of state property tax revenue that must be passed to nation treasury"),
+    IMPORT_TARIFF("Import Tariff", Category.TAXATION, 0.0, 0.5, ValueType.PERCENTAGE,
+        "Tax on cross-nation marketplace purchases, charged to the buyer at the buyer's nation rate (0-50%). Revenue goes to the buyer's nation treasury."),
     BASE_CHUNK_VALUE("Base Chunk Value", Category.TAXATION, 1, 100000, ValueType.CURRENCY,
         "Base valuation for chunks in the nation (default $100)"),
     NATION_SALES_TAX_RATE("Nation Sales Tax", Category.TAXATION, 0.0, 0.5, ValueType.PERCENTAGE,
@@ -21,6 +21,8 @@ public enum PolicyType {
         "Maximum number of cities each state can have"),
     MAX_CHUNKS_PER_CITY("Max Chunks per City", Category.TERRITORY, 1, 10000, ValueType.INTEGER,
         "Maximum chunks each city can claim"),
+    MAX_CHUNKS_PER_PLAYER("Max Chunks per Player", Category.TERRITORY, 0, 10000, ValueType.INTEGER,
+        "Maximum chunks a player can personally own (0 = use server default)"),
     OPEN_BORDERS("Open Borders", Category.TERRITORY, 0, 1, ValueType.BOOLEAN,
         "Allow foreign players to interact in nation territory"),
 
@@ -45,6 +47,12 @@ public enum PolicyType {
         "Minimum payment for jobs (roleplay enforcement)"),
     CHUNK_CLAIM_FEE("Chunk Claim Fee", Category.ECONOMY, 0, 1000000, ValueType.CURRENCY,
         "Fee cities must pay to claim each chunk"),
+    EMINENT_DOMAIN("Eminent Domain", Category.ECONOMY, 0, 0, ValueType.CHUNK_TARGET,
+        "Repossess a privately owned chunk. Owner receives 10x the tax valuation from nation treasury."),
+    LEADER_SPENDING_LIMIT("Leader Spending Limit", Category.ECONOMY, 0, 100000000, ValueType.CURRENCY,
+        "Daily spending limit for the nation leader on the nation treasury (0 = unlimited). Overrides server default."),
+    EMERGENCY_TAX_RATE("Emergency Tax Rate", Category.ECONOMY, 0.01, 0.20, ValueType.PERCENTAGE,
+        "Rate for emergency tax levy (0.01 = 1%, 0.20 = 20%). Capped at server max (default 20%). 0 = use server default."),
 
     // Constitutional policies (require constitutional amendment to change)
     LEADER_TERM_DURATION("Leader Term Duration", Category.CONSTITUTIONAL, 1, 365, ValueType.INTEGER,
@@ -53,10 +61,33 @@ public enum PolicyType {
         "Duration of election voting period in days (default: 1 day). Requires constitutional amendment."),
     MAX_OFFICERS("Max Officers", Category.CONSTITUTIONAL, 0, 3, ValueType.INTEGER,
         "Maximum number of officers the leader can appoint (0-3). Requires constitutional amendment."),
+    NATION_NAME("Nation Name", Category.CONSTITUTIONAL, 0, 0, ValueType.TEXT,
+        "Official name of the nation. Requires constitutional amendment."),
+    NATION_FLAG("Nation Flag", Category.CONSTITUTIONAL, 0, 0, ValueType.TEXT,
+        "URL to the nation's flag image. Requires constitutional amendment."),
+    IMPEACH_LEADER("Impeach Leader", Category.CONSTITUTIONAL, 0, 0, ValueType.TEXT,
+        "Remove the current nation leader from power and trigger an immediate election. " +
+        "Requires 2/3 majority vote and cannot be vetoed. Provide a reason for impeachment."),
+
+    // Emergency power ratification (auto-created, not player-proposable)
+    RATIFY_EMERGENCY_POWER("Ratify Emergency Power", Category.EMERGENCY, 0, 0, ValueType.TEXT,
+        "Legislature vote to ratify the leader's use of an emergency power. " +
+        "If the legislature votes NO, the power is reversed. Auto-created when a power is invoked."),
+    OVERRIDE_EMERGENCY_POWER("Override Emergency Power", Category.EMERGENCY, 0, 0, ValueType.TEXT,
+        "Legislature vote to immediately cancel an active emergency power. " +
+        "Requires simple majority. The leader cannot veto this."),
 
     // Custom laws (roleplay)
     CUSTOM_LAW("Custom Law", Category.CUSTOM, 0, 0, ValueType.TEXT,
-        "Custom law or regulation for roleplay purposes");
+        "Custom law or regulation for roleplay purposes"),
+    CUSTOM_LAW_2("Custom Law 2", Category.CUSTOM, 0, 0, ValueType.TEXT,
+        "Additional custom law or regulation"),
+    CUSTOM_LAW_3("Custom Law 3", Category.CUSTOM, 0, 0, ValueType.TEXT,
+        "Additional custom law or regulation"),
+    CUSTOM_LAW_4("Custom Law 4", Category.CUSTOM, 0, 0, ValueType.TEXT,
+        "Additional custom law or regulation"),
+    CUSTOM_LAW_5("Custom Law 5", Category.CUSTOM, 0, 0, ValueType.TEXT,
+        "Additional custom law or regulation");
 
     private final String displayName;
     private final Category category;
@@ -105,6 +136,14 @@ public enum PolicyType {
                 case TEXT:
                 case NATION_TARGET:
                     return value != null && !value.trim().isEmpty();
+                case CHUNK_TARGET:
+                    // Format: "chunkX,chunkZ,dimension"
+                    if (value == null || value.trim().isEmpty()) return false;
+                    String[] parts = value.split(",", 3);
+                    if (parts.length < 3) return false;
+                    Integer.parseInt(parts[0].trim());
+                    Integer.parseInt(parts[1].trim());
+                    return !parts[2].trim().isEmpty();
                 default:
                     return false;
             }
@@ -120,6 +159,7 @@ public enum PolicyType {
         DIPLOMACY("Diplomacy"),
         ECONOMY("Economy"),
         CONSTITUTIONAL("Constitutional"),
+        EMERGENCY("Emergency Powers"),
         CUSTOM("Custom Laws");
 
         private final String displayName;
@@ -137,7 +177,8 @@ public enum PolicyType {
         PERCENTAGE,
         CURRENCY,
         TEXT,
-        NATION_TARGET
+        NATION_TARGET,
+        CHUNK_TARGET
     }
 }
 

@@ -5,10 +5,15 @@ import com.statecraft.core.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.Container;
+import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.*;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraftforge.event.entity.player.AttackEntityEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.event.level.BlockEvent;
@@ -104,7 +109,22 @@ public class ProtectionHandler {
         }
 
         // Check for general interaction (buttons, levers, doors, etc.)
-        if (!canInteract(player, event.getPos(), Permission.INTERACT)) {
+        // Only block if the target is an interactable block AND player lacks INTERACT permission
+        if (isInteractable(event)) {
+            if (!canInteract(player, event.getPos(), Permission.INTERACT)) {
+                event.setCanceled(true);
+                event.setUseBlock(Event.Result.DENY);
+                sendDeniedMessage(player, "interact here");
+                return;
+            }
+        }
+
+        // For non-interactable blocks (e.g., placing blocks against a surface),
+        // allow if the player has BUILD permission. The EntityPlaceEvent will do
+        // the actual BUILD permission check for block placement.
+        // Only deny if the player has neither BUILD nor INTERACT permission
+        if (!canInteract(player, event.getPos(), Permission.BUILD) &&
+            !canInteract(player, event.getPos(), Permission.INTERACT)) {
             event.setCanceled(true);
             event.setUseBlock(Event.Result.DENY);
             sendDeniedMessage(player, "interact here");
@@ -134,13 +154,51 @@ public class ProtectionHandler {
         Entity target = event.getTarget();
         BlockPos pos = target.blockPosition();
 
-        // Allow PvP based on nation relationships (future enhancement)
-        // For now, protect non-player entities (animals, item frames, etc.)
-        if (!(target instanceof Player)) {
-            if (!canInteract(player, pos, Permission.INTERACT)) {
-                event.setCanceled(true);
-                sendDeniedMessage(player, "attack entities");
+        // PvP protection based on nation relationships
+        if (target instanceof ServerPlayer targetPlayer) {
+            // Bypass check
+            if (hasBypass(player.getUUID())) return;
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            Nation attackerNation = manager.getPlayerNation(player.getUUID());
+            Nation targetNation = manager.getPlayerNation(targetPlayer.getUUID());
+
+            // If both players are in nations, check relationships
+            if (attackerNation != null && targetNation != null) {
+                // Same nation: deny PvP (configurable)
+                if (attackerNation.getId().equals(targetNation.getId())) {
+                    if (com.statecraft.config.StateCraftConfig.PVP_PROTECT_SAME_NATION.get()) {
+                        event.setCanceled(true);
+                        player.displayClientMessage(
+                            net.minecraft.network.chat.Component.literal("§cYou cannot attack a fellow citizen!"), true);
+                        return;
+                    }
+                }
+
+                // At war: always allow PvP
+                if (attackerNation.isEnemy(targetNation.getId())) {
+                    return; // PvP allowed
+                }
+
+                // Allied nations: deny PvP (configurable)
+                if (attackerNation.isAlly(targetNation.getId())) {
+                    if (com.statecraft.config.StateCraftConfig.PVP_PROTECT_ALLIES.get()) {
+                        event.setCanceled(true);
+                        player.displayClientMessage(
+                            net.minecraft.network.chat.Component.literal("§cYou cannot attack a citizen of an allied nation!"), true);
+                        return;
+                    }
+                }
             }
+
+            // Neutral / nationless: allow PvP (vanilla behavior)
+            return;
+        }
+
+        // Non-player entities: protect based on chunk permissions
+        if (!canInteract(player, pos, Permission.INTERACT)) {
+            event.setCanceled(true);
+            sendDeniedMessage(player, "attack entities");
         }
     }
 
@@ -194,18 +252,9 @@ public class ProtectionHandler {
 
         ClaimedChunk chunk = manager.getClaimedChunk(chunkPos, player.level().dimension());
 
-        // WILDERNESS PROTECTION: Unclaimed chunks are protected
-        // Players must claim land to build
+        // WILDERNESS: Unclaimed chunks are not protected - anyone can interact
         if (chunk == null) {
-            // Check if player is in ANY nation - nation members can interact in wilderness
-            // This encourages claiming while not completely blocking nation members
-            Nation playerNation = manager.getPlayerNation(player.getUUID());
-            if (playerNation != null) {
-                // Nation members can interact in wilderness (to claim and expand)
-                return true;
-            }
-            // Players not in a nation cannot interact in wilderness
-            return false;
+            return true;
         }
 
         // Get the nation that owns this chunk through city -> state -> nation hierarchy
@@ -236,6 +285,11 @@ public class ProtectionHandler {
         // Player is a foreigner - check open borders policy
         Nation playerNation = manager.getPlayerNation(player.getUUID());
 
+        // MARTIAL LAW check: If martial law is active, ALL foreigners are blocked regardless of open borders
+        if (com.statecraft.legislature.EmergencyPowerManager.isMartialLawActive(chunkNation.getId())) {
+            return false;
+        }
+
         if (!chunkNation.canForeignerInteract(player.getUUID(), playerNation)) {
             // Foreigners not allowed due to closed borders or war
             return false;
@@ -247,30 +301,95 @@ public class ProtectionHandler {
     }
 
     /**
-     * Check if the interaction is with a container block
+     * Check if the interaction is with a container block.
+     * Uses type-based checks (MenuProvider, Container interfaces, block entity hierarchy)
+     * instead of fragile string matching. This correctly catches:
+     * - All vanilla containers (chests, furnaces, hoppers, barrels, brewing stands, etc.)
+     * - Modded containers from other mods
+     * - StateCraft Economy blocks (trading hub, company vault, etc.)
      */
     private static boolean isContainer(PlayerInteractEvent.RightClickBlock event) {
         if (event.getLevel().isClientSide()) return false;
 
-        var state = event.getLevel().getBlockState(event.getPos());
-        var block = state.getBlock();
-        String blockName = block.getDescriptionId().toLowerCase();
+        BlockPos pos = event.getPos();
+        Level level = event.getLevel();
+        BlockState state = level.getBlockState(pos);
+        Block block = state.getBlock();
 
-        // Common container blocks
-        return blockName.contains("chest") ||
-               blockName.contains("barrel") ||
-               blockName.contains("shulker") ||
-               blockName.contains("hopper") ||
-               blockName.contains("dropper") ||
-               blockName.contains("dispenser") ||
-               blockName.contains("furnace") ||
-               blockName.contains("smoker") ||
-               blockName.contains("blast") ||
-               blockName.contains("brewing") ||
-               blockName.contains("anvil") ||
-               blockName.contains("enchanting") ||
-               blockName.contains("beacon") ||
-               blockName.contains("lectern");
+        // Check block type directly for known container blocks
+        if (block instanceof ChestBlock ||
+            block instanceof BarrelBlock ||
+            block instanceof ShulkerBoxBlock ||
+            block instanceof HopperBlock ||
+            block instanceof DropperBlock ||
+            block instanceof DispenserBlock ||
+            block instanceof AbstractFurnaceBlock ||
+            block instanceof BrewingStandBlock ||
+            block instanceof AnvilBlock ||
+            block instanceof EnchantmentTableBlock ||
+            block instanceof BeaconBlock ||
+            block instanceof LecternBlock) {
+            return true;
+        }
+
+        // Check if the block entity implements MenuProvider or Container
+        // This catches all modded containers and any vanilla ones not covered above
+        BlockEntity blockEntity = level.getBlockEntity(pos);
+        if (blockEntity instanceof MenuProvider || blockEntity instanceof Container) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if the interaction is with an interactable block (doors, buttons, levers, etc.)
+     * These are blocks that have a use action when right-clicked, as opposed to
+     * blocks that are just surfaces for placing other blocks against.
+     * Uses type-based checks instead of fragile string matching.
+     */
+    private static boolean isInteractable(PlayerInteractEvent.RightClickBlock event) {
+        if (event.getLevel().isClientSide()) return false;
+
+        BlockState state = event.getLevel().getBlockState(event.getPos());
+        Block block = state.getBlock();
+
+        // Doors, trapdoors, fence gates
+        if (block instanceof DoorBlock ||
+            block instanceof TrapDoorBlock ||
+            block instanceof FenceGateBlock) {
+            return true;
+        }
+
+        // Buttons, levers
+        if (block instanceof ButtonBlock ||
+            block instanceof LeverBlock) {
+            return true;
+        }
+
+        // Redstone components
+        if (block instanceof DiodeBlock ||      // Covers RepeaterBlock and ComparatorBlock
+            block instanceof DaylightDetectorBlock ||
+            block instanceof NoteBlock) {
+            return true;
+        }
+
+        // Misc interactable blocks
+        if (block instanceof BellBlock ||
+            block instanceof BedBlock ||
+            block instanceof JukeboxBlock ||
+            block instanceof CakeBlock ||
+            block instanceof CandleCakeBlock ||
+            block instanceof FlowerPotBlock ||
+            block instanceof CampfireBlock ||
+            block instanceof RespawnAnchorBlock ||
+            block instanceof DragonEggBlock ||
+            block instanceof CommandBlock ||
+            block instanceof StructureBlock) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -301,7 +420,13 @@ public class ProtectionHandler {
 
             if (chunkNation != null && !chunkNation.isMember(player.getUUID())) {
                 // Player is a foreigner
-                if (playerNation != null && chunkNation.isEnemy(playerNation.getId())) {
+                if (com.statecraft.legislature.EmergencyPowerManager.isMartialLawActive(chunkNation.getId())) {
+                    // Martial law
+                    player.displayClientMessage(
+                        Component.literal("§c§l[MARTIAL LAW] §c" + chunkNation.getName() + " is under martial law. Foreign interaction blocked."),
+                        true
+                    );
+                } else if (playerNation != null && chunkNation.isEnemy(playerNation.getId())) {
                     // At war
                     player.displayClientMessage(
                         Component.literal("§cYour nation is at war with " + chunkNation.getName() + "! Cannot interact."),

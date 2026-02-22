@@ -93,6 +93,11 @@ public class MyStatesScreen extends StateCraftScreen {
         if (scrollOffset + MAX_VISIBLE < myStates.size()) {
             graphics.drawCenteredString(this.font, "§7▼ More below", this.width / 2, guiTop + guiHeight - 45, 0xFF888888);
         }
+
+        // Legend
+        int legendY = guiTop + guiHeight - 40;
+        graphics.drawString(this.font, "§6★ §7Primary State", guiLeft + 15, legendY, 0xFFAAAAAA);
+        graphics.drawString(this.font, "§7•  Other State", guiLeft + 130, legendY, 0xFFAAAAAA);
     }
 
     @Override

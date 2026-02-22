@@ -84,10 +84,8 @@ public class ChunkClaimManager {
     public boolean hasPermission(UUID playerId, ChunkPos pos, ResourceKey<Level> dimension, Permission permission) {
         ClaimedChunk chunk = getClaimedChunk(pos, dimension);
         if (chunk == null) {
-            // WILDERNESS PROTECTION: Unclaimed chunks are protected
-            // Only nation members can interact in wilderness (to encourage claiming)
-            Nation playerNation = getPlayerNation(playerId);
-            return playerNation != null;
+            // WILDERNESS: Unclaimed chunks are not protected - anyone can interact
+            return true;
         }
 
         // Get the player's role in this chunk's hierarchy
@@ -128,11 +126,96 @@ public class ChunkClaimManager {
         return cityRole;
     }
 
+    // ==================== Leadership Role Checks ====================
+
+    /**
+     * Check if a player is already the leader of any nation.
+     * A player can only be the leader of one nation at a time.
+     */
+    public boolean isLeaderOfAnyNation(UUID playerId) {
+        for (Nation nation : nations.values()) {
+            if (playerId.equals(nation.getLeaderId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if a player is already the governor of any state.
+     * A player can only be the governor of one state at a time.
+     */
+    public boolean isGovernorOfAnyState(UUID playerId) {
+        for (State state : stateIndex.values()) {
+            if (playerId.equals(state.getGovernorId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if a player is already the mayor of any city.
+     * A player can only be the mayor of one city at a time.
+     */
+    public boolean isMayorOfAnyCity(UUID playerId) {
+        for (City city : cityIndex.values()) {
+            if (playerId.equals(city.getMayorId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Get the name of the nation where a player is leader, or null.
+     */
+    @Nullable
+    public String getLeaderNationName(UUID playerId) {
+        for (Nation nation : nations.values()) {
+            if (playerId.equals(nation.getLeaderId())) {
+                return nation.getName();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Get the name of the state where a player is governor, or null.
+     */
+    @Nullable
+    public String getGovernorStateName(UUID playerId) {
+        for (State state : stateIndex.values()) {
+            if (playerId.equals(state.getGovernorId())) {
+                return state.getName();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Get the name of the city where a player is mayor, or null.
+     */
+    @Nullable
+    public String getMayorCityName(UUID playerId) {
+        for (City city : cityIndex.values()) {
+            if (playerId.equals(city.getMayorId())) {
+                return city.getName();
+            }
+        }
+        return null;
+    }
+
     // ==================== Nation Operations ====================
 
     public Nation createNation(String name, UUID leaderId) {
         // Check if player already has a nation
         if (playerNationIndex.containsKey(leaderId)) {
+            return null;
+        }
+
+        // Check if player is already the leader of another nation
+        if (isLeaderOfAnyNation(leaderId)) {
             return null;
         }
 
@@ -190,6 +273,62 @@ public class ChunkClaimManager {
 
         markDirty();
         StateCraft.LOGGER.info("Nation '{}' disbanded", nation.getName());
+        return true;
+    }
+
+    /**
+     * Disband a state - unclaim all chunks, remove all cities, clean up indexes
+     * Does NOT remove players from the nation.
+     */
+    public boolean disbandState(UUID nationId, UUID stateId) {
+        Nation nation = nations.get(nationId);
+        if (nation == null) return false;
+
+        State state = nation.getState(stateId);
+        if (state == null) return false;
+
+        // Remove all cities and their chunks
+        for (City city : new ArrayList<>(state.getAllCities())) {
+            for (ClaimedChunk chunk : city.getAllChunks()) {
+                removeChunkFromIndex(chunk);
+            }
+            cityIndex.remove(city.getId());
+            IntegrationRegistry.notifyCityDisbanded(city.getId());
+        }
+
+        // Remove state from nation and index
+        nation.removeState(stateId);
+        stateIndex.remove(stateId);
+        IntegrationRegistry.notifyStateDisbanded(stateId);
+
+        markDirty();
+        StateCraft.LOGGER.info("State '{}' disbanded from nation '{}'", state.getName(), nation.getName());
+        return true;
+    }
+
+    /**
+     * Disband a city - unclaim all chunks, remove residents from city, clean up indexes
+     * Does NOT remove players from the nation.
+     */
+    public boolean disbandCity(UUID stateId, UUID cityId) {
+        State state = stateIndex.get(stateId);
+        if (state == null) return false;
+
+        City city = state.getCity(cityId);
+        if (city == null) return false;
+
+        // Remove all chunks from index
+        for (ClaimedChunk chunk : city.getAllChunks()) {
+            removeChunkFromIndex(chunk);
+        }
+
+        // Remove city from state and index
+        state.removeCity(cityId);
+        cityIndex.remove(cityId);
+        IntegrationRegistry.notifyCityDisbanded(cityId);
+
+        markDirty();
+        StateCraft.LOGGER.info("City '{}' disbanded from state '{}'", city.getName(), state.getName());
         return true;
     }
 
@@ -279,7 +418,13 @@ public class ChunkClaimManager {
     // ==================== State Operations ====================
 
     public State createState(Nation nation, String name, UUID governorId) {
-        State state = nation.createState(name, governorId);
+        // If governorId is provided and already governor elsewhere, create with vacant governor
+        UUID actualGovernorId = governorId;
+        if (governorId != null && isGovernorOfAnyState(governorId)) {
+            actualGovernorId = null; // Create with vacant governor position
+        }
+
+        State state = nation.createState(name, actualGovernorId);
         if (state != null) {
             stateIndex.put(state.getId(), state);
             markDirty();
@@ -300,7 +445,13 @@ public class ChunkClaimManager {
     // ==================== City Operations ====================
 
     public City createCity(State state, String name, UUID mayorId) {
-        City city = state.createCity(name, mayorId);
+        // If mayorId is provided and already mayor elsewhere, create with vacant mayor
+        UUID actualMayorId = mayorId;
+        if (mayorId != null && isMayorOfAnyCity(mayorId)) {
+            actualMayorId = null; // Create with vacant mayor position
+        }
+
+        City city = state.createCity(name, actualMayorId);
         if (city != null) {
             cityIndex.put(city.getId(), city);
             markDirty();
@@ -318,6 +469,94 @@ public class ChunkClaimManager {
         return cityIndex.get(cityId);
     }
 
+    // ==================== Player Chunk Ownership ====================
+
+    /**
+     * Count how many chunks a player personally owns across ALL nations.
+     */
+    public int getPlayerOwnedChunkCount(UUID playerId) {
+        int count = 0;
+        for (Nation nation : nations.values()) {
+            for (State state : nation.getAllStates()) {
+                for (City city : state.getAllCities()) {
+                    for (ClaimedChunk chunk : city.getAllChunks()) {
+                        if (chunk.getOwnershipType() == OwnershipType.PLAYER &&
+                            playerId.equals(chunk.getPlayerOwner())) {
+                            count++;
+                        }
+                    }
+                }
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Get the effective max chunks per player for a nation.
+     * Nation legislature setting takes priority over server config.
+     * Returns 0 if unlimited.
+     */
+    public int getEffectiveMaxChunksPerPlayer(@Nullable Nation nation) {
+        // Nation-level legislature policy takes priority
+        if (nation != null && nation.getMaxChunksPerPlayer() > 0) {
+            return nation.getMaxChunksPerPlayer();
+        }
+        // Fall back to server config
+        return com.statecraft.config.StateCraftConfig.MAX_CHUNKS_PER_PLAYER.get();
+    }
+
+    /**
+     * Check if a player can own another chunk (against the per-player limit).
+     * @return true if the player can own another chunk, false if at limit.
+     */
+    public boolean canPlayerOwnMoreChunks(UUID playerId, @Nullable Nation nation) {
+        int limit = getEffectiveMaxChunksPerPlayer(nation);
+        if (limit <= 0) return true; // 0 = unlimited
+        return getPlayerOwnedChunkCount(playerId) < limit;
+    }
+
+    // ==================== Company Chunk Ownership ====================
+
+    /**
+     * Count how many chunks a company owns across ALL nations.
+     */
+    public int getCompanyOwnedChunkCount(UUID companyId) {
+        int count = 0;
+        for (Nation nation : nations.values()) {
+            for (State state : nation.getAllStates()) {
+                for (City city : state.getAllCities()) {
+                    for (ClaimedChunk chunk : city.getAllChunks()) {
+                        if (chunk.getOwnershipType() == OwnershipType.COMPANY &&
+                            companyId.equals(chunk.getCompanyOwner())) {
+                            count++;
+                        }
+                    }
+                }
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Get all chunks owned by a specific company.
+     */
+    public List<ClaimedChunk> getCompanyOwnedChunks(UUID companyId) {
+        List<ClaimedChunk> result = new ArrayList<>();
+        for (Nation nation : nations.values()) {
+            for (State state : nation.getAllStates()) {
+                for (City city : state.getAllCities()) {
+                    for (ClaimedChunk chunk : city.getAllChunks()) {
+                        if (chunk.getOwnershipType() == OwnershipType.COMPANY &&
+                            companyId.equals(chunk.getCompanyOwner())) {
+                            result.add(chunk);
+                        }
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
     // ==================== Chunk Claim Operations ====================
 
     /**
@@ -329,6 +568,7 @@ public class ChunkClaimManager {
         CITY_CHUNK_LIMIT,
         STATE_CHUNK_LIMIT,
         NATION_CHUNK_LIMIT,  // Nation's maxChunksPerCity limit exceeded
+        PLAYER_CHUNK_LIMIT,  // Player's max personal chunk limit exceeded
         NOT_CONTIGUOUS,
         INSUFFICIENT_FUNDS
     }
@@ -475,6 +715,20 @@ public class ChunkClaimManager {
         }
     }
 
+    /**
+     * Transfer an existing claimed chunk to a new city (used by peace treaty chunk transfers).
+     * The chunk is NOT removed from the chunk index — it stays in the same position.
+     * Only the city association is changed.
+     */
+    public void transferChunkToCity(ClaimedChunk chunk, City targetCity, ChunkPos pos, ResourceKey<Level> dimension) {
+        // The chunk is already in the index at the same position, just re-add it to be safe
+        addChunkToIndex(chunk);
+        // Add to target city's internal chunk map
+        targetCity.claimChunkDirect(chunk, pos, dimension);
+        markDirty();
+        StateCraft.LOGGER.info("Chunk ({}, {}) transferred to city '{}'", pos.x, pos.z, targetCity.getName());
+    }
+
     // ==================== Data Management ====================
 
     public void clear() {
@@ -527,6 +781,205 @@ public class ChunkClaimManager {
 
     public int getTotalClaimedChunks() {
         return chunkIndex.values().stream().mapToInt(Map::size).sum();
+    }
+
+    // ==================== Orphan Cleanup ====================
+
+    /**
+     * Scan for and clean up orphaned data after world load.
+     * Detects:
+     * - States whose nationId references a non-existent nation
+     * - Cities whose stateId references a non-existent state
+     * - Chunks in the chunk index whose cityId references a non-existent city
+     * - Player-nation index entries for players not in any nation's member list
+     *
+     * All orphans are logged and removed automatically.
+     *
+     * @return total number of orphaned entries removed
+     */
+    public int runOrphanCleanup() {
+        int totalRemoved = 0;
+        StateCraft.LOGGER.info("[OrphanCleanup] Starting data integrity scan...");
+
+        // 1. States referencing non-existent nations
+        int orphanedStates = cleanupOrphanedStates();
+        totalRemoved += orphanedStates;
+
+        // 2. Cities referencing non-existent states
+        int orphanedCities = cleanupOrphanedCities();
+        totalRemoved += orphanedCities;
+
+        // 3. Chunks referencing non-existent cities
+        int orphanedChunks = cleanupOrphanedChunks();
+        totalRemoved += orphanedChunks;
+
+        // 4. Player-nation index entries for players not in any nation's member list
+        int orphanedPlayers = cleanupOrphanedPlayerEntries();
+        totalRemoved += orphanedPlayers;
+
+        if (totalRemoved > 0) {
+            StateCraft.LOGGER.warn("[OrphanCleanup] Removed {} total orphaned entries " +
+                    "(states={}, cities={}, chunks={}, player-index={}). Data will be saved on next save cycle.",
+                totalRemoved, orphanedStates, orphanedCities, orphanedChunks, orphanedPlayers);
+            markDirty();
+        } else {
+            StateCraft.LOGGER.info("[OrphanCleanup] Data integrity check passed — no orphans found.");
+        }
+
+        return totalRemoved;
+    }
+
+    /**
+     * Remove states from the state index that reference a nation ID not in the nations map.
+     * Also removes those states from within their parent nation if the nation exists but the
+     * state's nationId is mismatched.
+     */
+    private int cleanupOrphanedStates() {
+        List<UUID> toRemove = new ArrayList<>();
+
+        for (Map.Entry<UUID, State> entry : stateIndex.entrySet()) {
+            State state = entry.getValue();
+            UUID nationId = state.getNationId();
+            Nation nation = nations.get(nationId);
+
+            if (nation == null) {
+                StateCraft.LOGGER.warn("[OrphanCleanup] State '{}' (ID: {}) references non-existent nation {}",
+                    state.getName(), state.getId(), nationId);
+                toRemove.add(entry.getKey());
+            } else {
+                // Nation exists — verify the state is actually in the nation's states map
+                if (nation.getState(state.getId()) == null) {
+                    StateCraft.LOGGER.warn("[OrphanCleanup] State '{}' (ID: {}) is in stateIndex but not in nation '{}' states map",
+                        state.getName(), state.getId(), nation.getName());
+                    toRemove.add(entry.getKey());
+                }
+            }
+        }
+
+        for (UUID stateId : toRemove) {
+            State state = stateIndex.remove(stateId);
+            if (state != null) {
+                // Also remove all cities belonging to this orphaned state from cityIndex
+                for (City city : state.getAllCities()) {
+                    cityIndex.remove(city.getId());
+                    // Remove chunks belonging to orphaned cities
+                    for (ClaimedChunk chunk : city.getAllChunks()) {
+                        removeChunkFromIndex(chunk);
+                    }
+                }
+                StateCraft.LOGGER.warn("[OrphanCleanup] Removed orphaned state '{}' and its {} cities",
+                    state.getName(), state.getCityCount());
+            }
+        }
+
+        return toRemove.size();
+    }
+
+    /**
+     * Remove cities from the city index that reference a state ID not in the state index.
+     */
+    private int cleanupOrphanedCities() {
+        List<UUID> toRemove = new ArrayList<>();
+
+        for (Map.Entry<UUID, City> entry : cityIndex.entrySet()) {
+            City city = entry.getValue();
+            UUID stateId = city.getStateId();
+            State state = stateIndex.get(stateId);
+
+            if (state == null) {
+                StateCraft.LOGGER.warn("[OrphanCleanup] City '{}' (ID: {}) references non-existent state {}",
+                    city.getName(), city.getId(), stateId);
+                toRemove.add(entry.getKey());
+            } else {
+                // State exists — verify the city is actually in the state's cities map
+                if (state.getCity(city.getId()) == null) {
+                    StateCraft.LOGGER.warn("[OrphanCleanup] City '{}' (ID: {}) is in cityIndex but not in state '{}' cities map",
+                        city.getName(), city.getId(), state.getName());
+                    toRemove.add(entry.getKey());
+                }
+            }
+        }
+
+        for (UUID cityId : toRemove) {
+            City city = cityIndex.remove(cityId);
+            if (city != null) {
+                // Remove chunks belonging to orphaned city
+                for (ClaimedChunk chunk : city.getAllChunks()) {
+                    removeChunkFromIndex(chunk);
+                }
+                StateCraft.LOGGER.warn("[OrphanCleanup] Removed orphaned city '{}' and its {} chunks",
+                    city.getName(), city.getChunkCount());
+            }
+        }
+
+        return toRemove.size();
+    }
+
+    /**
+     * Remove chunks from the chunk index that reference a city ID not in the city index.
+     */
+    private int cleanupOrphanedChunks() {
+        int removed = 0;
+
+        for (Map.Entry<String, Map<Long, ClaimedChunk>> dimEntry : chunkIndex.entrySet()) {
+            List<Long> toRemove = new ArrayList<>();
+
+            for (Map.Entry<Long, ClaimedChunk> chunkEntry : dimEntry.getValue().entrySet()) {
+                ClaimedChunk chunk = chunkEntry.getValue();
+                UUID cityId = chunk.getCityId();
+
+                if (!cityIndex.containsKey(cityId)) {
+                    StateCraft.LOGGER.warn("[OrphanCleanup] Chunk at ({}, {}) in dimension '{}' references non-existent city {}",
+                        chunk.getChunkPos().x, chunk.getChunkPos().z, dimEntry.getKey(), cityId);
+                    toRemove.add(chunkEntry.getKey());
+                }
+            }
+
+            for (Long key : toRemove) {
+                dimEntry.getValue().remove(key);
+                removed++;
+            }
+        }
+
+        if (removed > 0) {
+            StateCraft.LOGGER.warn("[OrphanCleanup] Removed {} orphaned chunks from chunk index", removed);
+        }
+
+        return removed;
+    }
+
+    /**
+     * Remove player-nation index entries where the player is not actually
+     * in the referenced nation's member list.
+     */
+    private int cleanupOrphanedPlayerEntries() {
+        List<UUID> toRemove = new ArrayList<>();
+
+        for (Map.Entry<UUID, UUID> entry : playerNationIndex.entrySet()) {
+            UUID playerId = entry.getKey();
+            UUID nationId = entry.getValue();
+            Nation nation = nations.get(nationId);
+
+            if (nation == null) {
+                StateCraft.LOGGER.warn("[OrphanCleanup] Player {} in player-nation index references non-existent nation {}",
+                    playerId, nationId);
+                toRemove.add(playerId);
+            } else if (!nation.isMember(playerId)) {
+                StateCraft.LOGGER.warn("[OrphanCleanup] Player {} in player-nation index is not a member of nation '{}'",
+                    playerId, nation.getName());
+                toRemove.add(playerId);
+            }
+        }
+
+        for (UUID playerId : toRemove) {
+            playerNationIndex.remove(playerId);
+        }
+
+        if (!toRemove.isEmpty()) {
+            StateCraft.LOGGER.warn("[OrphanCleanup] Removed {} orphaned player-nation index entries", toRemove.size());
+        }
+
+        return toRemove.size();
     }
 }
 

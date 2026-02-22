@@ -93,6 +93,11 @@ public class MyCitiesScreen extends StateCraftScreen {
         if (scrollOffset + MAX_VISIBLE < myCities.size()) {
             graphics.drawCenteredString(this.font, "§7▼ More below", this.width / 2, guiTop + guiHeight - 45, 0xFF888888);
         }
+
+        // Legend
+        int legendY = guiTop + guiHeight - 40;
+        graphics.drawString(this.font, "§6★ §7Primary City", guiLeft + 15, legendY, 0xFFAAAAAA);
+        graphics.drawString(this.font, "§7•  Other City", guiLeft + 130, legendY, 0xFFAAAAAA);
     }
 
     @Override

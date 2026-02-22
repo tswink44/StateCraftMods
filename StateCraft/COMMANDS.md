@@ -295,6 +295,22 @@ Force delete an entire nation.
 - Removes all claims, states, cities, members
 
 ```
+/sc admin deletestate <nation> <state>
+```
+Force delete a state within a nation.
+- Removes all cities and chunks belonging to the state
+- Does not remove players from the nation
+- Lists available states if the name is wrong
+
+```
+/sc admin deletecity <nation> <state> <city>
+```
+Force delete a city within a state.
+- Unclaims all chunks belonging to the city
+- Does not remove players from the nation
+- Lists available cities if the name is wrong
+
+```
 /sc admin info
 ```
 Show detailed admin info about current chunk.
@@ -306,9 +322,70 @@ Show detailed admin info about current chunk.
 Set a player as the owner of the current chunk.
 
 ```
+/sc admin setleader <nation> <player>
+```
+Set a player as the leader of a nation.
+- Player must be a member of the nation
+- Notifies both old and new leader
+
+```
+/sc admin setgovernor <nation> <state> <player>
+```
+Set a player as the governor of a state.
+- Player must be a member of the nation
+- Automatically adds them as a state citizen
+- Notifies both old and new governor
+
+```
+/sc admin setmayor <nation> <state> <city> <player>
+```
+Set a player as the mayor of a city.
+- Player must be a member of the nation
+- Automatically adds them as a city resident and state citizen
+- Notifies both old and new mayor
+
+```
 /sc admin reload
 ```
 Reload configuration (future feature).
+
+```
+/sc admin audit
+```
+Run data integrity check and orphan cleanup.
+- Scans for states referencing non-existent nations
+- Scans for cities referencing non-existent states
+- Scans for chunks referencing non-existent cities
+- Scans for player-nation index entries for players not in any nation's member list
+- Logs all orphans found and removes them automatically
+- Reports before/after statistics
+- Also runs automatically on every world load
+
+```
+/sc admin renamenation <nation> <newname>
+```
+Force rename a nation.
+- Validates name is 2-32 characters
+- Checks new name is not already taken
+- Note: Players must use a constitutional amendment via the legislature to rename nations
+
+```
+/sc admin renamestate <nation> <state> <newname>
+```
+Force rename a state within a nation.
+- Validates name is 2-32 characters
+- Checks new name is not already taken within the nation
+- Lists available states if state name is wrong
+- Note: Governors can also rename via the State Settings GUI
+
+```
+/sc admin renamecity <nation> <state> <city> <newname>
+```
+Force rename a city within a state.
+- Validates name is 2-32 characters
+- Checks new name is not already taken within the state
+- Lists available states/cities if names are wrong
+- Note: Mayors can also rename via the City Settings GUI
 
 ---
 

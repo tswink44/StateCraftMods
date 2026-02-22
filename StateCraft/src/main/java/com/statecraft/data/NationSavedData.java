@@ -1,6 +1,8 @@
 package com.statecraft.data;
 
 import com.statecraft.StateCraft;
+import com.statecraft.company.CompanyManager;
+import com.statecraft.contract.ContractManager;
 import com.statecraft.core.*;
 import com.statecraft.legislature.LegislatureManager;
 import net.minecraft.core.registries.Registries;
@@ -65,8 +67,29 @@ public class NationSavedData extends SavedData {
             StateCraft.LOGGER.info("Loaded legislature data");
         }
 
+        // Load contract data
+        if (tag.contains("contracts")) {
+            ContractManager.getInstance().load(tag.getCompound("contracts"));
+            StateCraft.LOGGER.info("Loaded contract data");
+        }
+
+        // Load company data
+        if (tag.contains("companies")) {
+            CompanyManager.getInstance().load(tag.getCompound("companies"));
+            StateCraft.LOGGER.info("Loaded company data");
+        }
+
+        // Load shareholder vote data
+        if (tag.contains("shareholderVotes")) {
+            com.statecraft.company.ShareholderVoteManager.getInstance().load(tag.getCompound("shareholderVotes"));
+            StateCraft.LOGGER.info("Loaded shareholder vote data");
+        }
+
         StateCraft.LOGGER.info("Loaded {} nations with {} total claimed chunks",
             manager.getTotalNationCount(), manager.getTotalClaimedChunks());
+
+        // Run orphan cleanup to detect and remove stale/orphaned data
+        manager.runOrphanCleanup();
 
         return data;
     }
@@ -126,10 +149,22 @@ public class NationSavedData extends SavedData {
         // Save legislature data
         tag.put("legislature", LegislatureManager.getInstance().save());
 
+        // Save contract data
+        tag.put("contracts", ContractManager.getInstance().save());
+
+        // Save company data
+        tag.put("companies", CompanyManager.getInstance().save());
+
+        // Save shareholder vote data
+        tag.put("shareholderVotes", com.statecraft.company.ShareholderVoteManager.getInstance().save());
+
         manager.clearDirty();
         InvitationManager.getInstance().clearDirty();
         ElectionManager.getInstance().clearDirty();
         LegislatureManager.getInstance().clearDirty();
+        ContractManager.getInstance().clearDirty();
+        CompanyManager.getInstance().clearDirty();
+        com.statecraft.company.ShareholderVoteManager.getInstance().clearDirty();
 
         StateCraft.LOGGER.debug("Saved {} nations", manager.getTotalNationCount());
 

@@ -29,7 +29,7 @@ public class ChunkMarketScreen extends Screen {
     private int guiLeft;
     private int guiTop;
     private int guiWidth = 280;
-    private int guiHeight = 220;
+    private int guiHeight = 260;
 
     // Chunk coordinates
     private final int chunkX;
@@ -46,6 +46,8 @@ public class ChunkMarketScreen extends Screen {
     private boolean isPrivatelyOwned = false;
     private boolean canListForSale = false;
     private boolean canBuy = false;
+    private double valuation = 0;
+    private double estimatedTax = 0;
 
     // Price input for listing
     private EditBox priceInput;
@@ -125,6 +127,17 @@ public class ChunkMarketScreen extends Screen {
             }
         }
 
+        // Valuation and Tax rows (always show for claimed chunks)
+        if (isClaimed) {
+            String valStr = EconomyManager.getInstance().formatCurrency(valuation);
+            menuEntries.add(new MenuEntry("Valuation: " + valStr, startY + spacing * row, false));
+            row++;
+
+            String taxStr = EconomyManager.getInstance().formatCurrency(estimatedTax);
+            menuEntries.add(new MenuEntry("Est. Tax: " + taxStr + "/cycle", startY + spacing * row, false));
+            row++;
+        }
+
         row++; // Gap before buttons
 
         // Action buttons area
@@ -181,7 +194,7 @@ public class ChunkMarketScreen extends Screen {
         // Back button
         this.addRenderableWidget(Button.builder(
             Component.literal("Back"),
-            btn -> this.onClose()
+            btn -> openMarketplaceScreen()
         ).pos(centerX - 40, guiTop + guiHeight - 28).size(80, 20).build());
     }
 
@@ -228,6 +241,24 @@ public class ChunkMarketScreen extends Screen {
     private void purchaseChunk() {
         NetworkHandler.sendToServer(new ChunkMarketPacket(
             ChunkMarketPacket.Action.PURCHASE, chunkX, chunkZ));
+    }
+
+    /**
+     * Open the chunk marketplace screen via reflection (StateCraft mod)
+     */
+    private void openMarketplaceScreen() {
+        try {
+            Class<?> screenClass = Class.forName("com.statecraft.client.gui.ChunkMarketplaceScreen");
+            var constructor = screenClass.getConstructor();
+            var screen = constructor.newInstance();
+            this.minecraft.setScreen((Screen) screen);
+        } catch (ClassNotFoundException e) {
+            // StateCraft not available, just close
+            this.onClose();
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.error("Error opening marketplace screen", e);
+            this.onClose();
+        }
     }
 
     @Override
@@ -290,7 +321,8 @@ public class ChunkMarketScreen extends Screen {
     // Called by client packet handler when info is received
     public void updateMarketInfo(boolean isClaimed, boolean isForSale, double salePrice,
                                   String sellerName, String ownerName, String cityName,
-                                  boolean isPrivatelyOwned, boolean canListForSale, boolean canBuy) {
+                                  boolean isPrivatelyOwned, boolean canListForSale, boolean canBuy,
+                                  double valuation, double estimatedTax) {
         this.isClaimed = isClaimed;
         this.isForSale = isForSale;
         this.salePrice = salePrice;
@@ -300,6 +332,8 @@ public class ChunkMarketScreen extends Screen {
         this.isPrivatelyOwned = isPrivatelyOwned;
         this.canListForSale = canListForSale;
         this.canBuy = canBuy;
+        this.valuation = valuation;
+        this.estimatedTax = estimatedTax;
         this.dataLoaded = true;
 
         // Rebuild UI with new data

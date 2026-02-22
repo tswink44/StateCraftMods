@@ -19,6 +19,8 @@ public class Mail {
     private final long timestamp;
     private boolean read;
     private boolean archived;
+    private double attachedCurrency;  // Currency attachment (0 = none)
+    private boolean currencyClaimed;  // Whether the currency has been claimed by recipient
 
     /**
      * Types of mail recipients
@@ -27,7 +29,8 @@ public class Mail {
         PLAYER,
         CITY,
         STATE,
-        NATION
+        NATION,
+        COMPANY
     }
 
     /**
@@ -58,7 +61,14 @@ public class Mail {
 
         // System
         SYSTEM("System", "§7"),
-        WELCOME("Welcome", "§a");
+        WELCOME("Welcome", "§a"),
+
+        // Financial / Currency
+        FINANCIAL("Financial", "§6"),
+        CURRENCY_TRANSFER("Currency Transfer", "§a"),
+
+        // Broadcast
+        BROADCAST("Broadcast", "§d");
 
         private final String displayName;
         private final String colorCode;
@@ -88,6 +98,8 @@ public class Mail {
         this.timestamp = System.currentTimeMillis();
         this.read = false;
         this.archived = false;
+        this.attachedCurrency = 0;
+        this.currencyClaimed = false;
     }
 
     /**
@@ -106,6 +118,8 @@ public class Mail {
         this.timestamp = timestamp;
         this.read = read;
         this.archived = archived;
+        this.attachedCurrency = 0;
+        this.currencyClaimed = false;
     }
 
     // Getters
@@ -126,6 +140,13 @@ public class Mail {
     // Setters
     public void setRead(boolean read) { this.read = read; }
     public void setArchived(boolean archived) { this.archived = archived; }
+
+    // Currency attachment
+    public double getAttachedCurrency() { return attachedCurrency; }
+    public void setAttachedCurrency(double amount) { this.attachedCurrency = Math.max(0, amount); }
+    public boolean isCurrencyClaimed() { return currencyClaimed; }
+    public void setCurrencyClaimed(boolean claimed) { this.currencyClaimed = claimed; }
+    public boolean hasUnclaimedCurrency() { return attachedCurrency > 0 && !currencyClaimed; }
 
     /**
      * Get formatted timestamp for display

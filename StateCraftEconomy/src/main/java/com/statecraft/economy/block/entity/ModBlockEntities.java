@@ -21,6 +21,15 @@ public class ModBlockEntities {
     public static final RegistryObject<BlockEntityType<TradingHubBlockEntity>> TRADING_HUB = BLOCK_ENTITIES.register("trading_hub",
         () -> BlockEntityType.Builder.of(TradingHubBlockEntity::new, ModBlocks.TRADING_HUB.get()).build(null));
 
+    public static final RegistryObject<BlockEntityType<CompanyVaultBlockEntity>> COMPANY_VAULT = BLOCK_ENTITIES.register("company_vault",
+        () -> BlockEntityType.Builder.of(CompanyVaultBlockEntity::new, ModBlocks.COMPANY_VAULT.get()).build(null));
+
+    public static final RegistryObject<BlockEntityType<MarketplaceBlockEntity>> MARKETPLACE = BLOCK_ENTITIES.register("marketplace",
+        () -> BlockEntityType.Builder.of(MarketplaceBlockEntity::new, ModBlocks.MARKETPLACE.get()).build(null));
+
+    public static final RegistryObject<BlockEntityType<StockMarketBlockEntity>> STOCK_MARKET = BLOCK_ENTITIES.register("stock_market",
+        () -> BlockEntityType.Builder.of(StockMarketBlockEntity::new, ModBlocks.STOCK_MARKET.get()).build(null));
+
     public static void register(IEventBus eventBus) {
         BLOCK_ENTITIES.register(eventBus);
     }

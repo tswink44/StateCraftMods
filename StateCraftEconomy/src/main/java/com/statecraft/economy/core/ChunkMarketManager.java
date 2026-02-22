@@ -165,9 +165,16 @@ public class ChunkMarketManager {
             UUID buyerId = buyer.getUUID();
             UUID sellerId = chunkInfo.sellerId();
 
-            // Can't buy your own chunk
-            if (buyerId.equals(sellerId)) {
+            // Can't buy your own privately-owned chunk
+            // But government officials CAN buy government chunks they listed for sale
+            // (they listed it as an official, but want to buy it personally)
+            if (buyerId.equals(sellerId) && chunkInfo.isPrivatelyOwned()) {
                 return new MarketResult(false, "You cannot buy your own chunk");
+            }
+
+            // Check if buyer has reached their personal chunk limit
+            if (!StateCraftIntegration.canPlayerOwnMoreChunks(buyerId)) {
+                return new MarketResult(false, "You have reached your personal chunk ownership limit");
             }
 
             // Check if buyer can afford it

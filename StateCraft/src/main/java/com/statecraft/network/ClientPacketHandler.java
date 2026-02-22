@@ -30,7 +30,7 @@ public class ClientPacketHandler {
                         packet.getChunks(),
                         packet.getMembers(),
                         packet.isLeader(),
-                        packet.isAdmin()
+                        packet.isOfficer()
                     );
                 } else {
                     screen.setNoNation();
@@ -55,7 +55,8 @@ public class ClientPacketHandler {
                     packet.isInNation() ? packet.getNationName() : "",
                     packet.isInNation() ? packet.getStateName() : "",
                     packet.isInNation() ? packet.getCityName() : "",
-                    nickname
+                    nickname,
+                    packet.getCompanyNames()
                 );
             } else if (mc.screen instanceof NationInfoScreen screen) {
                 if (packet.isDetailedData()) {
@@ -70,7 +71,7 @@ public class ClientPacketHandler {
                         packet.getDescription(),
                         packet.getLeaderName(),
                         packet.isLeader(),
-                        packet.isAdmin(),
+                        packet.isOfficer(),
                         packet.isMember(),
                         packet.getStateNames(),
                         packet.getAllyNames(),
@@ -315,7 +316,8 @@ public class ClientPacketHandler {
                     packet.getMemberCount(),
                     packet.isGovernor(),
                     packet.canManage(),
-                    packet.getCityNames()
+                    packet.getCityNames(),
+                    packet.isNationLeader()
                 );
             }
         });
@@ -349,7 +351,8 @@ public class ClientPacketHandler {
                     packet.getResidentCount(),
                     packet.isMayor(),
                     packet.canManage(),
-                    packet.getResidentNames()
+                    packet.getResidentNames(),
+                    packet.canAppoint()
                 );
             }
         });
@@ -386,7 +389,17 @@ public class ClientPacketHandler {
                         info.textValue
                     ));
                 }
-                screen.updatePolicies(entries);
+                // Build enacted law entries
+                List<NationLawsScreen.EnactedLawEntry> enactedLaws = new ArrayList<>();
+                for (SyncNationLawsPacket.EnactedLawInfo law : packet.getEnactedLaws()) {
+                    enactedLaws.add(new NationLawsScreen.EnactedLawEntry(
+                        law.lawNumber, law.title, law.description, law.authorName,
+                        law.enactedTime, law.yesVotes, law.noVotes, law.abstainVotes,
+                        law.wasVetoProof, law.isConstitutionalAmendment, law.isRepealed,
+                        law.policyChanges, law.fullText
+                    ));
+                }
+                screen.updatePolicies(entries, enactedLaws);
             }
         });
         ctx.get().setPacketHandled(true);
@@ -395,9 +408,7 @@ public class ClientPacketHandler {
     public static void handleSyncAutoClaim(SyncAutoClaimPacket packet, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
             Minecraft mc = Minecraft.getInstance();
-            if (mc.screen instanceof ClaimsManagementScreen screen) {
-                screen.updateAutoClaimState(packet.isEnabled(), packet.canUse(), packet.getCityName());
-            } else if (mc.screen instanceof ChunkMapScreen screen) {
+            if (mc.screen instanceof ChunkMapScreen screen) {
                 screen.updateAutoClaimState(packet.isEnabled(), packet.canUse(), packet.getCityName());
             }
         });
@@ -428,7 +439,7 @@ public class ClientPacketHandler {
                     listings.add(new ChunkMarketplaceScreen.ChunkListing(
                         info.chunkX, info.chunkZ,
                         info.ownerName, info.isGovernment,
-                        info.price, info.cityName
+                        info.price, info.cityName, info.valuation
                     ));
                 }
                 screen.updateMarketplaceData(listings);
@@ -451,7 +462,9 @@ public class ClientPacketHandler {
                         info.senderName,
                         info.timeAgo,
                         info.type,
-                        info.read
+                        info.read,
+                        info.attachedCurrency,
+                        info.currencyClaimed
                     ));
                 }
                 screen.updateMailData(entries, packet.getUnreadCount(), packet.getTotalCount());
@@ -581,6 +594,76 @@ public class ClientPacketHandler {
             Minecraft mc = Minecraft.getInstance();
             if (mc.screen instanceof com.statecraft.client.gui.ContractsMainScreen screen) {
                 screen.updateData(packet);
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncCityChunks(SyncCityChunksPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof com.statecraft.client.gui.CityChunksScreen screen) {
+                screen.updateChunks(packet.getChunks());
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncNationPrivateChunks(SyncNationPrivateChunksPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof com.statecraft.client.gui.EminentDomainScreen screen) {
+                screen.updateChunks(packet.getChunks());
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncEmergencyPowerData(SyncEmergencyPowerDataPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof com.statecraft.client.gui.ExecutiveActionsScreen screen) {
+                screen.updateData(packet);
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncDiplomacyData(SyncDiplomacyDataPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof com.statecraft.client.gui.DiplomacyScreen screen) {
+                screen.updateData(packet);
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncTargetNationChunks(SyncTargetNationChunksPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof com.statecraft.client.gui.PeaceTermsScreen screen) {
+                screen.updateChunkData(packet);
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncCompanyData(SyncCompanyDataPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof com.statecraft.client.gui.CompanyScreen screen) {
+                screen.updateData(packet);
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncShareholderVotes(SyncShareholderVotesPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof com.statecraft.client.gui.CompanyScreen screen) {
+                screen.updateVotesData(packet);
             }
         });
         ctx.get().setPacketHandled(true);

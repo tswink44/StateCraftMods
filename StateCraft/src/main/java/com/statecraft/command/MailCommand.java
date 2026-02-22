@@ -3,6 +3,8 @@ package com.statecraft.command;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
+import com.statecraft.core.ChunkClaimManager;
+import com.statecraft.core.Nation;
 import com.statecraft.mail.Mail;
 import com.statecraft.mail.Mailbox;
 import com.statecraft.mail.MailManager;
@@ -15,11 +17,14 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * Commands for the mail system
  * /sc mail - Open mail GUI
  * /sc mail send <player> <subject> - Send mail to player
+ * /sc mail broadcast <message> - Broadcast mail to all nation members
  * /sc mail read - Show unread count
  * /sc mail list - List recent mail in chat
  */
@@ -32,6 +37,9 @@ public class MailCommand {
                 .then(Commands.argument("player", EntityArgument.player())
                     .then(Commands.argument("message", StringArgumentType.greedyString())
                         .executes(MailCommand::sendMail))))
+            .then(Commands.literal("broadcast")
+                .then(Commands.argument("message", StringArgumentType.greedyString())
+                    .executes(MailCommand::broadcastMail)))
             .then(Commands.literal("read")
                 .executes(MailCommand::showUnreadCount))
             .then(Commands.literal("list")
@@ -94,6 +102,58 @@ public class MailCommand {
 
             context.getSource().sendSuccess(() ->
                 Component.literal("§aMail sent to " + recipient.getName().getString()), false);
+
+            return 1;
+        } catch (Exception e) {
+            context.getSource().sendFailure(Component.literal("§cError: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    private static int broadcastMail(CommandContext<CommandSourceStack> context) {
+        try {
+            ServerPlayer sender = context.getSource().getPlayerOrException();
+            String message = StringArgumentType.getString(context, "message");
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            Nation nation = manager.getPlayerNation(sender.getUUID());
+
+            if (nation == null) {
+                context.getSource().sendFailure(Component.literal("§cYou are not in a nation!"));
+                return 0;
+            }
+
+            if (!nation.isLeaderOrOfficer(sender.getUUID())) {
+                context.getSource().sendFailure(Component.literal("§cOnly nation leaders and officers can broadcast mail!"));
+                return 0;
+            }
+
+            // Parse subject and body - first line is subject
+            String subject;
+            String body;
+            int newlineIndex = message.indexOf('\n');
+            if (newlineIndex > 0) {
+                subject = message.substring(0, newlineIndex).trim();
+                body = message.substring(newlineIndex + 1).trim();
+            } else {
+                subject = message.length() > 30 ? message.substring(0, 30) + "..." : message;
+                body = message;
+            }
+
+            String broadcastSubject = "§d[Broadcast] §f" + subject;
+
+            Set<UUID> allMembers = nation.getAllMembers();
+            int delivered = MailManager.getInstance().sendBroadcastMail(
+                sender.getUUID(),
+                sender.getName().getString(),
+                allMembers,
+                broadcastSubject,
+                body
+            );
+
+            context.getSource().sendSuccess(() ->
+                Component.literal("§aBroadcast mail sent to " + delivered + " nation member" +
+                    (delivered != 1 ? "s" : "") + "!"), false);
 
             return 1;
         } catch (Exception e) {

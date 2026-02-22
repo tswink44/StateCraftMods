@@ -3,7 +3,9 @@ package com.statecraft.command;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.statecraft.core.ChunkClaimManager;
+import com.statecraft.core.City;
 import com.statecraft.core.Nation;
+import com.statecraft.core.State;
 import com.statecraft.event.ProtectionHandler;
 import com.statecraft.network.ServerPacketHandler;
 import net.minecraft.commands.CommandSourceStack;
@@ -21,6 +23,16 @@ import net.minecraft.world.level.ChunkPos;
  * /statecraft admin bypass - Toggle protection bypass
  * /statecraft admin unclaim - Force unclaim a chunk
  * /statecraft admin delete <nation> - Force delete a nation
+ * /statecraft admin deletestate <nation> <state> - Force delete a state
+ * /statecraft admin deletecity <nation> <state> <city> - Force delete a city
+ * /statecraft admin setleader <nation> <player> - Set nation leader
+ * /statecraft admin setgovernor <nation> <state> <player> - Set state governor
+ * /statecraft admin setmayor <nation> <state> <city> <player> - Set city mayor
+ * /statecraft admin renamenation <nation> <newname> - Rename a nation
+ * /statecraft admin renamestate <nation> <state> <newname> - Rename a state
+ * /statecraft admin renamecity <nation> <state> <city> <newname> - Rename a city
+ * /statecraft admin renamecity <nation> <state> <city> <newname> - Rename a city
+ * /statecraft admin audit - Run data integrity check and orphan cleanup
  * /statecraft admin reload - Reload configuration
  */
 public class AdminCommand {
@@ -44,6 +56,8 @@ public class AdminCommand {
                     .executes(AdminCommand::setChunkOwner)))
             .then(Commands.literal("reload")
                 .executes(AdminCommand::reloadConfig))
+            .then(Commands.literal("audit")
+                .executes(AdminCommand::runAudit))
             .then(Commands.literal("valuation")
                 .then(Commands.literal("recalculate")
                     .executes(AdminCommand::recalculateAllValuations)
@@ -68,7 +82,47 @@ public class AdminCommand {
                     .then(Commands.argument("ticks", com.mojang.brigadier.arguments.LongArgumentType.longArg(1200))
                         .executes(AdminCommand::setTaxPeriod))))
             .then(ElectionCommand.registerAdmin())
-            .then(LegislatureCommand.registerAdmin());
+            .then(LegislatureCommand.registerAdmin())
+            .then(ContractCommand.registerAdmin())
+            .then(Commands.literal("deletestate")
+                .then(Commands.argument("nation", com.mojang.brigadier.arguments.StringArgumentType.string())
+                    .then(Commands.argument("state", com.mojang.brigadier.arguments.StringArgumentType.string())
+                        .executes(AdminCommand::forceDeleteState))))
+            .then(Commands.literal("deletecity")
+                .then(Commands.argument("nation", com.mojang.brigadier.arguments.StringArgumentType.string())
+                    .then(Commands.argument("state", com.mojang.brigadier.arguments.StringArgumentType.string())
+                        .then(Commands.argument("city", com.mojang.brigadier.arguments.StringArgumentType.string())
+                            .executes(AdminCommand::forceDeleteCity)))))
+            .then(Commands.literal("setleader")
+                .then(Commands.argument("nation", com.mojang.brigadier.arguments.StringArgumentType.string())
+                    .then(Commands.argument("player", EntityArgument.player())
+                        .executes(AdminCommand::setNationLeader))))
+            .then(Commands.literal("setgovernor")
+                .then(Commands.argument("nation", com.mojang.brigadier.arguments.StringArgumentType.string())
+                    .then(Commands.argument("state", com.mojang.brigadier.arguments.StringArgumentType.string())
+                        .then(Commands.argument("player", EntityArgument.player())
+                            .executes(AdminCommand::setStateGovernor)))))
+            .then(Commands.literal("setmayor")
+                .then(Commands.argument("nation", com.mojang.brigadier.arguments.StringArgumentType.string())
+                    .then(Commands.argument("state", com.mojang.brigadier.arguments.StringArgumentType.string())
+                        .then(Commands.argument("city", com.mojang.brigadier.arguments.StringArgumentType.string())
+                            .then(Commands.argument("player", EntityArgument.player())
+                                .executes(AdminCommand::setCityMayor))))))
+            .then(Commands.literal("renamenation")
+                .then(Commands.argument("nation", com.mojang.brigadier.arguments.StringArgumentType.string())
+                    .then(Commands.argument("newname", com.mojang.brigadier.arguments.StringArgumentType.string())
+                        .executes(AdminCommand::renameNation))))
+            .then(Commands.literal("renamestate")
+                .then(Commands.argument("nation", com.mojang.brigadier.arguments.StringArgumentType.string())
+                    .then(Commands.argument("state", com.mojang.brigadier.arguments.StringArgumentType.string())
+                        .then(Commands.argument("newname", com.mojang.brigadier.arguments.StringArgumentType.string())
+                            .executes(AdminCommand::renameState)))))
+            .then(Commands.literal("renamecity")
+                .then(Commands.argument("nation", com.mojang.brigadier.arguments.StringArgumentType.string())
+                    .then(Commands.argument("state", com.mojang.brigadier.arguments.StringArgumentType.string())
+                        .then(Commands.argument("city", com.mojang.brigadier.arguments.StringArgumentType.string())
+                            .then(Commands.argument("newname", com.mojang.brigadier.arguments.StringArgumentType.string())
+                                .executes(AdminCommand::renameCity))))));
     }
 
     /**
@@ -557,6 +611,545 @@ public class AdminCommand {
             return 0;
         } catch (Exception e) {
             context.getSource().sendFailure(Component.literal("§cError setting tax period: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    /**
+     * Force delete a state within a nation (OP only)
+     * /sc admin deletestate <nation> <state>
+     */
+    private static int forceDeleteState(CommandContext<CommandSourceStack> context) {
+        String nationName = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "nation");
+        String stateName = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "state");
+
+        ChunkClaimManager manager = ChunkClaimManager.getInstance();
+        Nation nation = manager.getNationByName(nationName);
+
+        if (nation == null) {
+            context.getSource().sendFailure(Component.literal("Nation '" + nationName + "' not found!"));
+            return 0;
+        }
+
+        State state = nation.getStateByName(stateName);
+        if (state == null) {
+            context.getSource().sendFailure(Component.literal("State '" + stateName + "' not found in nation '" + nationName + "'!"));
+            // List available states
+            StringBuilder sb = new StringBuilder("§7Available states: ");
+            boolean first = true;
+            for (State s : nation.getAllStates()) {
+                if (!first) sb.append(", ");
+                sb.append("§f").append(s.getName());
+                first = false;
+            }
+            if (first) sb.append("§8(none)");
+            context.getSource().sendFailure(Component.literal(sb.toString()));
+            return 0;
+        }
+
+        String name = state.getName();
+        int cities = state.getCityCount();
+        int chunks = state.getTotalChunkCount();
+
+        boolean success = manager.disbandState(nation.getId(), state.getId());
+
+        if (success) {
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§c§lForce deleted state '§e" + name + "§c' from nation '§e" + nationName +
+                "§c' §7(" + cities + " cities, " + chunks + " chunks)"
+            ), true);
+            return 1;
+        } else {
+            context.getSource().sendFailure(Component.literal("Failed to delete state!"));
+            return 0;
+        }
+    }
+
+    /**
+     * Force delete a city within a state (OP only)
+     * /sc admin deletecity <nation> <state> <city>
+     */
+    private static int forceDeleteCity(CommandContext<CommandSourceStack> context) {
+        String nationName = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "nation");
+        String stateName = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "state");
+        String cityName = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "city");
+
+        ChunkClaimManager manager = ChunkClaimManager.getInstance();
+        Nation nation = manager.getNationByName(nationName);
+
+        if (nation == null) {
+            context.getSource().sendFailure(Component.literal("Nation '" + nationName + "' not found!"));
+            return 0;
+        }
+
+        State state = nation.getStateByName(stateName);
+        if (state == null) {
+            context.getSource().sendFailure(Component.literal("State '" + stateName + "' not found in nation '" + nationName + "'!"));
+            return 0;
+        }
+
+        City city = state.getCityByName(cityName);
+        if (city == null) {
+            context.getSource().sendFailure(Component.literal("City '" + cityName + "' not found in state '" + stateName + "'!"));
+            // List available cities
+            StringBuilder sb = new StringBuilder("§7Available cities: ");
+            boolean first = true;
+            for (City c : state.getAllCities()) {
+                if (!first) sb.append(", ");
+                sb.append("§f").append(c.getName());
+                first = false;
+            }
+            if (first) sb.append("§8(none)");
+            context.getSource().sendFailure(Component.literal(sb.toString()));
+            return 0;
+        }
+
+        String name = city.getName();
+        int chunks = city.getChunkCount();
+        int residents = city.getResidents().size();
+
+        boolean success = manager.disbandCity(state.getId(), city.getId());
+
+        if (success) {
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§c§lForce deleted city '§e" + name + "§c' from state '§e" + stateName +
+                "§c' §7(" + chunks + " chunks, " + residents + " residents)"
+            ), true);
+            return 1;
+        } else {
+            context.getSource().sendFailure(Component.literal("Failed to delete city!"));
+            return 0;
+        }
+    }
+
+    /**
+     * Set the leader of a nation (OP only)
+     * /sc admin setleader <nation> <player>
+     */
+    private static int setNationLeader(CommandContext<CommandSourceStack> context) {
+        try {
+            String nationName = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "nation");
+            ServerPlayer targetPlayer = EntityArgument.getPlayer(context, "player");
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            Nation nation = manager.getNationByName(nationName);
+
+            if (nation == null) {
+                context.getSource().sendFailure(Component.literal("Nation '" + nationName + "' not found!"));
+                return 0;
+            }
+
+            // Target must be a member of the nation
+            if (!nation.isMember(targetPlayer.getUUID())) {
+                context.getSource().sendFailure(Component.literal(
+                    targetPlayer.getName().getString() + " is not a member of " + nationName + "!"));
+                return 0;
+            }
+
+            java.util.UUID oldLeaderId = nation.getLeaderId();
+            String targetName = targetPlayer.getName().getString();
+
+            nation.setLeaderId(targetPlayer.getUUID());
+            manager.markDirty();
+
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§a§lSet §e" + targetName + "§a as leader of §e" + nationName + "§a!"
+            ), true);
+
+            // Notify new leader
+            targetPlayer.sendSystemMessage(Component.literal(
+                "§6§l[Admin] §eYou have been set as the leader of §f" + nationName + "§e!"));
+
+            // Notify old leader if online and different
+            if (oldLeaderId != null && !oldLeaderId.equals(targetPlayer.getUUID())) {
+                ServerPlayer oldLeader = context.getSource().getServer().getPlayerList().getPlayer(oldLeaderId);
+                if (oldLeader != null) {
+                    oldLeader.sendSystemMessage(Component.literal(
+                        "§6§l[Admin] §eYou are no longer the leader of §f" + nationName +
+                        "§e. §f" + targetName + "§e has been appointed."));
+                }
+            }
+
+            return 1;
+        } catch (Exception e) {
+            context.getSource().sendFailure(Component.literal("Error: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    /**
+     * Set the governor of a state (OP only)
+     * /sc admin setgovernor <nation> <state> <player>
+     */
+    private static int setStateGovernor(CommandContext<CommandSourceStack> context) {
+        try {
+            String nationName = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "nation");
+            String stateName = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "state");
+            ServerPlayer targetPlayer = EntityArgument.getPlayer(context, "player");
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            Nation nation = manager.getNationByName(nationName);
+
+            if (nation == null) {
+                context.getSource().sendFailure(Component.literal("Nation '" + nationName + "' not found!"));
+                return 0;
+            }
+
+            State state = nation.getStateByName(stateName);
+            if (state == null) {
+                context.getSource().sendFailure(Component.literal(
+                    "State '" + stateName + "' not found in nation '" + nationName + "'!"));
+                return 0;
+            }
+
+            // Target must be a member of the nation
+            if (!nation.isMember(targetPlayer.getUUID())) {
+                context.getSource().sendFailure(Component.literal(
+                    targetPlayer.getName().getString() + " is not a member of " + nationName + "!"));
+                return 0;
+            }
+
+            java.util.UUID oldGovernorId = state.getGovernorId();
+            String targetName = targetPlayer.getName().getString();
+
+            state.setGovernorId(targetPlayer.getUUID());
+            // Make new governor a citizen of the state if not already
+            if (!state.isCitizen(targetPlayer.getUUID())) {
+                state.addCitizen(targetPlayer.getUUID());
+            }
+            manager.markDirty();
+
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§a§lSet §e" + targetName + "§a as governor of §e" + stateName +
+                "§a in §e" + nationName + "§a!"
+            ), true);
+
+            // Notify new governor
+            targetPlayer.sendSystemMessage(Component.literal(
+                "§6§l[Admin] §eYou have been set as the governor of §f" + stateName + "§e!"));
+
+            // Notify old governor if online and different
+            if (oldGovernorId != null && !oldGovernorId.equals(targetPlayer.getUUID())) {
+                ServerPlayer oldGovernor = context.getSource().getServer().getPlayerList().getPlayer(oldGovernorId);
+                if (oldGovernor != null) {
+                    oldGovernor.sendSystemMessage(Component.literal(
+                        "§6§l[Admin] §eYou are no longer the governor of §f" + stateName +
+                        "§e. §f" + targetName + "§e has been appointed."));
+                }
+            }
+
+            return 1;
+        } catch (Exception e) {
+            context.getSource().sendFailure(Component.literal("Error: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    /**
+     * Set the mayor of a city (OP only)
+     * /sc admin setmayor <nation> <state> <city> <player>
+     */
+    private static int setCityMayor(CommandContext<CommandSourceStack> context) {
+        try {
+            String nationName = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "nation");
+            String stateName = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "state");
+            String cityName = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "city");
+            ServerPlayer targetPlayer = EntityArgument.getPlayer(context, "player");
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            Nation nation = manager.getNationByName(nationName);
+
+            if (nation == null) {
+                context.getSource().sendFailure(Component.literal("Nation '" + nationName + "' not found!"));
+                return 0;
+            }
+
+            State state = nation.getStateByName(stateName);
+            if (state == null) {
+                context.getSource().sendFailure(Component.literal(
+                    "State '" + stateName + "' not found in nation '" + nationName + "'!"));
+                return 0;
+            }
+
+            City city = state.getCityByName(cityName);
+            if (city == null) {
+                context.getSource().sendFailure(Component.literal(
+                    "City '" + cityName + "' not found in state '" + stateName + "'!"));
+                return 0;
+            }
+
+            // Target must be a member of the nation
+            if (!nation.isMember(targetPlayer.getUUID())) {
+                context.getSource().sendFailure(Component.literal(
+                    targetPlayer.getName().getString() + " is not a member of " + nationName + "!"));
+                return 0;
+            }
+
+            java.util.UUID oldMayorId = city.getMayorId();
+            String targetName = targetPlayer.getName().getString();
+
+            city.setMayorId(targetPlayer.getUUID());
+            // Make new mayor a resident of the city if not already
+            if (!city.isResident(targetPlayer.getUUID())) {
+                city.addResident(targetPlayer.getUUID());
+            }
+            // Make new mayor a citizen of the state if not already
+            if (!state.isCitizen(targetPlayer.getUUID())) {
+                state.addCitizen(targetPlayer.getUUID());
+            }
+            manager.markDirty();
+
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§a§lSet §e" + targetName + "§a as mayor of §e" + cityName +
+                "§a in §e" + stateName + "§a!"
+            ), true);
+
+            // Notify new mayor
+            targetPlayer.sendSystemMessage(Component.literal(
+                "§6§l[Admin] §eYou have been set as the mayor of §f" + cityName + "§e!"));
+
+            // Notify old mayor if online and different
+            if (oldMayorId != null && !oldMayorId.equals(targetPlayer.getUUID())) {
+                ServerPlayer oldMayor = context.getSource().getServer().getPlayerList().getPlayer(oldMayorId);
+                if (oldMayor != null) {
+                    oldMayor.sendSystemMessage(Component.literal(
+                        "§6§l[Admin] §eYou are no longer the mayor of §f" + cityName +
+                        "§e. §f" + targetName + "§e has been appointed."));
+                }
+            }
+
+            return 1;
+        } catch (Exception e) {
+            context.getSource().sendFailure(Component.literal("Error: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    // ==================== Audit / Orphan Cleanup ====================
+
+    /**
+     * Run data integrity check and orphan cleanup (OP only)
+     */
+    private static int runAudit(CommandContext<CommandSourceStack> context) {
+        ChunkClaimManager manager = ChunkClaimManager.getInstance();
+
+        context.getSource().sendSuccess(() -> Component.literal(
+            "§6§l[Audit] §7Running data integrity scan..."
+        ), true);
+
+        // Show stats before cleanup
+        int nationCount = manager.getTotalNationCount();
+        int chunkCount = manager.getTotalClaimedChunks();
+
+        context.getSource().sendSuccess(() -> Component.literal(
+            "§7Before: §f" + nationCount + "§7 nations, §f" + chunkCount + "§7 claimed chunks"
+        ), false);
+
+        int removed = manager.runOrphanCleanup();
+
+        if (removed > 0) {
+            int newChunkCount = manager.getTotalClaimedChunks();
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§e§l[Audit] §cRemoved §f" + removed + "§c orphaned entries. " +
+                "§7Chunks now: §f" + newChunkCount + "§7. Check server log for details."
+            ), true);
+        } else {
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§a§l[Audit] §aData integrity check passed — no orphans found!"
+            ), true);
+        }
+
+        return 1;
+    }
+
+    // ==================== Rename Commands ====================
+
+    /**
+     * Force rename a nation (OP only)
+     */
+    private static int renameNation(CommandContext<CommandSourceStack> context) {
+        try {
+            String nationName = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "nation");
+            String newName = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "newname");
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            Nation nation = manager.getNationByName(nationName);
+            if (nation == null) {
+                context.getSource().sendFailure(Component.literal(
+                    "Nation '" + nationName + "' not found!"));
+                return 0;
+            }
+
+            // Validate new name
+            if (newName.length() < 2 || newName.length() > 32) {
+                context.getSource().sendFailure(Component.literal(
+                    "Name must be between 2 and 32 characters!"));
+                return 0;
+            }
+
+            // Check if name is taken
+            Nation existing = manager.getNationByName(newName);
+            if (existing != null && !existing.getId().equals(nation.getId())) {
+                context.getSource().sendFailure(Component.literal(
+                    "A nation with the name '" + newName + "' already exists!"));
+                return 0;
+            }
+
+            String oldName = nation.getName();
+            nation.setName(newName);
+            manager.markDirty();
+
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§a§lRenamed nation §e" + oldName + "§a to §e" + newName + "§a!"
+            ), true);
+
+            return 1;
+        } catch (Exception e) {
+            context.getSource().sendFailure(Component.literal("Error: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    /**
+     * Force rename a state (OP only)
+     */
+    private static int renameState(CommandContext<CommandSourceStack> context) {
+        try {
+            String nationName = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "nation");
+            String stateName = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "state");
+            String newName = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "newname");
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            Nation nation = manager.getNationByName(nationName);
+            if (nation == null) {
+                context.getSource().sendFailure(Component.literal(
+                    "Nation '" + nationName + "' not found!"));
+                return 0;
+            }
+
+            State state = null;
+            for (State s : nation.getAllStates()) {
+                if (s.getName().equals(stateName)) {
+                    state = s;
+                    break;
+                }
+            }
+
+            if (state == null) {
+                context.getSource().sendFailure(Component.literal(
+                    "State '" + stateName + "' not found in nation '" + nationName + "'!"));
+                // List available states
+                StringBuilder sb = new StringBuilder("§7Available states: ");
+                nation.getAllStates().forEach(s -> sb.append("§e").append(s.getName()).append("§7, "));
+                context.getSource().sendFailure(Component.literal(sb.toString()));
+                return 0;
+            }
+
+            // Validate new name
+            if (newName.length() < 2 || newName.length() > 32) {
+                context.getSource().sendFailure(Component.literal(
+                    "Name must be between 2 and 32 characters!"));
+                return 0;
+            }
+
+            // Check if name is taken within nation
+            boolean nameTaken = nation.getAllStates().stream()
+                .anyMatch(s -> s.getName().equals(newName));
+            if (nameTaken) {
+                context.getSource().sendFailure(Component.literal(
+                    "A state with the name '" + newName + "' already exists in this nation!"));
+                return 0;
+            }
+
+            String oldName = state.getName();
+            state.setName(newName);
+            manager.markDirty();
+
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§a§lRenamed state §e" + oldName + "§a to §e" + newName +
+                "§a in nation §e" + nationName + "§a!"
+            ), true);
+
+            return 1;
+        } catch (Exception e) {
+            context.getSource().sendFailure(Component.literal("Error: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    /**
+     * Force rename a city (OP only)
+     */
+    private static int renameCity(CommandContext<CommandSourceStack> context) {
+        try {
+            String nationName = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "nation");
+            String stateName = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "state");
+            String cityName = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "city");
+            String newName = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "newname");
+
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            Nation nation = manager.getNationByName(nationName);
+            if (nation == null) {
+                context.getSource().sendFailure(Component.literal(
+                    "Nation '" + nationName + "' not found!"));
+                return 0;
+            }
+
+            State state = null;
+            for (State s : nation.getAllStates()) {
+                if (s.getName().equals(stateName)) {
+                    state = s;
+                    break;
+                }
+            }
+
+            if (state == null) {
+                context.getSource().sendFailure(Component.literal(
+                    "State '" + stateName + "' not found in nation '" + nationName + "'!"));
+                StringBuilder sb = new StringBuilder("§7Available states: ");
+                nation.getAllStates().forEach(s -> sb.append("§e").append(s.getName()).append("§7, "));
+                context.getSource().sendFailure(Component.literal(sb.toString()));
+                return 0;
+            }
+
+            City city = state.getCityByName(cityName);
+            if (city == null) {
+                context.getSource().sendFailure(Component.literal(
+                    "City '" + cityName + "' not found in state '" + stateName + "'!"));
+                StringBuilder sb = new StringBuilder("§7Available cities: ");
+                state.getAllCities().forEach(c -> sb.append("§e").append(c.getName()).append("§7, "));
+                context.getSource().sendFailure(Component.literal(sb.toString()));
+                return 0;
+            }
+
+            // Validate new name
+            if (newName.length() < 2 || newName.length() > 32) {
+                context.getSource().sendFailure(Component.literal(
+                    "Name must be between 2 and 32 characters!"));
+                return 0;
+            }
+
+            // Check if name is taken within state
+            boolean nameTaken = state.getAllCities().stream()
+                .anyMatch(c -> c.getName().equals(newName));
+            if (nameTaken) {
+                context.getSource().sendFailure(Component.literal(
+                    "A city with the name '" + newName + "' already exists in this state!"));
+                return 0;
+            }
+
+            String oldName = city.getName();
+            city.setName(newName);
+            manager.markDirty();
+
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§a§lRenamed city §e" + oldName + "§a to §e" + newName +
+                "§a in state §e" + stateName + "§a (nation §e" + nationName + "§a)!"
+            ), true);
+
+            return 1;
+        } catch (Exception e) {
+            context.getSource().sendFailure(Component.literal("Error: " + e.getMessage()));
             return 0;
         }
     }

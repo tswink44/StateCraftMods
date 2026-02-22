@@ -7,14 +7,21 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.statecraft.economy.StateCraftEconomy;
 import com.statecraft.economy.core.EconomyManager;
+import com.statecraft.economy.core.SpendingLimitManager;
 import com.statecraft.economy.core.TaxationManager;
+import com.statecraft.economy.core.Transaction;
 import com.statecraft.economy.core.TransactionResult;
 import com.statecraft.economy.integration.StateCraftIntegration;
+import com.statecraft.economy.valuation.ChunkValuationManager;
+import com.statecraft.economy.valuation.ChunkValuation;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+
+import java.text.SimpleDateFormat;
+import java.util.*;
 
 /**
  * Commands for the economy system
@@ -54,18 +61,29 @@ public class EconomyCommands {
                 .requires(src -> src.hasPermission(2))
                 .executes(EconomyCommands::reload))
             .then(Commands.literal("tax")
-                .requires(src -> src.hasPermission(2))
+                .then(Commands.literal("history")
+                    .executes(EconomyCommands::showTaxHistory))
                 .then(Commands.literal("collect")
+                    .requires(src -> src.hasPermission(2))
                     .executes(EconomyCommands::forceCollectTax))
                 .then(Commands.literal("status")
+                    .requires(src -> src.hasPermission(2))
                     .executes(EconomyCommands::showTaxStatus))
                 .then(Commands.literal("enable")
+                    .requires(src -> src.hasPermission(2))
                     .executes(ctx -> setTaxEnabled(ctx, true)))
                 .then(Commands.literal("disable")
+                    .requires(src -> src.hasPermission(2))
                     .executes(ctx -> setTaxEnabled(ctx, false)))
                 .then(Commands.literal("period")
+                    .requires(src -> src.hasPermission(2))
                     .then(Commands.argument("ticks", LongArgumentType.longArg(1200))
-                        .executes(EconomyCommands::setTaxPeriod))));
+                        .executes(EconomyCommands::setTaxPeriod))))
+            .then(CompanyCommands.buildCompanyCommand())
+            .then(BankCommands.buildBankCommand())
+            .then(MarketplaceCommands.buildMarketCommand())
+            .then(Commands.literal("recipes")
+                .executes(EconomyCommands::giveRecipeGuide));
 
         // Nation treasury commands (only if StateCraft is loaded)
         if (StateCraftEconomy.isStateCraftLoaded()) {
@@ -100,6 +118,24 @@ public class EconomyCommands {
             context.getSource().sendSuccess(() ->
                 Component.literal("§6Your Balance: §f" + manager.formatCurrency(balance)), false);
 
+            return 1;
+        } catch (Exception e) {
+            context.getSource().sendFailure(Component.literal("This command must be run by a player!"));
+            return 0;
+        }
+    }
+
+    private static int giveRecipeGuide(CommandContext<CommandSourceStack> context) {
+        try {
+            ServerPlayer player = context.getSource().getPlayerOrException();
+            net.minecraft.world.item.ItemStack guideBook = new net.minecraft.world.item.ItemStack(
+                com.statecraft.economy.item.ModItems.RECIPE_GUIDE.get());
+            if (!player.getInventory().add(guideBook)) {
+                // Drop at player's feet if inventory is full
+                player.drop(guideBook, false);
+            }
+            context.getSource().sendSuccess(() ->
+                Component.literal("§aYou received a StateCraft Economy Recipe Guide!"), false);
             return 1;
         } catch (Exception e) {
             context.getSource().sendFailure(Component.literal("This command must be run by a player!"));
@@ -288,8 +324,8 @@ public class EconomyCommands {
             ServerPlayer player = context.getSource().getPlayerOrException();
             double amount = DoubleArgumentType.getDouble(context, "amount");
 
-            if (!StateCraftIntegration.isNationAdmin(player)) {
-                context.getSource().sendFailure(Component.literal("§cOnly nation admins can withdraw from treasury!"));
+            if (!StateCraftIntegration.isNationLeaderOrOfficer(player)) {
+                context.getSource().sendFailure(Component.literal("§cOnly the nation leader or officers can withdraw from treasury!"));
                 return 0;
             }
 
@@ -299,10 +335,23 @@ public class EconomyCommands {
                 return 0;
             }
 
+            // Check daily spending limit
+            SpendingLimitManager spendingMgr = SpendingLimitManager.getInstance();
+            SpendingLimitManager.GovernmentRole role =
+                StateCraftIntegration.getPlayerGovernmentRole(player, "NATION", nationId);
+            String limitError = spendingMgr.checkSpendingLimit(
+                player.getUUID(), "NATION", nationId, amount, role, nationId);
+            if (limitError != null) {
+                context.getSource().sendFailure(Component.literal("§c" + limitError));
+                return 0;
+            }
+
             EconomyManager manager = EconomyManager.getInstance();
             TransactionResult result = manager.withdrawFromNation(nationId, player.getUUID(), amount, "Nation withdrawal");
 
             if (result.isSuccess()) {
+                // Record spending against daily limit
+                spendingMgr.recordSpending(player.getUUID(), "NATION", nationId, amount);
                 context.getSource().sendSuccess(() -> Component.literal("§a" + result.getMessage()), false);
             } else {
                 context.getSource().sendFailure(Component.literal("§c" + result.getMessage()));
@@ -316,6 +365,183 @@ public class EconomyCommands {
     }
 
     // ==================== Tax Commands ====================
+
+    /**
+     * Show a player their property tax payment history and current chunk ownership summary.
+     * Available to all players (no permission required).
+     */
+    private static int showTaxHistory(CommandContext<CommandSourceStack> context) {
+        try {
+            ServerPlayer player = context.getSource().getPlayerOrException();
+            UUID playerId = player.getUUID();
+            EconomyManager ecoManager = EconomyManager.getInstance();
+            TaxationManager taxManager = TaxationManager.getInstance();
+
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§6§l=== Property Tax History ==="), false);
+
+            // 1. Get player's current chunk ownership via StateCraft integration
+            int chunksOwned = 0;
+            double totalEstimatedNextTax = 0;
+            Map<String, List<ChunkTaxEntry>> chunksByCity = new LinkedHashMap<>();
+
+            if (StateCraftEconomy.isStateCraftLoaded() && StateCraftIntegration.isInitialized()) {
+                List<TaxationManager.ChunkTaxInfo> allTaxable =
+                    StateCraftIntegration.getAllTaxableChunks(context.getSource().getServer());
+
+                ChunkValuationManager valuationManager = ChunkValuationManager.getInstance();
+
+                for (TaxationManager.ChunkTaxInfo chunk : allTaxable) {
+                    if (playerId.equals(chunk.getOwnerId())) {
+                        chunksOwned++;
+
+                        // Get chunk valuation and tax rate
+                        ChunkValuation valuation = valuationManager.getValuation(
+                            chunk.getChunkX(), chunk.getChunkZ(), chunk.getDimension());
+                        double chunkValue = valuation.getTotalValue();
+                        double taxRate = taxManager.getTaxRateForCity(chunk.getCityId());
+                        double estimatedTax = chunkValue * taxRate;
+                        totalEstimatedNextTax += estimatedTax;
+
+                        // Group by city
+                        String cityName = StateCraftIntegration.getCityName(chunk.getCityId());
+                        if (cityName == null || cityName.isEmpty()) cityName = "Unknown City";
+
+                        chunksByCity.computeIfAbsent(cityName, k -> new ArrayList<>())
+                            .add(new ChunkTaxEntry(chunk.getChunkX(), chunk.getChunkZ(),
+                                chunkValue, taxRate, estimatedTax));
+                    }
+                }
+            }
+
+            // 2. Scan transaction history for property tax payments
+            List<Transaction> history = ecoManager.getTransactionHistory(playerId);
+            double totalTaxPaid = 0;
+            int taxPaymentCount = 0;
+            long oldestTaxTimestamp = Long.MAX_VALUE;
+            long newestTaxTimestamp = 0;
+
+            for (Transaction tx : history) {
+                String desc = tx.getDescription();
+                if (desc != null && desc.contains("Property tax for chunk")) {
+                    double amt = tx.getAmount();
+                    totalTaxPaid += amt;
+                    taxPaymentCount++;
+                    if (tx.getTimestamp() < oldestTaxTimestamp) oldestTaxTimestamp = tx.getTimestamp();
+                    if (tx.getTimestamp() > newestTaxTimestamp) newestTaxTimestamp = tx.getTimestamp();
+                }
+            }
+
+            // 3. Display summary
+            final int finalChunksOwned = chunksOwned;
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§7Chunks Owned: §f" + finalChunksOwned), false);
+
+            double balance = ecoManager.getBalance(playerId);
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§7Current Balance: §f" + ecoManager.formatCurrency(balance)), false);
+
+            // Tax payment summary
+            if (taxPaymentCount > 0) {
+                final double finalTotalTaxPaid = totalTaxPaid;
+                final int finalTaxPaymentCount = taxPaymentCount;
+
+                context.getSource().sendSuccess(() -> Component.literal(
+                    "§7Total Tax Paid: §c" + ecoManager.formatCurrency(finalTotalTaxPaid) +
+                    " §8(" + finalTaxPaymentCount + " payments)"), false);
+
+                // Date range
+                SimpleDateFormat sdf = new SimpleDateFormat("MMM dd, HH:mm");
+                final String oldestStr = sdf.format(new Date(oldestTaxTimestamp));
+                final String newestStr = sdf.format(new Date(newestTaxTimestamp));
+                context.getSource().sendSuccess(() -> Component.literal(
+                    "§7Period: §8" + oldestStr + " — " + newestStr), false);
+
+                // Average per payment
+                final double avgPerPayment = totalTaxPaid / taxPaymentCount;
+                context.getSource().sendSuccess(() -> Component.literal(
+                    "§7Avg per Collection: §c" + ecoManager.formatCurrency(avgPerPayment)), false);
+            } else {
+                context.getSource().sendSuccess(() -> Component.literal(
+                    "§7Total Tax Paid: §a$0.00 §8(no tax payments on record)"), false);
+            }
+
+            // 4. Estimated next tax period
+            if (chunksOwned > 0) {
+                final double finalEstimate = totalEstimatedNextTax;
+                context.getSource().sendSuccess(() -> Component.literal(
+                    "§7Est. Next Period: §e" + ecoManager.formatCurrency(finalEstimate)), false);
+
+                // Tax affordability check
+                int periodsAffordable = totalEstimatedNextTax > 0
+                    ? (int) Math.floor(balance / totalEstimatedNextTax)
+                    : Integer.MAX_VALUE;
+
+                if (periodsAffordable <= 0) {
+                    context.getSource().sendSuccess(() -> Component.literal(
+                        "§c⚠ WARNING: Insufficient funds for next tax period!"), false);
+                } else if (periodsAffordable <= 3) {
+                    final int finalPeriods = periodsAffordable;
+                    context.getSource().sendSuccess(() -> Component.literal(
+                        "§e⚠ Funds cover ~" + finalPeriods + " tax period(s)"), false);
+                } else {
+                    final int finalPeriods = periodsAffordable;
+                    context.getSource().sendSuccess(() -> Component.literal(
+                        "§7Funds cover: §a~" + finalPeriods + " tax periods"), false);
+                }
+            }
+
+            // 5. Per-city chunk breakdown (max 5 cities, 3 chunks each)
+            if (!chunksByCity.isEmpty()) {
+                context.getSource().sendSuccess(() -> Component.literal(
+                    "§6§l--- Per-City Breakdown ---"), false);
+
+                int cityCount = 0;
+                for (Map.Entry<String, List<ChunkTaxEntry>> entry : chunksByCity.entrySet()) {
+                    if (cityCount >= 5) {
+                        final int remaining = chunksByCity.size() - 5;
+                        context.getSource().sendSuccess(() -> Component.literal(
+                            "§8  +" + remaining + " more cities..."), false);
+                        break;
+                    }
+
+                    String cityName = entry.getKey();
+                    List<ChunkTaxEntry> chunks = entry.getValue();
+                    double cityTotalTax = chunks.stream().mapToDouble(c -> c.estimatedTax).sum();
+
+                    context.getSource().sendSuccess(() -> Component.literal(
+                        "§e" + cityName + " §7(" + chunks.size() + " chunks, " +
+                        "tax rate: §f" + String.format("%.1f%%", chunks.get(0).taxRate * 100) +
+                        "§7, est: §c" + ecoManager.formatCurrency(cityTotalTax) + "§7)"), false);
+
+                    // Show up to 3 individual chunks
+                    int chunkCount = 0;
+                    for (ChunkTaxEntry chunk : chunks) {
+                        if (chunkCount >= 3) {
+                            final int moreChunks = chunks.size() - 3;
+                            context.getSource().sendSuccess(() -> Component.literal(
+                                "§8    +" + moreChunks + " more chunks..."), false);
+                            break;
+                        }
+                        context.getSource().sendSuccess(() -> Component.literal(
+                            "§8    (" + chunk.chunkX + ", " + chunk.chunkZ + ") " +
+                            "§7val: §f" + ecoManager.formatCurrency(chunk.value) +
+                            " §7tax: §c" + ecoManager.formatCurrency(chunk.estimatedTax)), false);
+                        chunkCount++;
+                    }
+                    cityCount++;
+                }
+            }
+
+            return 1;
+        } catch (Exception e) {
+            context.getSource().sendFailure(Component.literal("This command must be run by a player!"));
+            return 0;
+        }
+    }
+
+    /** Helper record for per-chunk tax breakdown display */
+    private record ChunkTaxEntry(int chunkX, int chunkZ, double value, double taxRate, double estimatedTax) {}
 
     private static int forceCollectTax(CommandContext<CommandSourceStack> context) {
         TaxationManager taxManager = TaxationManager.getInstance();

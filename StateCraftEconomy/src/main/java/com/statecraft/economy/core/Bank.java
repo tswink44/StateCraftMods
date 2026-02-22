@@ -23,7 +23,7 @@ public class Bank {
         this.id = id;
         this.name = name;
         this.displayName = displayName;
-        this.interestRate = 0.02; // Default 2% annual interest
+        this.interestRate = 0.0; // No interest by default; player-made banks set their own rate via BankCompany
         this.withdrawalFee = 0.0;
         this.transferFee = 0.0;
         this.allowsLoans = false;

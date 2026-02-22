@@ -130,14 +130,21 @@ public class MailInboxScreen extends StateCraftScreen {
 
             // Subject (truncated)
             String readColor = entry.read ? "§7" : "§f";
+            String currencyPrefix = "";
+            if (entry.attachedCurrency > 0 && !entry.currencyClaimed) {
+                currencyPrefix = "§a💰 ";
+            } else if (entry.attachedCurrency > 0 && entry.currencyClaimed) {
+                currencyPrefix = "§8💰 ";
+            }
             String subject = entry.subject;
-            if (this.font.width(subject) > listWidth - 100) {
-                while (this.font.width(subject + "...") > listWidth - 100 && subject.length() > 0) {
+            int maxSubjectWidth = listWidth - 100 - (currencyPrefix.isEmpty() ? 0 : 14);
+            if (this.font.width(subject) > maxSubjectWidth) {
+                while (this.font.width(subject + "...") > maxSubjectWidth && subject.length() > 0) {
                     subject = subject.substring(0, subject.length() - 1);
                 }
                 subject += "...";
             }
-            graphics.drawString(this.font, readColor + subject, listX + 20, entryY + 3, COLOR_TEXT);
+            graphics.drawString(this.font, currencyPrefix + readColor + subject, listX + 20, entryY + 3, COLOR_TEXT);
 
             // Sender and time
             String senderInfo = "§8" + entry.senderName;
@@ -218,7 +225,8 @@ public class MailInboxScreen extends StateCraftScreen {
 
     private void openMailView(MailEntry entry) {
         this.minecraft.setScreen(new MailViewScreen(entry.mailId, entry.subject, entry.body,
-            entry.senderName, entry.timeAgo, entry.type));
+            entry.senderName, entry.timeAgo, entry.type,
+            entry.attachedCurrency, entry.currencyClaimed));
     }
 
     private void goBack() {
@@ -253,9 +261,12 @@ public class MailInboxScreen extends StateCraftScreen {
         public final String timeAgo;
         public final Mail.MailType type;
         public boolean read;
+        public final double attachedCurrency;
+        public final boolean currencyClaimed;
 
         public MailEntry(String mailId, String subject, String body, String senderName,
-                        String timeAgo, Mail.MailType type, boolean read) {
+                        String timeAgo, Mail.MailType type, boolean read,
+                        double attachedCurrency, boolean currencyClaimed) {
             this.mailId = mailId;
             this.subject = subject;
             this.body = body;
@@ -263,6 +274,8 @@ public class MailInboxScreen extends StateCraftScreen {
             this.timeAgo = timeAgo;
             this.type = type;
             this.read = read;
+            this.attachedCurrency = attachedCurrency;
+            this.currencyClaimed = currencyClaimed;
         }
     }
 }

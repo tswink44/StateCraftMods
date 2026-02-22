@@ -15,7 +15,6 @@ public class Nation {
     private final UUID id;
     private String name;
     private UUID leaderId; // Nation leader/ruler
-    private final Set<UUID> admins; // Co-leaders with administrative powers
     private final Set<UUID> officers; // Legislature voting members appointed by leader
     private final Set<UUID> members; // Basic nation members (not in a city yet)
     private final Map<UUID, State> states;
@@ -25,6 +24,7 @@ public class Nation {
     // Nation settings
     private int maxStates;
     private int maxChunksPerCity;
+    private int maxChunksPerPlayer; // 0 = use server config (which 0 = unlimited)
     private int defaultMaxCitiesPerState; // Default max cities for new states
     private String description;
     private String tag; // Short tag/prefix for chat
@@ -35,20 +35,19 @@ public class Nation {
     private double baseChunkValue; // Base valuation for chunks in the nation (default $100)
     private double chunkClaimFee; // Fee cities pay to nation when claiming chunks
     private double salesTaxRate; // Nation's sales tax rate (e.g., 0.20 = 20%) - set via legislature
+    private double importTariffRate; // Import tariff on cross-nation marketplace purchases (buyer-side, 0-50%)
+    private double emergencyTaxRate; // Nation's emergency tax rate (0 = use server config, e.g. 0.10 = 10%)
 
     // Constitutional settings (can only be changed via constitutional amendment)
     private int leaderTermDays = 7;       // Default: 7 days term for leader
     private int electionDurationDays = 1; // Default: 1 day election duration
     private int maxOfficers = 3;          // Default: max 3 officers (can be 0-3)
 
-    // Treasury (for future economy integration)
-    private long balance;
 
     public Nation(UUID id, String name, UUID leaderId) {
         this.id = id;
         this.name = name;
         this.leaderId = leaderId;
-        this.admins = new HashSet<>();
         this.officers = new HashSet<>();
         this.members = new HashSet<>();
         this.states = new HashMap<>();
@@ -56,6 +55,7 @@ public class Nation {
         this.enemies = new HashSet<>();
         this.maxStates = 5; // Default max states
         this.maxChunksPerCity = 50; // Default max chunks per city
+        this.maxChunksPerPlayer = 0; // Default: use server config
         this.defaultMaxCitiesPerState = 10; // Default max cities per state
         this.description = "";
         this.tag = "";
@@ -66,7 +66,8 @@ public class Nation {
         this.baseChunkValue = 100.0; // Default $100
         this.chunkClaimFee = 0.0; // Default: no fee
         this.salesTaxRate = 0.0; // Default: no nation sales tax (set via legislature)
-        this.balance = 0;
+        this.importTariffRate = 0.0; // Default: no import tariff (set via legislature)
+        this.emergencyTaxRate = 0.0; // Default: use server config (set via legislature)
     }
 
     public UUID getId() {
@@ -89,20 +90,13 @@ public class Nation {
         this.leaderId = leaderId;
     }
 
-    public Set<UUID> getAdmins() {
-        return Collections.unmodifiableSet(admins);
-    }
 
-    public void addAdmin(UUID playerId) {
-        admins.add(playerId);
-    }
-
-    public void removeAdmin(UUID playerId) {
-        admins.remove(playerId);
-    }
-
-    public boolean isAdmin(UUID playerId) {
-        return admins.contains(playerId) || playerId.equals(leaderId);
+    /**
+     * Check if player is the nation leader or an officer.
+     * Officers have elevated permissions but not full leader powers.
+     */
+    public boolean isLeaderOrOfficer(UUID playerId) {
+        return playerId.equals(leaderId) || officers.contains(playerId);
     }
 
     public Set<UUID> getOfficers() {
@@ -131,7 +125,6 @@ public class Nation {
 
     public void removeMember(UUID playerId) {
         members.remove(playerId);
-        admins.remove(playerId);
         officers.remove(playerId);
     }
 
@@ -153,6 +146,18 @@ public class Nation {
 
     public void setMaxChunksPerCity(int maxChunksPerCity) {
         this.maxChunksPerCity = maxChunksPerCity;
+    }
+
+    /**
+     * Get the max chunks per player for this nation.
+     * 0 means use the server config value. Config 0 means unlimited.
+     */
+    public int getMaxChunksPerPlayer() {
+        return maxChunksPerPlayer;
+    }
+
+    public void setMaxChunksPerPlayer(int maxChunksPerPlayer) {
+        this.maxChunksPerPlayer = Math.max(0, maxChunksPerPlayer);
     }
 
     public int getDefaultMaxCitiesPerState() {
@@ -282,6 +287,31 @@ public class Nation {
         this.salesTaxRate = Math.max(0, Math.min(0.5, salesTaxRate));
     }
 
+    public double getImportTariffRate() {
+        return importTariffRate;
+    }
+
+    public void setImportTariffRate(double importTariffRate) {
+        // Clamp between 0 and 0.5 (0% to 50%)
+        this.importTariffRate = Math.max(0, Math.min(0.5, importTariffRate));
+    }
+
+    /**
+     * Get the nation's emergency tax rate. 0 = use server config default.
+     */
+    public double getEmergencyTaxRate() {
+        return emergencyTaxRate;
+    }
+
+    /**
+     * Set the nation's emergency tax rate. Clamped to server max.
+     * 0 = use server default.
+     */
+    public void setEmergencyTaxRate(double rate) {
+        double maxRate = StateCraftConfig.MAX_EMERGENCY_TAX_RATE.get();
+        this.emergencyTaxRate = Math.max(0, Math.min(maxRate, rate));
+    }
+
     // Constitutional settings getters and setters
 
     /**
@@ -340,25 +370,6 @@ public class Nation {
         return officers.size() < maxOfficers;
     }
 
-    public long getBalance() {
-        return balance;
-    }
-
-    public void setBalance(long balance) {
-        this.balance = balance;
-    }
-
-    public void deposit(long amount) {
-        this.balance += amount;
-    }
-
-    public boolean withdraw(long amount) {
-        if (this.balance >= amount) {
-            this.balance -= amount;
-            return true;
-        }
-        return false;
-    }
 
     // Diplomacy
     public Set<UUID> getAllies() {
@@ -470,7 +481,7 @@ public class Nation {
     public Set<UUID> getAllMembers() {
         Set<UUID> allMembers = new HashSet<>();
         allMembers.add(leaderId);
-        allMembers.addAll(admins);
+        allMembers.addAll(officers);
         allMembers.addAll(members);
         for (State state : states.values()) {
             allMembers.addAll(state.getAllResidents());
@@ -486,7 +497,7 @@ public class Nation {
         if (playerId.equals(leaderId)) {
             return PermissionLevel.OWNER;
         }
-        if (admins.contains(playerId)) {
+        if (officers.contains(playerId)) {
             return PermissionLevel.ADMIN;
         }
         // Check state/city membership
@@ -507,31 +518,25 @@ public class Nation {
         tag.putUUID("leaderId", leaderId);
         tag.putInt("maxStates", maxStates);
         tag.putInt("maxChunksPerCity", maxChunksPerCity);
+        tag.putInt("maxChunksPerPlayer", maxChunksPerPlayer);
         tag.putInt("defaultMaxCitiesPerState", defaultMaxCitiesPerState);
         tag.putString("description", description);
         tag.putString("tag", this.tag);
         tag.putBoolean("open", open);
         tag.putBoolean("openBorders", openBorders);
         tag.putString("flagUrl", flagUrl);
-        tag.putLong("balance", balance);
         tag.putDouble("statePassThroughRate", statePassThroughRate);
         tag.putDouble("baseChunkValue", baseChunkValue);
         tag.putDouble("chunkClaimFee", chunkClaimFee);
         tag.putDouble("salesTaxRate", salesTaxRate);
+        tag.putDouble("importTariffRate", importTariffRate);
+        tag.putDouble("emergencyTaxRate", emergencyTaxRate);
 
         // Constitutional settings
         tag.putInt("leaderTermDays", leaderTermDays);
         tag.putInt("electionDurationDays", electionDurationDays);
         tag.putInt("maxOfficers", maxOfficers);
 
-        // Save admins
-        ListTag adminsList = new ListTag();
-        for (UUID admin : admins) {
-            CompoundTag adminTag = new CompoundTag();
-            adminTag.putUUID("id", admin);
-            adminsList.add(adminTag);
-        }
-        tag.put("admins", adminsList);
 
         // Save officers
         ListTag officersList = new ListTag();
@@ -587,27 +592,32 @@ public class Nation {
         Nation nation = new Nation(id, name, leaderId);
         nation.maxStates = tag.getInt("maxStates");
         nation.maxChunksPerCity = tag.getInt("maxChunksPerCity");
+        nation.maxChunksPerPlayer = tag.contains("maxChunksPerPlayer") ? tag.getInt("maxChunksPerPlayer") : 0;
         nation.defaultMaxCitiesPerState = tag.contains("defaultMaxCitiesPerState") ? tag.getInt("defaultMaxCitiesPerState") : 10;
         nation.description = tag.getString("description");
         nation.tag = tag.getString("tag");
         nation.open = tag.getBoolean("open");
         nation.openBorders = tag.contains("openBorders") ? tag.getBoolean("openBorders") : false;
         nation.flagUrl = tag.getString("flagUrl");
-        nation.balance = tag.getLong("balance");
+        // Note: "balance" key in old saves is ignored — treasury is managed by EconomyManager
         nation.statePassThroughRate = tag.contains("statePassThroughRate") ? tag.getDouble("statePassThroughRate") : 0.20;
         nation.baseChunkValue = tag.contains("baseChunkValue") ? tag.getDouble("baseChunkValue") : 100.0;
         nation.chunkClaimFee = tag.contains("chunkClaimFee") ? tag.getDouble("chunkClaimFee") : 0.0;
         nation.salesTaxRate = tag.contains("salesTaxRate") ? tag.getDouble("salesTaxRate") : 0.0;
+        nation.importTariffRate = tag.contains("importTariffRate") ? tag.getDouble("importTariffRate") : 0.0;
+        nation.emergencyTaxRate = tag.contains("emergencyTaxRate") ? tag.getDouble("emergencyTaxRate") : 0.0;
 
         // Constitutional settings (with defaults for backwards compatibility)
         nation.leaderTermDays = tag.contains("leaderTermDays") ? tag.getInt("leaderTermDays") : 7;
         nation.electionDurationDays = tag.contains("electionDurationDays") ? tag.getInt("electionDurationDays") : 1;
         nation.maxOfficers = tag.contains("maxOfficers") ? tag.getInt("maxOfficers") : 3;
 
-        // Load admins
+        // Load admins (legacy — migrate to officers)
         ListTag adminsList = tag.getList("admins", Tag.TAG_COMPOUND);
         for (int i = 0; i < adminsList.size(); i++) {
-            nation.admins.add(adminsList.getCompound(i).getUUID("id"));
+            UUID adminId = adminsList.getCompound(i).getUUID("id");
+            // Migrate old admins into the officers set (admin role no longer exists)
+            nation.officers.add(adminId);
         }
 
         // Load officers

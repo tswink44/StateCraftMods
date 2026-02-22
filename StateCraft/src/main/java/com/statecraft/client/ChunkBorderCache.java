@@ -1,5 +1,6 @@
 package com.statecraft.client;
 
+import com.statecraft.integration.IntegrationRegistry;
 import com.statecraft.network.NetworkHandler;
 import com.statecraft.network.packets.RequestChunkBordersPacket;
 import net.minecraft.client.Minecraft;
@@ -92,6 +93,8 @@ public class ChunkBorderCache {
         clearArea(centerX, centerZ, radius);
         // Then add only the claimed chunks
         cache.putAll(newData);
+        // Notify minimap integrations of updated territory data
+        IntegrationRegistry.notifyMinimapChunkDataUpdated(centerX, centerZ, radius);
     }
 
     /**
@@ -123,6 +126,8 @@ public class ChunkBorderCache {
         cache.clear();
         lastChunkX = Integer.MIN_VALUE;
         lastChunkZ = Integer.MIN_VALUE;
+        // Notify minimap integrations of dimension change
+        IntegrationRegistry.notifyMinimapDimensionChange();
     }
 
     private static long chunkKey(int x, int z) {

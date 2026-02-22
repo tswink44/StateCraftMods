@@ -2,6 +2,7 @@ package com.statecraft.economy.integration;
 
 import com.statecraft.economy.StateCraftEconomy;
 import com.statecraft.economy.core.EconomyManager;
+import com.statecraft.economy.core.SpendingLimitManager;
 import com.statecraft.economy.core.TransactionResult;
 import com.statecraft.economy.network.NetworkHandler;
 import com.statecraft.economy.network.packets.NationTreasuryPacket;
@@ -68,7 +69,24 @@ public class StateCraftIntegration {
                         case "onCityDisbanded" -> economyIntegrationImpl.onCityDisbanded((UUID) args[0]);
                         case "getPlayerBalance" -> { return economyIntegrationImpl.getPlayerBalance((UUID) args[0]); }
                         case "withdrawFromPlayer" -> { return economyIntegrationImpl.withdrawFromPlayer((UUID) args[0], (Double) args[1], (String) args[2]); }
+                        case "depositToPlayer" -> { return economyIntegrationImpl.depositToPlayer((UUID) args[0], (Double) args[1], (String) args[2]); }
+                        case "getNationBalance" -> { return economyIntegrationImpl.getNationBalance((String) args[0]); }
+                        case "withdrawFromNation" -> { return economyIntegrationImpl.withdrawFromNation((String) args[0], (Double) args[1], (String) args[2]); }
+                        case "forceWithdrawFromNation" -> { return economyIntegrationImpl.forceWithdrawFromNation((String) args[0], (Double) args[1], (String) args[2]); }
+                        case "depositToNation" -> { return economyIntegrationImpl.depositToNation((String) args[0], (Double) args[1], (String) args[2]); }
                         case "formatCurrency" -> { return economyIntegrationImpl.formatCurrency((Double) args[0]); }
+                        case "getChunkImprovementScore" -> { return economyIntegrationImpl.getChunkImprovementScore((Integer) args[0], (Integer) args[1], (String) args[2]); }
+                        case "getChunkTotalValue" -> { return economyIntegrationImpl.getChunkTotalValue((Integer) args[0], (Integer) args[1], (String) args[2]); }
+                        case "onCompanyCreated" -> economyIntegrationImpl.onCompanyCreated((UUID) args[0]);
+                        case "onCompanyDissolving" -> { return economyIntegrationImpl.onCompanyDissolving((UUID) args[0], (UUID) args[1]); }
+                        case "getCompanyBalance" -> { return economyIntegrationImpl.getCompanyBalance((UUID) args[0]); }
+                        case "isDividendsEnabled" -> { return economyIntegrationImpl.isDividendsEnabled((UUID) args[0]); }
+                        case "getDividendRate" -> { return economyIntegrationImpl.getDividendRate((UUID) args[0]); }
+                        case "getDividendPeriodTicks" -> { return economyIntegrationImpl.getDividendPeriodTicks((UUID) args[0]); }
+                        case "setDividendConfig" -> economyIntegrationImpl.setDividendConfig((UUID) args[0], (Boolean) args[1], (Double) args[2], (Long) args[3]);
+                        case "setDividendsEnabled" -> economyIntegrationImpl.setDividendsEnabled((UUID) args[0], (Boolean) args[1]);
+                        case "setDividendRate" -> economyIntegrationImpl.setDividendRate((UUID) args[0], (Double) args[1]);
+                        case "setDividendPeriodTicks" -> economyIntegrationImpl.setDividendPeriodTicks((UUID) args[0], (Long) args[1]);
                     }
                     return null;
                 }
@@ -154,12 +172,194 @@ public class StateCraftIntegration {
             return result.isSuccess();
         }
 
+        public boolean depositToPlayer(UUID playerId, double amount, String description) {
+            EconomyManager manager = EconomyManager.getInstance();
+            var result = manager.deposit(playerId, amount, description);
+            return result.isSuccess();
+        }
+
+        public double getNationBalance(String nationName) {
+            // Look up nation by name and get its treasury balance
+            try {
+                var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
+                var getInstance = managerClass.getMethod("getInstance");
+                var claimManager = getInstance.invoke(null);
+
+                var getNationByName = managerClass.getMethod("getNationByName", String.class);
+                var nation = getNationByName.invoke(claimManager, nationName);
+
+                if (nation != null) {
+                    var nationClass = Class.forName("com.statecraft.core.Nation");
+                    var getId = nationClass.getMethod("getId");
+                    UUID nationId = (UUID) getId.invoke(nation);
+
+                    EconomyManager manager = EconomyManager.getInstance();
+                    return manager.getNationTreasuryBalance(nationId);
+                }
+            } catch (Exception e) {
+                StateCraftEconomy.LOGGER.warn("Error getting nation balance for '{}': {}", nationName, e.getMessage());
+            }
+            return 0.0;
+        }
+
+        public boolean withdrawFromNation(String nationName, double amount, String description) {
+            try {
+                var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
+                var getInstance = managerClass.getMethod("getInstance");
+                var claimManager = getInstance.invoke(null);
+
+                var getNationByName = managerClass.getMethod("getNationByName", String.class);
+                var nation = getNationByName.invoke(claimManager, nationName);
+
+                if (nation != null) {
+                    var nationClass = Class.forName("com.statecraft.core.Nation");
+                    var getId = nationClass.getMethod("getId");
+                    UUID nationId = (UUID) getId.invoke(nation);
+
+                    EconomyManager manager = EconomyManager.getInstance();
+                    var result = manager.withdrawFromNationTreasury(nationId, amount, description);
+                    return result.isSuccess();
+                }
+            } catch (Exception e) {
+                StateCraftEconomy.LOGGER.warn("Error withdrawing from nation '{}': {}", nationName, e.getMessage());
+            }
+            return false;
+        }
+
+        public boolean forceWithdrawFromNation(String nationName, double amount, String description) {
+            try {
+                var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
+                var getInstance = managerClass.getMethod("getInstance");
+                var claimManager = getInstance.invoke(null);
+
+                var getNationByName = managerClass.getMethod("getNationByName", String.class);
+                var nation = getNationByName.invoke(claimManager, nationName);
+
+                if (nation != null) {
+                    var nationClass = Class.forName("com.statecraft.core.Nation");
+                    var getId = nationClass.getMethod("getId");
+                    UUID nationId = (UUID) getId.invoke(nation);
+
+                    EconomyManager manager = EconomyManager.getInstance();
+                    var result = manager.forceWithdrawFromNationTreasury(nationId, amount, description);
+                    return result.isSuccess();
+                }
+            } catch (Exception e) {
+                StateCraftEconomy.LOGGER.warn("Error force-withdrawing from nation '{}': {}", nationName, e.getMessage());
+            }
+            return false;
+        }
+
+        public boolean depositToNation(String nationName, double amount, String description) {
+            try {
+                var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
+                var getInstance = managerClass.getMethod("getInstance");
+                var claimManager = getInstance.invoke(null);
+
+                var getNationByName = managerClass.getMethod("getNationByName", String.class);
+                var nation = getNationByName.invoke(claimManager, nationName);
+
+                if (nation != null) {
+                    var nationClass = Class.forName("com.statecraft.core.Nation");
+                    var getId = nationClass.getMethod("getId");
+                    UUID nationId = (UUID) getId.invoke(nation);
+
+                    EconomyManager manager = EconomyManager.getInstance();
+                    var result = manager.depositToNationTreasury(nationId, amount, description);
+                    return result.isSuccess();
+                }
+            } catch (Exception e) {
+                StateCraftEconomy.LOGGER.warn("Error depositing to nation '{}': {}", nationName, e.getMessage());
+            }
+            return false;
+        }
+
         public String formatCurrency(double amount) {
             EconomyManager manager = EconomyManager.getInstance();
             if (manager != null) {
                 return manager.formatCurrency(amount);
             }
             return String.format("$%.2f", amount);
+        }
+
+        public int getChunkImprovementScore(int chunkX, int chunkZ, String dimension) {
+            com.statecraft.economy.valuation.ImprovementTracker tracker =
+                com.statecraft.economy.valuation.ImprovementTracker.getInstance();
+            return tracker.getScoreNoScan(chunkX, chunkZ, dimension);
+        }
+
+        public double getChunkTotalValue(int chunkX, int chunkZ, String dimension) {
+            com.statecraft.economy.valuation.ChunkValuationManager valuationManager =
+                com.statecraft.economy.valuation.ChunkValuationManager.getInstance();
+            com.statecraft.economy.valuation.ChunkValuation valuation =
+                valuationManager.getValuation(chunkX, chunkZ, dimension);
+            return valuation != null ? valuation.getTotalValue() : 0;
+        }
+
+        // ==================== Company Economy ====================
+
+        public void onCompanyCreated(UUID companyId) {
+            EconomyManager.getInstance().getOrCreateCompanyTreasury(companyId);
+            StateCraftEconomy.LOGGER.info("Created treasury account for company {}", companyId);
+        }
+
+        public void onBankCreated(UUID companyId) {
+            com.statecraft.economy.company.BankManager.getInstance().createBank(companyId);
+            StateCraftEconomy.LOGGER.info("Initialized bank for company {}", companyId);
+        }
+
+        public boolean onCompanyDissolving(UUID companyId, UUID founderId) {
+            return com.statecraft.economy.company.CompanyEconomyManager.getInstance()
+                .dissolveCompany(companyId, founderId);
+        }
+
+        public double getCompanyBalance(UUID companyId) {
+            return EconomyManager.getInstance().getCompanyBalance(companyId);
+        }
+
+        public boolean isDividendsEnabled(UUID companyId) {
+            var config = com.statecraft.economy.company.CompanyEconomyManager.getInstance()
+                .getDividendConfig(companyId);
+            return config != null && config.isEnabled();
+        }
+
+        public double getDividendRate(UUID companyId) {
+            var config = com.statecraft.economy.company.CompanyEconomyManager.getInstance()
+                .getDividendConfig(companyId);
+            return config != null ? config.getRate() : 0;
+        }
+
+        public long getDividendPeriodTicks(UUID companyId) {
+            var config = com.statecraft.economy.company.CompanyEconomyManager.getInstance()
+                .getDividendConfig(companyId);
+            return config != null ? config.getPeriodTicks() : 72000;
+        }
+
+        public void setDividendConfig(UUID companyId, boolean enabled, double rate, long periodTicks) {
+            var mgr = com.statecraft.economy.company.CompanyEconomyManager.getInstance();
+            var config = mgr.getOrCreateDividendConfig(companyId);
+            config.setEnabled(enabled);
+            config.setRate(rate);
+            config.setPeriodTicks(periodTicks);
+            mgr.markDirty();
+        }
+
+        public void setDividendsEnabled(UUID companyId, boolean enabled) {
+            var mgr = com.statecraft.economy.company.CompanyEconomyManager.getInstance();
+            mgr.getOrCreateDividendConfig(companyId).setEnabled(enabled);
+            mgr.markDirty();
+        }
+
+        public void setDividendRate(UUID companyId, double rate) {
+            var mgr = com.statecraft.economy.company.CompanyEconomyManager.getInstance();
+            mgr.getOrCreateDividendConfig(companyId).setRate(rate);
+            mgr.markDirty();
+        }
+
+        public void setDividendPeriodTicks(UUID companyId, long ticks) {
+            var mgr = com.statecraft.economy.company.CompanyEconomyManager.getInstance();
+            mgr.getOrCreateDividendConfig(companyId).setPeriodTicks(ticks);
+            mgr.markDirty();
         }
     }
 
@@ -238,6 +438,36 @@ public class StateCraftIntegration {
     }
 
     /**
+     * Check if an economic emergency is active for a nation.
+     * During economic emergency, only the nation leader can withdraw from the treasury.
+     */
+    public static boolean isEconomicEmergencyActive(UUID nationId) {
+        if (!initialized || nationId == null) return false;
+        try {
+            var emergencyManagerClass = Class.forName("com.statecraft.legislature.EmergencyPowerManager");
+            var isActive = emergencyManagerClass.getMethod("isEconomicEmergencyActive", UUID.class);
+            return (Boolean) isActive.invoke(null, nationId);
+        } catch (Exception e) {
+            // EmergencyPowerManager not available — no emergency
+            return false;
+        }
+    }
+
+    /**
+     * Check if a player is the leader of a specific nation.
+     */
+    public static boolean isNationLeader(UUID playerId, UUID nationId) {
+        if (!initialized || playerId == null || nationId == null) return false;
+        try {
+            var emergencyManagerClass = Class.forName("com.statecraft.legislature.EmergencyPowerManager");
+            var isLeader = emergencyManagerClass.getMethod("isLeaderOfNation", UUID.class, UUID.class);
+            return (Boolean) isLeader.invoke(null, playerId, nationId);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
      * Get the nation ID for a player
      */
     public static UUID getPlayerNationId(ServerPlayer player) {
@@ -264,9 +494,9 @@ public class StateCraftIntegration {
     }
 
     /**
-     * Check if player is nation admin
+     * Check if player is nation leader or officer.
      */
-    public static boolean isNationAdmin(ServerPlayer player) {
+    public static boolean isNationLeaderOrOfficer(ServerPlayer player) {
         if (!initialized) return false;
 
         try {
@@ -279,13 +509,197 @@ public class StateCraftIntegration {
 
             if (nation != null) {
                 var nationClass = Class.forName("com.statecraft.core.Nation");
-                var isAdmin = nationClass.getMethod("isAdmin", UUID.class);
-                return (Boolean) isAdmin.invoke(nation, player.getUUID());
+                var isLeaderOrOfficer = nationClass.getMethod("isLeaderOrOfficer", UUID.class);
+                return (Boolean) isLeaderOrOfficer.invoke(nation, player.getUUID());
             }
         } catch (Exception e) {
-            StateCraftEconomy.LOGGER.debug("Error checking nation admin: {}", e.getMessage());
+            StateCraftEconomy.LOGGER.debug("Error checking nation leader/officer: {}", e.getMessage());
         }
         return false;
+    }
+
+    /**
+     * Determine the player's role relative to a specific government account.
+     * Used for spending limit enforcement.
+     *
+     * @param player The player
+     * @param accountType "NATION", "STATE", or "CITY"
+     * @param accountId The UUID of the nation/state/city
+     * @return The player's role, or UNKNOWN if they don't have access
+     */
+    public static SpendingLimitManager.GovernmentRole getPlayerGovernmentRole(
+            ServerPlayer player, String accountType, UUID accountId) {
+        if (!initialized) return SpendingLimitManager.GovernmentRole.UNKNOWN;
+
+        try {
+            var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
+            var getInstance = managerClass.getMethod("getInstance");
+            var claimManager = getInstance.invoke(null);
+            UUID playerUUID = player.getUUID();
+
+            switch (accountType) {
+                case "NATION" -> {
+                    var getPlayerNation = managerClass.getMethod("getPlayerNation", UUID.class);
+                    var nation = getPlayerNation.invoke(claimManager, playerUUID);
+                    if (nation == null) return SpendingLimitManager.GovernmentRole.UNKNOWN;
+
+                    var nationClass = Class.forName("com.statecraft.core.Nation");
+                    var getId = nationClass.getMethod("getId");
+                    UUID nationId = (UUID) getId.invoke(nation);
+                    if (!nationId.equals(accountId)) return SpendingLimitManager.GovernmentRole.UNKNOWN;
+
+                    var getLeaderId = nationClass.getMethod("getLeaderId");
+                    UUID leaderId = (UUID) getLeaderId.invoke(nation);
+                    if (playerUUID.equals(leaderId)) {
+                        return SpendingLimitManager.GovernmentRole.NATION_LEADER;
+                    }
+
+                    var isLeaderOrOfficer = nationClass.getMethod("isLeaderOrOfficer", UUID.class);
+                    if ((Boolean) isLeaderOrOfficer.invoke(nation, playerUUID)) {
+                        return SpendingLimitManager.GovernmentRole.NATION_OFFICER;
+                    }
+                }
+                case "STATE" -> {
+                    var getPlayerNation = managerClass.getMethod("getPlayerNation", UUID.class);
+                    var nation = getPlayerNation.invoke(claimManager, playerUUID);
+                    if (nation == null) return SpendingLimitManager.GovernmentRole.UNKNOWN;
+
+                    var nationClass = Class.forName("com.statecraft.core.Nation");
+                    var getAllStates = nationClass.getMethod("getAllStates");
+                    @SuppressWarnings("unchecked")
+                    var states = (java.util.Collection<?>) getAllStates.invoke(nation);
+
+                    var stateClass = Class.forName("com.statecraft.core.State");
+                    var stateGetId = stateClass.getMethod("getId");
+                    var stateGetGovernorId = stateClass.getMethod("getGovernorId");
+
+                    for (Object state : states) {
+                        UUID stateId = (UUID) stateGetId.invoke(state);
+                        if (stateId.equals(accountId)) {
+                            UUID governorId = (UUID) stateGetGovernorId.invoke(state);
+                            if (playerUUID.equals(governorId)) {
+                                return SpendingLimitManager.GovernmentRole.STATE_GOVERNOR;
+                            }
+                            // Nation leader/officer accessing state account
+                            var getLeaderId = nationClass.getMethod("getLeaderId");
+                            UUID leaderId = (UUID) getLeaderId.invoke(nation);
+                            if (playerUUID.equals(leaderId)) {
+                                return SpendingLimitManager.GovernmentRole.NATION_LEADER;
+                            }
+                            var isLeaderOrOfficer = nationClass.getMethod("isLeaderOrOfficer", UUID.class);
+                            if ((Boolean) isLeaderOrOfficer.invoke(nation, playerUUID)) {
+                                return SpendingLimitManager.GovernmentRole.NATION_OFFICER;
+                            }
+                            break;
+                        }
+                    }
+                }
+                case "CITY" -> {
+                    var getPlayerNation = managerClass.getMethod("getPlayerNation", UUID.class);
+                    var nation = getPlayerNation.invoke(claimManager, playerUUID);
+                    if (nation == null) return SpendingLimitManager.GovernmentRole.UNKNOWN;
+
+                    var nationClass = Class.forName("com.statecraft.core.Nation");
+                    var getAllStates = nationClass.getMethod("getAllStates");
+                    @SuppressWarnings("unchecked")
+                    var states = (java.util.Collection<?>) getAllStates.invoke(nation);
+
+                    var stateClass = Class.forName("com.statecraft.core.State");
+                    var stateGetAllCities = stateClass.getMethod("getAllCities");
+                    var stateGetGovernorId = stateClass.getMethod("getGovernorId");
+
+                    var cityClass = Class.forName("com.statecraft.core.City");
+                    var cityGetId = cityClass.getMethod("getId");
+                    var cityGetMayorId = cityClass.getMethod("getMayorId");
+
+                    for (Object state : states) {
+                        @SuppressWarnings("unchecked")
+                        var cities = (java.util.Collection<?>) stateGetAllCities.invoke(state);
+                        for (Object city : cities) {
+                            UUID cityId = (UUID) cityGetId.invoke(city);
+                            if (cityId.equals(accountId)) {
+                                UUID mayorId = (UUID) cityGetMayorId.invoke(city);
+                                if (playerUUID.equals(mayorId)) {
+                                    return SpendingLimitManager.GovernmentRole.CITY_MAYOR;
+                                }
+                                UUID governorId = (UUID) stateGetGovernorId.invoke(state);
+                                if (playerUUID.equals(governorId)) {
+                                    return SpendingLimitManager.GovernmentRole.STATE_GOVERNOR;
+                                }
+                                var getLeaderId = nationClass.getMethod("getLeaderId");
+                                UUID leaderId = (UUID) getLeaderId.invoke(nation);
+                                if (playerUUID.equals(leaderId)) {
+                                    return SpendingLimitManager.GovernmentRole.NATION_LEADER;
+                                }
+                                var isLeaderOrOfficer = nationClass.getMethod("isLeaderOrOfficer", UUID.class);
+                                if ((Boolean) isLeaderOrOfficer.invoke(nation, playerUUID)) {
+                                    return SpendingLimitManager.GovernmentRole.NATION_OFFICER;
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.debug("Error determining government role: {}", e.getMessage());
+        }
+        return SpendingLimitManager.GovernmentRole.UNKNOWN;
+    }
+
+    /**
+     * Get the nation ID that a government account belongs to.
+     * For NATION accounts, this is the account ID itself.
+     * For STATE/CITY accounts, this finds the parent nation.
+     */
+    public static UUID getNationIdForAccount(String accountType, UUID accountId) {
+        if (!initialized) return null;
+        if ("NATION".equals(accountType)) return accountId;
+
+        try {
+            var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
+            var getInstance = managerClass.getMethod("getInstance");
+            var claimManager = getInstance.invoke(null);
+
+            var getAllNations = managerClass.getMethod("getAllNations");
+            @SuppressWarnings("unchecked")
+            var nations = (java.util.Collection<?>) getAllNations.invoke(claimManager);
+
+            var nationClass = Class.forName("com.statecraft.core.Nation");
+            var nationGetId = nationClass.getMethod("getId");
+            var getAllStates = nationClass.getMethod("getAllStates");
+
+            var stateClass = Class.forName("com.statecraft.core.State");
+            var stateGetId = stateClass.getMethod("getId");
+            var stateGetAllCities = stateClass.getMethod("getAllCities");
+
+            var cityClass = Class.forName("com.statecraft.core.City");
+            var cityGetId = cityClass.getMethod("getId");
+
+            for (Object nation : nations) {
+                UUID nationId = (UUID) nationGetId.invoke(nation);
+
+                @SuppressWarnings("unchecked")
+                var states = (java.util.Collection<?>) getAllStates.invoke(nation);
+                for (Object state : states) {
+                    if ("STATE".equals(accountType)) {
+                        UUID stateId = (UUID) stateGetId.invoke(state);
+                        if (stateId.equals(accountId)) return nationId;
+                    }
+                    if ("CITY".equals(accountType)) {
+                        @SuppressWarnings("unchecked")
+                        var cities = (java.util.Collection<?>) stateGetAllCities.invoke(state);
+                        for (Object city : cities) {
+                            UUID cityId = (UUID) cityGetId.invoke(city);
+                            if (cityId.equals(accountId)) return nationId;
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.debug("Error finding nation for account: {}", e.getMessage());
+        }
+        return null;
     }
 
     /**
@@ -311,15 +725,15 @@ public class StateCraftIntegration {
 
             if (nation != null) {
                 var nationClass = Class.forName("com.statecraft.core.Nation");
-                var isAdmin = nationClass.getMethod("isAdmin", UUID.class);
+                var isLeaderOrOfficer = nationClass.getMethod("isLeaderOrOfficer", UUID.class);
                 var getId = nationClass.getMethod("getId");
                 var getName = nationClass.getMethod("getName");
                 UUID nationId = (UUID) getId.invoke(nation);
                 String nationName = (String) getName.invoke(nation);
-                boolean isNationAdmin = (Boolean) isAdmin.invoke(nation, playerUUID);
+                boolean isNationLeaderOrOfficer = (Boolean) isLeaderOrOfficer.invoke(nation, playerUUID);
 
-                // Add nation account if player is admin
-                if (isNationAdmin) {
+                // Add nation account if player is leader or officer
+                if (isNationLeaderOrOfficer) {
                     accounts.add(new SyncAccountsPacket.AccountInfo(
                         "NATION",
                         nationName,
@@ -345,8 +759,8 @@ public class StateCraftIntegration {
                             UUID governorId = (UUID) stateGetGovernorId.invoke(state);
                             boolean isGovernor = playerUUID.equals(governorId);
 
-                            // Add state account if player is governor or nation admin
-                            if (isGovernor || isNationAdmin) {
+                            // Add state account if player is governor or nation leader/officer
+                            if (isGovernor || isNationLeaderOrOfficer) {
                                 UUID stateId = (UUID) stateGetId.invoke(state);
                                 String stateName = (String) stateGetName.invoke(state);
 
@@ -375,8 +789,8 @@ public class StateCraftIntegration {
                                         UUID governorIdForCity = (UUID) stateGetGovernorId.invoke(state);
                                         boolean isGovernorForCity = playerUUID.equals(governorIdForCity);
 
-                                        // Add city account if player is mayor, governor of parent state, or nation admin
-                                        if (isMayor || isGovernorForCity || isNationAdmin) {
+                                        // Add city account if player is mayor, governor of parent state, or nation leader/officer
+                                        if (isMayor || isGovernorForCity || isNationLeaderOrOfficer) {
                                             UUID cityId = (UUID) cityGetId.invoke(city);
                                             String cityName = (String) cityGetName.invoke(city);
 
@@ -403,6 +817,157 @@ public class StateCraftIntegration {
         }
 
         return accounts;
+    }
+
+    /**
+     * Check if a player is a member of a government entity (nation, state, or city)
+     */
+    public static boolean isPlayerMemberOfEntity(ServerPlayer player, String entityType, UUID entityId) {
+        if (!initialized) return false;
+
+        try {
+            var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
+            var getInstance = managerClass.getMethod("getInstance");
+            var claimManager = getInstance.invoke(null);
+
+            var getPlayerNation = managerClass.getMethod("getPlayerNation", UUID.class);
+            var nation = getPlayerNation.invoke(claimManager, player.getUUID());
+
+            if (nation == null) return false;
+
+            var nationClass = Class.forName("com.statecraft.core.Nation");
+            var getId = nationClass.getMethod("getId");
+            UUID nationId = (UUID) getId.invoke(nation);
+
+            switch (entityType) {
+                case "NATION" -> {
+                    return nationId.equals(entityId);
+                }
+                case "STATE" -> {
+                    var getAllStates = nationClass.getMethod("getAllStates");
+                    @SuppressWarnings("unchecked")
+                    var states = (java.util.Collection<?>) getAllStates.invoke(nation);
+                    if (states != null) {
+                        var stateClass = Class.forName("com.statecraft.core.State");
+                        var stateGetId = stateClass.getMethod("getId");
+                        for (Object state : states) {
+                            UUID stateId = (UUID) stateGetId.invoke(state);
+                            if (stateId.equals(entityId)) return true;
+                        }
+                    }
+                }
+                case "CITY" -> {
+                    var getAllStates = nationClass.getMethod("getAllStates");
+                    @SuppressWarnings("unchecked")
+                    var states = (java.util.Collection<?>) getAllStates.invoke(nation);
+                    if (states != null) {
+                        var stateClass = Class.forName("com.statecraft.core.State");
+                        var stateGetAllCities = stateClass.getMethod("getAllCities");
+                        var cityClass = Class.forName("com.statecraft.core.City");
+                        var cityGetId = cityClass.getMethod("getId");
+                        for (Object state : states) {
+                            @SuppressWarnings("unchecked")
+                            var cities = (java.util.Collection<?>) stateGetAllCities.invoke(state);
+                            for (Object city : cities) {
+                                UUID cityId = (UUID) cityGetId.invoke(city);
+                                if (cityId.equals(entityId)) return true;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.debug("Error checking membership: {}", e.getMessage());
+        }
+        return false;
+    }
+
+    /**
+     * Get the display name for a government entity by type and UUID
+     */
+    public static String getEntityName(String entityType, UUID entityId) {
+        if (!initialized) return "Unknown";
+
+        try {
+            var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
+            var getInstance = managerClass.getMethod("getInstance");
+            var claimManager = getInstance.invoke(null);
+
+            switch (entityType) {
+                case "NATION" -> {
+                    var getAllNations = managerClass.getMethod("getAllNations");
+                    @SuppressWarnings("unchecked")
+                    var nations = (java.util.Collection<?>) getAllNations.invoke(claimManager);
+                    if (nations != null) {
+                        var nationClass = Class.forName("com.statecraft.core.Nation");
+                        var getId = nationClass.getMethod("getId");
+                        var getName = nationClass.getMethod("getName");
+                        for (Object nation : nations) {
+                            if (entityId.equals(getId.invoke(nation))) {
+                                return (String) getName.invoke(nation);
+                            }
+                        }
+                    }
+                }
+                case "STATE" -> {
+                    var getAllNations = managerClass.getMethod("getAllNations");
+                    @SuppressWarnings("unchecked")
+                    var nations = (java.util.Collection<?>) getAllNations.invoke(claimManager);
+                    if (nations != null) {
+                        var nationClass = Class.forName("com.statecraft.core.Nation");
+                        var getAllStates = nationClass.getMethod("getAllStates");
+                        var stateClass = Class.forName("com.statecraft.core.State");
+                        var stateGetId = stateClass.getMethod("getId");
+                        var stateGetName = stateClass.getMethod("getName");
+                        for (Object nation : nations) {
+                            @SuppressWarnings("unchecked")
+                            var states = (java.util.Collection<?>) getAllStates.invoke(nation);
+                            if (states != null) {
+                                for (Object state : states) {
+                                    if (entityId.equals(stateGetId.invoke(state))) {
+                                        return (String) stateGetName.invoke(state);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                case "CITY" -> {
+                    var getAllNations = managerClass.getMethod("getAllNations");
+                    @SuppressWarnings("unchecked")
+                    var nations = (java.util.Collection<?>) getAllNations.invoke(claimManager);
+                    if (nations != null) {
+                        var nationClass = Class.forName("com.statecraft.core.Nation");
+                        var getAllStates = nationClass.getMethod("getAllStates");
+                        var stateClass = Class.forName("com.statecraft.core.State");
+                        var stateGetAllCities = stateClass.getMethod("getAllCities");
+                        var cityClass = Class.forName("com.statecraft.core.City");
+                        var cityGetId = cityClass.getMethod("getId");
+                        var cityGetName = cityClass.getMethod("getName");
+                        for (Object nation : nations) {
+                            @SuppressWarnings("unchecked")
+                            var states = (java.util.Collection<?>) getAllStates.invoke(nation);
+                            if (states != null) {
+                                for (Object state : states) {
+                                    @SuppressWarnings("unchecked")
+                                    var cities = (java.util.Collection<?>) stateGetAllCities.invoke(state);
+                                    if (cities != null) {
+                                        for (Object city : cities) {
+                                            if (entityId.equals(cityGetId.invoke(city))) {
+                                                return (String) cityGetName.invoke(city);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.debug("Error getting entity name: {}", e.getMessage());
+        }
+        return "Unknown";
     }
 
     /**
@@ -579,13 +1144,27 @@ public class StateCraftIntegration {
                 NetworkHandler.sendToPlayer(new SyncBalancePacket(result.getNewBalance(), manager.getNationBalance(nationId)), player);
             }
             case WITHDRAW -> {
-                // Only admins can withdraw
-                if (!isNationAdmin(player)) {
+                // Only leader/officers can withdraw
+                if (!isNationLeaderOrOfficer(player)) {
                     NetworkHandler.sendToPlayer(new TransactionResultPacket(false,
-                        "Only nation admins can withdraw from treasury", manager.getBalance(player.getUUID())), player);
+                        "Only nation leader or officers can withdraw from treasury", manager.getBalance(player.getUUID())), player);
+                    return;
+                }
+                // Check daily spending limit
+                SpendingLimitManager spendingMgr = SpendingLimitManager.getInstance();
+                SpendingLimitManager.GovernmentRole role =
+                    getPlayerGovernmentRole(player, "NATION", nationId);
+                String limitError = spendingMgr.checkSpendingLimit(
+                    player.getUUID(), "NATION", nationId, amount, role, nationId);
+                if (limitError != null) {
+                    NetworkHandler.sendToPlayer(new TransactionResultPacket(false,
+                        limitError, manager.getBalance(player.getUUID())), player);
                     return;
                 }
                 TransactionResult result = manager.withdrawFromNation(nationId, player.getUUID(), amount, "Nation treasury withdrawal");
+                if (result.isSuccess()) {
+                    spendingMgr.recordSpending(player.getUUID(), "NATION", nationId, amount);
+                }
                 NetworkHandler.sendToPlayer(new TransactionResultPacket(result.isSuccess(),
                     result.getMessage(), manager.getBalance(player.getUUID())), player);
                 NetworkHandler.sendToPlayer(new SyncBalancePacket(manager.getBalance(player.getUUID()), result.getNewBalance()), player);
@@ -680,6 +1259,39 @@ public class StateCraftIntegration {
             StateCraftEconomy.LOGGER.debug("Error getting nation name: {}", e.getMessage());
         }
         return "";
+    }
+
+    /**
+     * Get the IMPORT_TARIFF rate for a nation (set via legislature policy).
+     * Returns 0.0 if no policy is set or nation not found.
+     */
+    public static double getImportTariffRate(UUID nationId) {
+        if (!initialized || nationId == null) return 0.0;
+
+        try {
+            var legislatureClass = Class.forName("com.statecraft.legislature.LegislatureManager");
+            var getInstance = legislatureClass.getMethod("getInstance");
+            var legislatureManager = getInstance.invoke(null);
+
+            var policyTypeClass = Class.forName("com.statecraft.legislature.PolicyType");
+            Object importTariffPolicy = null;
+            for (Object constant : policyTypeClass.getEnumConstants()) {
+                if ("IMPORT_TARIFF".equals(constant.toString())) {
+                    importTariffPolicy = constant;
+                    break;
+                }
+            }
+            if (importTariffPolicy == null) return 0.0;
+
+            var getPassedPolicy = legislatureClass.getMethod("getPassedPolicyValue", UUID.class, policyTypeClass);
+            Object result = getPassedPolicy.invoke(legislatureManager, nationId, importTariffPolicy);
+            if (result instanceof Number num) {
+                return num.doubleValue();
+            }
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.debug("Error getting import tariff rate: {}", e.getMessage());
+        }
+        return 0.0;
     }
 
     /**
@@ -784,8 +1396,8 @@ public class StateCraftIntegration {
                 var nation = getNation.invoke(manager, nationId);
                 if (nation != null) {
                     var nationClass = Class.forName("com.statecraft.core.Nation");
-                    var isAdmin = nationClass.getMethod("isAdmin", UUID.class);
-                    return (Boolean) isAdmin.invoke(nation, playerId);
+                    var isLeaderOrOfficer = nationClass.getMethod("isLeaderOrOfficer", UUID.class);
+                    return (Boolean) isLeaderOrOfficer.invoke(nation, playerId);
                 }
             }
 
@@ -867,6 +1479,27 @@ public class StateCraftIntegration {
     }
 
     /**
+     * Check if a player can own more chunks (against the per-player limit).
+     * Uses reflection to call ChunkClaimManager.canPlayerOwnMoreChunks().
+     */
+    public static boolean canPlayerOwnMoreChunks(java.util.UUID playerId) {
+        if (!initialized) return true; // If not initialized, don't block
+        try {
+            var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
+            var getInstance = managerClass.getMethod("getInstance");
+            var manager = getInstance.invoke(null);
+            var nationClass = Class.forName("com.statecraft.core.Nation");
+            var canOwn = managerClass.getMethod("canPlayerOwnMoreChunks", java.util.UUID.class, nationClass);
+            var getPlayerNation = managerClass.getMethod("getPlayerNation", java.util.UUID.class);
+            Object playerNation = getPlayerNation.invoke(manager, playerId);
+            return (boolean) canOwn.invoke(manager, playerId, playerNation);
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.debug("Error checking player chunk limit: {}", e.getMessage());
+            return true; // Don't block on error
+        }
+    }
+
+    /**
      * Transfer chunk ownership to a new player
      */
     public static boolean transferChunkOwnership(int chunkX, int chunkZ,
@@ -882,6 +1515,17 @@ public class StateCraftIntegration {
             var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
             var getInstance = managerClass.getMethod("getInstance");
             var manager = getInstance.invoke(null);
+
+            // Check player chunk limit before transferring
+            var canPlayerOwnMore = managerClass.getMethod("canPlayerOwnMoreChunks", UUID.class, Class.forName("com.statecraft.core.Nation"));
+            // Get player's nation for the limit check
+            var getPlayerNation = managerClass.getMethod("getPlayerNation", UUID.class);
+            Object playerNation = getPlayerNation.invoke(manager, newOwnerId);
+            boolean canOwn = (boolean) canPlayerOwnMore.invoke(manager, newOwnerId, playerNation);
+            if (!canOwn) {
+                StateCraftEconomy.LOGGER.warn("Player {} has reached their personal chunk limit", newOwnerId);
+                return false;
+            }
 
             var chunkPosClass = Class.forName("net.minecraft.world.level.ChunkPos");
             var chunkPos = chunkPosClass.getConstructor(int.class, int.class).newInstance(chunkX, chunkZ);
@@ -954,6 +1598,10 @@ public class StateCraftIntegration {
             var setPlayerOwner = chunkClass.getMethod("setPlayerOwner", UUID.class);
             setPlayerOwner.invoke(chunk, (UUID) null);
 
+            // Also clear company owner if set
+            var setCompanyOwner = chunkClass.getMethod("setCompanyOwner", UUID.class);
+            setCompanyOwner.invoke(chunk, (UUID) null);
+
             // Remove from sale if listed
             var removeFromSale = chunkClass.getMethod("removeFromSale");
             removeFromSale.invoke(chunk);
@@ -1006,6 +1654,7 @@ public class StateCraftIntegration {
 
             var ownershipTypeClass = Class.forName("com.statecraft.core.OwnershipType");
             var playerType = Enum.valueOf((Class<Enum>) ownershipTypeClass, "PLAYER");
+            var companyType = Enum.valueOf((Class<Enum>) ownershipTypeClass, "COMPANY");
 
             for (Object nation : nations) {
                 @SuppressWarnings("unchecked")
@@ -1034,9 +1683,6 @@ public class StateCraftIntegration {
                                 int x = (int) chunkPosClass.getField("x").get(chunkPos);
                                 int z = (int) chunkPosClass.getField("z").get(chunkPos);
 
-                                // Get dimension string using location().toString() for consistency
-                                // ResourceKey.toString() returns "ResourceKey[minecraft:dimension / minecraft:overworld]"
-                                // but we need "minecraft:overworld" to match cache keys
                                 net.minecraft.resources.ResourceKey<?> dimKey = (net.minecraft.resources.ResourceKey<?>) dimension;
                                 String dimStr = dimKey.location().toString();
 
@@ -1045,6 +1691,28 @@ public class StateCraftIntegration {
                                     dimKey,
                                     cityId, ownerId, true, salePrice
                                 ));
+                            } else if (ownership.equals(companyType)) {
+                                // Company-owned chunks — taxed from company treasury
+                                var getCompanyOwner = chunkClass.getMethod("getCompanyOwner");
+                                UUID companyId = (UUID) getCompanyOwner.invoke(chunk);
+                                if (companyId != null) {
+                                    Object chunkPos = getChunkPos.invoke(chunk);
+                                    Object dimension = getDimension.invoke(chunk);
+                                    double salePrice = (Double) getSalePrice.invoke(chunk);
+
+                                    var chunkPosClass = Class.forName("net.minecraft.world.level.ChunkPos");
+                                    int x = (int) chunkPosClass.getField("x").get(chunkPos);
+                                    int z = (int) chunkPosClass.getField("z").get(chunkPos);
+
+                                    net.minecraft.resources.ResourceKey<?> dimKey = (net.minecraft.resources.ResourceKey<?>) dimension;
+                                    String dimStr = dimKey.location().toString();
+
+                                    result.add(new com.statecraft.economy.core.TaxationManager.ChunkTaxInfo(
+                                        x, z, dimStr,
+                                        dimKey,
+                                        cityId, companyId, true, salePrice, true
+                                    ));
+                                }
                             }
                         }
                     }
@@ -1108,6 +1776,29 @@ public class StateCraftIntegration {
         }
 
         return null;
+    }
+
+    /**
+     * Get a nation's chunk claim fee.
+     */
+    public static double getChunkClaimFee(UUID nationId) {
+        if (!initialized || nationId == null) return 0;
+
+        try {
+            var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
+            var manager = managerClass.getMethod("getInstance").invoke(null);
+            var getNation = managerClass.getMethod("getNation", UUID.class);
+            var nation = getNation.invoke(manager, nationId);
+
+            if (nation != null) {
+                var nationClass = Class.forName("com.statecraft.core.Nation");
+                return (double) nationClass.getMethod("getChunkClaimFee").invoke(nation);
+            }
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.debug("Error getting chunk claim fee: {}", e.getMessage());
+        }
+
+        return 0;
     }
 
     /**
@@ -1675,5 +2366,284 @@ public class StateCraftIntegration {
 
         return -1;
     }
-}
 
+    // ==================== Company Integration ====================
+
+    /**
+     * Get the city ID at the player's current chunk position.
+     */
+    public static UUID getPlayerCityId(net.minecraft.server.level.ServerPlayer player) {
+        if (!initialized) return null;
+
+        try {
+            var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
+            var getInstance = managerClass.getMethod("getInstance");
+            var manager = getInstance.invoke(null);
+
+            int chunkX = player.blockPosition().getX() >> 4;
+            int chunkZ = player.blockPosition().getZ() >> 4;
+            String dimension = player.level().dimension().location().toString();
+
+            var getClaim = managerClass.getMethod("getClaimedChunk", String.class, int.class, int.class);
+            Object chunk = getClaim.invoke(manager, dimension, chunkX, chunkZ);
+
+            if (chunk != null) {
+                var chunkClass = Class.forName("com.statecraft.core.ClaimedChunk");
+                var getCityId = chunkClass.getMethod("getCityId");
+                return (UUID) getCityId.invoke(chunk);
+            }
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.debug("Error getting player city ID: {}", e.getMessage());
+        }
+
+        return null;
+    }
+
+    /**
+     * Get the nation ID for a city (via its state).
+     */
+    public static UUID getNationIdForCity(UUID cityId) {
+        if (!initialized || cityId == null) return null;
+        UUID stateId = getStateIdForCity(cityId);
+        if (stateId == null) return null;
+        return getNationIdForState(stateId);
+    }
+
+    /**
+     * Send mail notification when a company dividend payout is deferred due to insufficient funds.
+     */
+    public static void sendCompanyDividendDeferredMail(UUID founderId, String companyName,
+                                                        double balance, double requiredPayout) {
+        if (!initialized) return;
+
+        try {
+            var mailManagerClass = Class.forName("com.statecraft.mail.MailManager");
+            var getInstance = mailManagerClass.getMethod("getInstance");
+            var mailManager = getInstance.invoke(null);
+
+            var mailTypeClass = Class.forName("com.statecraft.mail.Mail$MailType");
+            // Use SYSTEM or FINANCIAL type — try SYSTEM first as it's guaranteed to exist
+            Object mailType = null;
+            for (Object constant : mailTypeClass.getEnumConstants()) {
+                if ("SYSTEM".equals(constant.toString()) || "FINANCIAL".equals(constant.toString())) {
+                    mailType = constant;
+                    break;
+                }
+            }
+            if (mailType == null) {
+                mailType = mailTypeClass.getEnumConstants()[0]; // Fallback to first enum
+            }
+
+            String subject = "Dividend Deferred — " + companyName;
+            String body = String.format(
+                "§eThe scheduled dividend payout for §f%s §ehas been deferred.\n\n" +
+                "§7Company Balance: §f$%,.2f\n" +
+                "§7Required Payout: §c$%,.2f\n\n" +
+                "§7The company does not have sufficient funds to cover the full dividend.\n" +
+                "§7Dividends will be attempted again next cycle.",
+                companyName, balance, requiredPayout);
+
+            var sendSystemMail = mailManagerClass.getMethod("sendSystemMail",
+                UUID.class, mailTypeClass, String.class, String.class);
+            sendSystemMail.invoke(mailManager, founderId, mailType, subject, body);
+
+            // Also send to the company's own mailbox
+            sendCompanyMailboxNotification(companyName, "FINANCIAL", subject, body);
+
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.debug("Error sending company dividend deferred mail: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Send a system mail to a company's own mailbox (accessed by officers/founders).
+     * @param companyName The company name to look up
+     * @param mailTypeName The MailType enum name (e.g., "FINANCIAL", "SYSTEM")
+     * @param subject Mail subject
+     * @param body Mail body
+     */
+    public static void sendCompanyMailboxNotification(String companyName, String mailTypeName,
+                                                       String subject, String body) {
+        if (!initialized) return;
+
+        try {
+            // Look up the company by name
+            var companyManagerClass = Class.forName("com.statecraft.company.CompanyManager");
+            var getCompanyManager = companyManagerClass.getMethod("getInstance");
+            var companyManager = getCompanyManager.invoke(null);
+            var getByName = companyManagerClass.getMethod("getCompanyByName", String.class);
+            Object company = getByName.invoke(companyManager, companyName);
+            if (company == null) return;
+            UUID companyId = (UUID) company.getClass().getMethod("getId").invoke(company);
+
+            var mailManagerClass = Class.forName("com.statecraft.mail.MailManager");
+            var getInstance = mailManagerClass.getMethod("getInstance");
+            var mailManager = getInstance.invoke(null);
+
+            var mailTypeClass = Class.forName("com.statecraft.mail.Mail$MailType");
+            Object mailType = null;
+            for (Object constant : mailTypeClass.getEnumConstants()) {
+                if (mailTypeName.equals(constant.toString())) {
+                    mailType = constant;
+                    break;
+                }
+            }
+            if (mailType == null) {
+                for (Object constant : mailTypeClass.getEnumConstants()) {
+                    if ("SYSTEM".equals(constant.toString())) {
+                        mailType = constant;
+                        break;
+                    }
+                }
+            }
+            if (mailType == null) mailType = mailTypeClass.getEnumConstants()[0];
+
+            var sendCompanyMail = mailManagerClass.getMethod("sendCompanySystemMail",
+                UUID.class, mailTypeClass, String.class, String.class);
+            sendCompanyMail.invoke(mailManager, companyId, mailType, subject, body);
+
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.debug("Error sending company mailbox notification: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Send a system mail to a company's own mailbox by company UUID.
+     */
+    public static void sendCompanyMailboxNotificationById(UUID companyId, String mailTypeName,
+                                                           String subject, String body) {
+        if (!initialized) return;
+
+        try {
+            var mailManagerClass = Class.forName("com.statecraft.mail.MailManager");
+            var getInstance = mailManagerClass.getMethod("getInstance");
+            var mailManager = getInstance.invoke(null);
+
+            var mailTypeClass = Class.forName("com.statecraft.mail.Mail$MailType");
+            Object mailType = null;
+            for (Object constant : mailTypeClass.getEnumConstants()) {
+                if (mailTypeName.equals(constant.toString())) {
+                    mailType = constant;
+                    break;
+                }
+            }
+            if (mailType == null) {
+                for (Object constant : mailTypeClass.getEnumConstants()) {
+                    if ("SYSTEM".equals(constant.toString())) {
+                        mailType = constant;
+                        break;
+                    }
+                }
+            }
+            if (mailType == null) mailType = mailTypeClass.getEnumConstants()[0];
+
+            var sendCompanyMail = mailManagerClass.getMethod("sendCompanySystemMail",
+                UUID.class, mailTypeClass, String.class, String.class);
+            sendCompanyMail.invoke(mailManager, companyId, mailType, subject, body);
+
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.debug("Error sending company mailbox notification by ID: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Attempt to repossess a player's most valuable chunk to cover a loan default.
+     * Uses the same transferChunkToGovernment mechanism as tax repossession.
+     *
+     * @param playerId The player whose chunk to repossess
+     * @param loanAmount The outstanding loan amount
+     * @param bankName The name of the bank repossessing
+     * @return true if a chunk was successfully repossessed
+     */
+    public static boolean repossessPlayerChunkForLoan(UUID playerId, double loanAmount, String bankName) {
+        if (!initialized) return false;
+
+        try {
+            // Find the player's chunks and pick one to repossess
+            var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
+            var getInstance = managerClass.getMethod("getInstance");
+            var manager = getInstance.invoke(null);
+
+            var getPlayerChunks = managerClass.getMethod("getPlayerOwnedChunks", UUID.class);
+            @SuppressWarnings("unchecked")
+            var chunks = (java.util.Collection<?>) getPlayerChunks.invoke(manager, playerId);
+
+            if (chunks == null || chunks.isEmpty()) return false;
+
+            // Pick the first chunk (simplification — future improvement: pick most valuable)
+            var firstChunk = chunks.iterator().next();
+            var chunkClass = firstChunk.getClass();
+            var getChunkPos = chunkClass.getMethod("getChunkPos");
+            var getDimension = chunkClass.getMethod("getDimension");
+
+            Object chunkPos = getChunkPos.invoke(firstChunk);
+            Object dimension = getDimension.invoke(firstChunk);
+
+            var chunkPosClass = Class.forName("net.minecraft.world.level.ChunkPos");
+            int chunkX = (int) chunkPosClass.getField("x").get(chunkPos);
+            int chunkZ = (int) chunkPosClass.getField("z").get(chunkPos);
+
+            net.minecraft.resources.ResourceKey<?> dimKey = (net.minecraft.resources.ResourceKey<?>) dimension;
+
+            boolean success = transferChunkToGovernment(chunkX, chunkZ, dimKey);
+
+            if (success) {
+                // Send mail notification
+                sendRepossessionNotice(playerId, chunkX, chunkZ, bankName + " (loan default)");
+            }
+
+            return success;
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.debug("Error repossessing chunk for loan default: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Get the nation's reserve ratio policy for a city. Returns the national legislature-mandated
+     * minimum reserve ratio, or 0 if no policy exists.
+     *
+     * @param cityId The city ID (to look up the nation)
+     * @return The national minimum reserve ratio (0.0 - 1.0), or 0 if no policy
+     */
+    public static double getNationReserveRatioPolicy(UUID cityId) {
+        if (!initialized) return 0;
+
+        try {
+            UUID nationId = getNationIdForCity(cityId);
+            if (nationId == null) return 0;
+
+            var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
+            var getInstance = managerClass.getMethod("getInstance");
+            var manager = getInstance.invoke(null);
+
+            var getNation = managerClass.getMethod("getNation", UUID.class);
+            var nation = getNation.invoke(manager, nationId);
+            if (nation == null) return 0;
+
+            var nationClass = Class.forName("com.statecraft.core.Nation");
+            var getLegislature = nationClass.getMethod("getLegislature");
+            var legislature = getLegislature.invoke(nation);
+            if (legislature == null) return 0;
+
+            var legClass = legislature.getClass();
+            var getPassedPolicies = legClass.getMethod("getPassedPolicies");
+            @SuppressWarnings("unchecked")
+            var policies = (java.util.Collection<?>) getPassedPolicies.invoke(legislature);
+            if (policies == null) return 0;
+
+            for (Object policy : policies) {
+                var policyClass = policy.getClass();
+                var getType = policyClass.getMethod("getType");
+                var policyType = getType.invoke(policy);
+                if (policyType.toString().equals("RESERVE_RATIO")) {
+                    var getValue = policyClass.getMethod("getValue");
+                    return ((Number) getValue.invoke(policy)).doubleValue();
+                }
+            }
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.debug("Error getting nation reserve ratio policy: {}", e.getMessage());
+        }
+        return 0;
+    }
+}

@@ -2,6 +2,9 @@ package com.statecraft.economy.core;
 
 import com.statecraft.economy.StateCraftEconomy;
 import com.statecraft.economy.integration.StateCraftIntegration;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -49,6 +52,9 @@ public class TaxationManager {
     // Tax collection enabled flag
     private boolean enabled = true;
 
+    // Dirty flag for persistence
+    private boolean dirty = false;
+
     private TaxationManager() {}
 
     public static TaxationManager getInstance() {
@@ -69,6 +75,7 @@ public class TaxationManager {
         if (currentTime - lastTaxCollection >= taxPeriodTicks) {
             collectAllTaxes(server);
             lastTaxCollection = currentTime;
+            dirty = true;
         }
     }
 
@@ -120,10 +127,15 @@ public class TaxationManager {
                     double taxAmount = calculateChunkTax(chunk, cityTaxRate);
                     UUID ownerId = chunk.getOwnerId();
 
-                    // Collect tax from owner
-                    TaxResult taxResult = collectTaxFromPlayer(server, ownerId, taxAmount, chunk);
+                    // Collect tax from owner (player or company)
+                    TaxResult taxResult;
+                    if (chunk.isCompanyOwned()) {
+                        taxResult = collectTaxFromCompany(server, ownerId, taxAmount, chunk);
+                    } else {
+                        taxResult = collectTaxFromPlayer(server, ownerId, taxAmount, chunk);
+                    }
 
-                    // Track player summary
+                    // Track player/company summary
                     playerTaxSummaries.computeIfAbsent(ownerId, k -> new PlayerTaxSummary())
                         .addTax(taxAmount);
 
@@ -133,26 +145,25 @@ public class TaxationManager {
                         result.chunksProcessed++;
                         cityChunksProcessed++;
 
-                        // Reset negative count on successful payment
-                        resetNegativeCount(chunk);
-                    } else if (taxResult.wentNegative) {
-                        cityRevenue += taxResult.amountCollected; // Still collect even if negative
-                        result.totalCollected += taxResult.amountCollected;
-                        result.chunksProcessed++;
-                        result.negativeBalances++;
-                        cityChunksProcessed++;
+                        if (taxResult.wentNegative) {
+                            // Payment went through but account is now negative
+                            result.negativeBalances++;
 
-                        // Track negative balance
-                        int negCount = incrementNegativeCount(chunk);
+                            // Track consecutive negative balance
+                            int negCount = incrementNegativeCount(chunk);
 
-                        if (negCount >= REPOSSESSION_THRESHOLD) {
-                            // Repossess the chunk
-                            repossessChunk(server, chunk, ownerId);
-                            result.chunksRepossessed++;
-                            resetNegativeCount(chunk);
+                            if (negCount >= REPOSSESSION_THRESHOLD) {
+                                // Repossess the chunk
+                                repossessChunk(server, chunk, ownerId);
+                                result.chunksRepossessed++;
+                                resetNegativeCount(chunk);
+                            } else {
+                                // Warn the player via mail
+                                warnPlayerAboutNegativeBalance(server, ownerId, chunk, negCount);
+                            }
                         } else {
-                            // Warn the player via mail
-                            warnPlayerAboutNegativeBalance(server, ownerId, chunk, negCount);
+                            // Successful payment with positive balance — reset negative count
+                            resetNegativeCount(chunk);
                         }
                     }
                 }
@@ -184,8 +195,8 @@ public class TaxationManager {
 
                 StateCraftEconomy.LOGGER.info("City keeps: ${}, passes to state: ${}", cityKeeps, toState);
 
-                // Deposit to city treasury
-                depositToCityTreasury(cityId, cityKeeps);
+                // Deposit full revenue to city treasury, then record the pass-through as outgoing
+                depositToCityTreasury(cityId, revenue, toState, stateId);
 
                 // Send city tax revenue mail
                 CityTaxSummary citySummary = cityTaxSummaries.get(cityId);
@@ -217,8 +228,8 @@ public class TaxationManager {
                 double toNation = revenue * nationPassthrough;
                 double stateKeeps = revenue - toNation;
 
-                // Deposit to state treasury
-                depositToStateTreasury(stateId, stateKeeps);
+                // Deposit full revenue to state treasury, then record the pass-through as outgoing
+                depositToStateTreasury(stateId, revenue, toNation, nationId);
 
                 // Send state tax revenue mail
                 String stateName = StateCraftIntegration.getStateName(stateId);
@@ -259,6 +270,13 @@ public class TaxationManager {
         }
 
         logTaxCollectionResult(result);
+
+        // Collect corporate taxes from companies
+        try {
+            com.statecraft.economy.company.CompanyEconomyManager.getInstance().collectCompanyTaxes(server);
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.error("Error during corporate tax collection", e);
+        }
     }
 
     // Helper class to track per-player tax totals
@@ -346,6 +364,40 @@ public class TaxationManager {
     }
 
     /**
+     * Collect property tax from a company treasury.
+     * Company-owned chunks are taxed from the company's treasury balance.
+     * If insufficient funds, the tax is force-withdrawn (can go negative).
+     */
+    private TaxResult collectTaxFromCompany(MinecraftServer server, UUID companyId, double amount, ChunkTaxInfo chunk) {
+        EconomyManager ecoManager = EconomyManager.getInstance();
+        double currentBalance = ecoManager.getCompanyBalance(companyId);
+
+        TaxResult result = new TaxResult();
+        result.amountCollected = amount;
+
+        String description = "Property tax for chunk (" + chunk.getChunkX() + ", " + chunk.getChunkZ() + ")";
+
+        if (currentBalance >= amount) {
+            // Sufficient funds — withdraw normally
+            ecoManager.getOrCreateCompanyTreasury(companyId).subtract(amount);
+            ecoManager.recordAccountTransaction(companyId, Transaction.Type.TAX, amount, null,
+                description, null, "Tax System");
+            result.collected = true;
+            result.wentNegative = false;
+        } else {
+            // Insufficient funds — force withdraw (company treasury goes negative)
+            ecoManager.getOrCreateCompanyTreasury(companyId).forceSubtract(amount);
+            ecoManager.recordAccountTransaction(companyId, Transaction.Type.TAX, amount, null,
+                "[FORCED] " + description, null, "Tax System");
+            result.collected = true;
+            result.wentNegative = true;
+        }
+
+        ecoManager.markDirty();
+        return result;
+    }
+
+    /**
      * Get the unique key for tracking negative balances per chunk ownership
      */
     private String getChunkOwnerKey(ChunkTaxInfo chunk) {
@@ -356,19 +408,22 @@ public class TaxationManager {
         String key = getChunkOwnerKey(chunk);
         int count = negativeBalanceCounts.getOrDefault(key, 0) + 1;
         negativeBalanceCounts.put(key, count);
+        dirty = true;
         return count;
     }
 
     private void resetNegativeCount(ChunkTaxInfo chunk) {
         negativeBalanceCounts.remove(getChunkOwnerKey(chunk));
+        dirty = true;
     }
 
     /**
-     * Repossess a chunk from a player due to unpaid taxes
+     * Repossess a chunk from a player or company due to unpaid taxes
      */
     private void repossessChunk(MinecraftServer server, ChunkTaxInfo chunk, UUID formerOwnerId) {
-        StateCraftEconomy.LOGGER.info("Repossessing chunk ({}, {}) from player {} due to unpaid taxes",
-            chunk.getChunkX(), chunk.getChunkZ(), formerOwnerId);
+        String ownerLabel = chunk.isCompanyOwned() ? "company " + formerOwnerId : "player " + formerOwnerId;
+        StateCraftEconomy.LOGGER.info("Repossessing chunk ({}, {}) from {} due to unpaid taxes",
+            chunk.getChunkX(), chunk.getChunkZ(), ownerLabel);
 
         // Transfer ownership back to government (null owner = government owned)
         boolean success = StateCraftIntegration.transferChunkToGovernment(
@@ -379,68 +434,149 @@ public class TaxationManager {
             String cityName = StateCraftIntegration.getCityName(chunk.getCityId());
             if (cityName == null || cityName.isEmpty()) cityName = "Unknown City";
 
-            // Send mail notification
-            StateCraftIntegration.sendRepossessionNotice(formerOwnerId, chunk.getChunkX(), chunk.getChunkZ(), cityName);
+            if (chunk.isCompanyOwned()) {
+                // Company-owned chunk — notify founder
+                com.statecraft.company.Company company =
+                    com.statecraft.company.CompanyManager.getInstance().getCompany(formerOwnerId);
+                if (company != null) {
+                    StateCraftIntegration.sendRepossessionNotice(
+                        company.getFounderId(), chunk.getChunkX(), chunk.getChunkZ(), cityName);
+                    // Notify founder if online
+                    ServerPlayer founder = server.getPlayerList().getPlayer(company.getFounderId());
+                    if (founder != null) {
+                        founder.sendSystemMessage(Component.literal(
+                            "§c§lTAX REPOSSESSION: §r" + company.getName() + "'s chunk at (" +
+                            chunk.getChunkX() + ", " + chunk.getChunkZ() +
+                            ") has been repossessed due to 3 consecutive tax periods with negative balance."
+                        ));
+                    }
+                }
+            } else {
+                // Player-owned chunk
+                StateCraftIntegration.sendRepossessionNotice(formerOwnerId, chunk.getChunkX(), chunk.getChunkZ(), cityName);
 
-            // Also notify the player directly if online
-            ServerPlayer player = server.getPlayerList().getPlayer(formerOwnerId);
-            if (player != null) {
-                player.sendSystemMessage(Component.literal(
-                    "§c§lTAX REPOSSESSION: §rYour chunk at (" + chunk.getChunkX() + ", " + chunk.getChunkZ() +
-                    ") has been repossessed due to 3 consecutive tax periods with negative balance."
-                ));
+                // Also notify the player directly if online
+                ServerPlayer player = server.getPlayerList().getPlayer(formerOwnerId);
+                if (player != null) {
+                    player.sendSystemMessage(Component.literal(
+                        "§c§lTAX REPOSSESSION: §rYour chunk at (" + chunk.getChunkX() + ", " + chunk.getChunkZ() +
+                        ") has been repossessed due to 3 consecutive tax periods with negative balance."
+                    ));
+                }
             }
         }
     }
 
     /**
-     * Warn player about their negative balance status
+     * Warn player/company about their negative balance status
      */
-    private void warnPlayerAboutNegativeBalance(MinecraftServer server, UUID playerId, ChunkTaxInfo chunk, int negCount) {
+    private void warnPlayerAboutNegativeBalance(MinecraftServer server, UUID ownerId, ChunkTaxInfo chunk, int negCount) {
         int remaining = REPOSSESSION_THRESHOLD - negCount;
-        double balance = EconomyManager.getInstance().getBalance(playerId);
 
-        // Send mail warning
-        StateCraftIntegration.sendTaxWarning(playerId, chunk.getChunkX(), chunk.getChunkZ(), remaining, balance);
+        if (chunk.isCompanyOwned()) {
+            // Company-owned: warn the founder
+            double balance = EconomyManager.getInstance().getCompanyBalance(ownerId);
+            com.statecraft.company.Company company =
+                com.statecraft.company.CompanyManager.getInstance().getCompany(ownerId);
+            if (company != null) {
+                StateCraftIntegration.sendTaxWarning(company.getFounderId(),
+                    chunk.getChunkX(), chunk.getChunkZ(), remaining, balance);
+            }
+        } else {
+            double balance = EconomyManager.getInstance().getBalance(ownerId);
+            StateCraftIntegration.sendTaxWarning(ownerId, chunk.getChunkX(), chunk.getChunkZ(), remaining, balance);
+        }
 
-        // Also notify directly if online
-        ServerPlayer player = server.getPlayerList().getPlayer(playerId);
-        if (player != null) {
-            player.sendSystemMessage(Component.literal(
-                "§e§lTAX WARNING: §rYou have a negative balance after paying taxes for chunk (" +
-                chunk.getChunkX() + ", " + chunk.getChunkZ() + "). " +
-                "§c" + remaining + "§r more negative tax period(s) and the chunk will be repossessed!"
-            ));
+        // Also notify directly if online (only for player-owned chunks)
+        if (!chunk.isCompanyOwned()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(ownerId);
+            if (player != null) {
+                player.sendSystemMessage(Component.literal(
+                    "§e§lTAX WARNING: §rYou have a negative balance after paying taxes for chunk (" +
+                    chunk.getChunkX() + ", " + chunk.getChunkZ() + "). " +
+                    "§c" + remaining + "§r more negative tax period(s) and the chunk will be repossessed!"
+                ));
+            }
         }
     }
 
     // Treasury deposit methods
-    private void depositToCityTreasury(UUID cityId, double amount) {
+
+    /**
+     * Deposit tax revenue to city treasury.
+     * Records two transactions: +revenue (tax collected) and -passThrough (passed to state).
+     * The city treasury net receives (revenue - passThrough).
+     */
+    private void depositToCityTreasury(UUID cityId, double revenue, double passThrough, UUID stateId) {
         EconomyManager ecoManager = EconomyManager.getInstance();
         var treasury = ecoManager.getOrCreateCityTreasury(cityId);
-        treasury.add(amount);
+        double netAmount = revenue - passThrough;
+        treasury.add(netAmount);
+
+        // Record incoming tax revenue (positive)
+        ecoManager.recordAccountTransaction(cityId, Transaction.Type.TAX, revenue, null,
+            "Property tax revenue collected", null, "Tax System");
+
+        // Record outgoing pass-through to state (negative) if any
+        if (passThrough > 0 && stateId != null) {
+            String stateName = StateCraftIntegration.getStateName(stateId);
+            if (stateName == null) stateName = "State";
+            ecoManager.recordAccountTransaction(cityId, Transaction.Type.TRANSFER_OUT, passThrough, stateId,
+                "Tax pass-through to state: " + stateName, null, "Tax System");
+        }
+
         ecoManager.markDirty();
-        StateCraftEconomy.LOGGER.debug("Deposited {} to city treasury {}", amount, cityId);
+        StateCraftEconomy.LOGGER.debug("Deposited {} (revenue {} - passthrough {}) to city treasury {}",
+            netAmount, revenue, passThrough, cityId);
     }
 
-    private void depositToStateTreasury(UUID stateId, double amount) {
+    /**
+     * Deposit tax pass-through to state treasury.
+     * Records two transactions: +revenue (received from cities) and -passThrough (passed to nation).
+     * The state treasury net receives (revenue - passThrough).
+     */
+    private void depositToStateTreasury(UUID stateId, double revenue, double passThrough, UUID nationId) {
         EconomyManager ecoManager = EconomyManager.getInstance();
         var treasury = ecoManager.getOrCreateStateTreasury(stateId);
-        treasury.add(amount);
+        double netAmount = revenue - passThrough;
+        treasury.add(netAmount);
+
+        // Record incoming pass-through from cities (positive)
+        ecoManager.recordAccountTransaction(stateId, Transaction.Type.TAX, revenue, null,
+            "Tax pass-through received from cities", null, "Tax System");
+
+        // Record outgoing pass-through to nation (negative) if any
+        if (passThrough > 0 && nationId != null) {
+            String nationName = StateCraftIntegration.getNationName(nationId);
+            if (nationName == null) nationName = "Nation";
+            ecoManager.recordAccountTransaction(stateId, Transaction.Type.TRANSFER_OUT, passThrough, nationId,
+                "Tax pass-through to nation: " + nationName, null, "Tax System");
+        }
+
         ecoManager.markDirty();
-        StateCraftEconomy.LOGGER.debug("Deposited {} to state treasury {}", amount, stateId);
+        StateCraftEconomy.LOGGER.debug("Deposited {} (revenue {} - passthrough {}) to state treasury {}",
+            netAmount, revenue, passThrough, stateId);
     }
 
+    /**
+     * Deposit tax pass-through to nation treasury.
+     * Records one transaction: +amount (received from states).
+     */
     private void depositToNationTreasury(UUID nationId, double amount) {
         EconomyManager ecoManager = EconomyManager.getInstance();
         var treasury = ecoManager.getOrCreateNationTreasury(nationId);
         treasury.add(amount);
+
+        // Record incoming pass-through from states (positive)
+        ecoManager.recordAccountTransaction(nationId, Transaction.Type.TAX, amount, null,
+            "Tax pass-through received from states", null, "Tax System");
+
         ecoManager.markDirty();
         StateCraftEconomy.LOGGER.debug("Deposited {} to nation treasury {}", amount, nationId);
     }
 
     // Tax rate getters
-    private double getTaxRateForCity(UUID cityId) {
+    public double getTaxRateForCity(UUID cityId) {
         // Get the city's configured tax rate via StateCraft integration
         double rate = StateCraftIntegration.getCityTaxRate(cityId);
         if (rate < 0) {
@@ -483,6 +619,7 @@ public class TaxationManager {
     // Configuration methods
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+        this.dirty = true;
     }
 
     public boolean isEnabled() {
@@ -491,6 +628,7 @@ public class TaxationManager {
 
     public void setTaxPeriodTicks(long ticks) {
         this.taxPeriodTicks = ticks;
+        this.dirty = true;
     }
 
     public long getTaxPeriodTicks() {
@@ -500,6 +638,7 @@ public class TaxationManager {
     public void forceCollectNow(MinecraftServer server) {
         collectAllTaxes(server);
         lastTaxCollection = server.overworld().getGameTime();
+        dirty = true;
     }
 
     /**
@@ -517,6 +656,69 @@ public class TaxationManager {
     public int getNegativeBalanceCount(UUID ownerId, int chunkX, int chunkZ, String dimension) {
         String key = ownerId + ":" + chunkX + ":" + chunkZ + ":" + dimension;
         return negativeBalanceCounts.getOrDefault(key, 0);
+    }
+
+    // ==================== Persistence ====================
+
+    public boolean isDirty() {
+        return dirty;
+    }
+
+    public void clearDirty() {
+        dirty = false;
+    }
+
+    /**
+     * Save taxation manager state to NBT
+     */
+    public CompoundTag save() {
+        CompoundTag tag = new CompoundTag();
+        tag.putLong("LastTaxCollection", lastTaxCollection);
+        tag.putLong("TaxPeriodTicks", taxPeriodTicks);
+        tag.putBoolean("Enabled", enabled);
+
+        // Save negative balance counts
+        ListTag negativeCountsList = new ListTag();
+        for (Map.Entry<String, Integer> entry : negativeBalanceCounts.entrySet()) {
+            CompoundTag entryTag = new CompoundTag();
+            entryTag.putString("Key", entry.getKey());
+            entryTag.putInt("Count", entry.getValue());
+            negativeCountsList.add(entryTag);
+        }
+        tag.put("NegativeBalanceCounts", negativeCountsList);
+
+        return tag;
+    }
+
+    /**
+     * Load taxation manager state from NBT
+     */
+    public void load(CompoundTag tag) {
+        if (tag.contains("LastTaxCollection")) {
+            lastTaxCollection = tag.getLong("LastTaxCollection");
+        }
+        if (tag.contains("TaxPeriodTicks")) {
+            taxPeriodTicks = tag.getLong("TaxPeriodTicks");
+        }
+        if (tag.contains("Enabled")) {
+            enabled = tag.getBoolean("Enabled");
+        }
+
+        // Load negative balance counts
+        negativeBalanceCounts.clear();
+        if (tag.contains("NegativeBalanceCounts")) {
+            ListTag negativeCountsList = tag.getList("NegativeBalanceCounts", Tag.TAG_COMPOUND);
+            for (int i = 0; i < negativeCountsList.size(); i++) {
+                CompoundTag entryTag = negativeCountsList.getCompound(i);
+                String key = entryTag.getString("Key");
+                int count = entryTag.getInt("Count");
+                negativeBalanceCounts.put(key, count);
+            }
+        }
+
+        dirty = false;
+        StateCraftEconomy.LOGGER.info("Loaded taxation state: enabled={}, period={} ticks, lastCollection={}, {} negative balance entries",
+            enabled, taxPeriodTicks, lastTaxCollection, negativeBalanceCounts.size());
     }
 
     // Inner classes for results
@@ -543,14 +745,22 @@ public class TaxationManager {
         private final int chunkZ;
         private final String dimension;
         private final UUID cityId;
-        private final UUID ownerId;
+        private final UUID ownerId; // Player UUID or Company UUID depending on companyOwned
         private final boolean privatelyOwned;
         private final double salePrice;
         private final net.minecraft.resources.ResourceKey<?> dimensionKey;
+        private final boolean companyOwned; // true if owned by a company (ownerId is companyId)
 
         public ChunkTaxInfo(int chunkX, int chunkZ, String dimension,
                           net.minecraft.resources.ResourceKey<?> dimensionKey,
                           UUID cityId, UUID ownerId, boolean privatelyOwned, double salePrice) {
+            this(chunkX, chunkZ, dimension, dimensionKey, cityId, ownerId, privatelyOwned, salePrice, false);
+        }
+
+        public ChunkTaxInfo(int chunkX, int chunkZ, String dimension,
+                          net.minecraft.resources.ResourceKey<?> dimensionKey,
+                          UUID cityId, UUID ownerId, boolean privatelyOwned, double salePrice,
+                          boolean companyOwned) {
             this.chunkX = chunkX;
             this.chunkZ = chunkZ;
             this.dimension = dimension;
@@ -559,6 +769,7 @@ public class TaxationManager {
             this.ownerId = ownerId;
             this.privatelyOwned = privatelyOwned;
             this.salePrice = salePrice;
+            this.companyOwned = companyOwned;
         }
 
         public int getChunkX() { return chunkX; }
@@ -569,6 +780,7 @@ public class TaxationManager {
         public UUID getOwnerId() { return ownerId; }
         public boolean isPrivatelyOwned() { return privatelyOwned; }
         public double getSalePrice() { return salePrice; }
+        public boolean isCompanyOwned() { return companyOwned; }
     }
 }
 

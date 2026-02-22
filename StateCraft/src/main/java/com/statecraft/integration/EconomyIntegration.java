@@ -101,6 +101,18 @@ public interface EconomyIntegration {
     }
 
     /**
+     * Force withdraw funds from a nation's treasury, allowing negative balance.
+     * Used for mandatory government actions like eminent domain where payment is required.
+     * @param nationName The name of the nation
+     * @param amount The amount to withdraw
+     * @param description Description of the withdrawal
+     * @return true if successful, false on error
+     */
+    default boolean forceWithdrawFromNation(String nationName, double amount, String description) {
+        return false;
+    }
+
+    /**
      * Deposit funds to a nation's treasury
      * @param nationName The name of the nation
      * @param amount The amount to deposit
@@ -119,5 +131,106 @@ public interface EconomyIntegration {
     default String formatCurrency(double amount) {
         return String.format("$%.2f", amount);
     }
+
+    /**
+     * Get the improvement score for a chunk
+     * @param chunkX The chunk X coordinate
+     * @param chunkZ The chunk Z coordinate
+     * @param dimension The dimension (e.g., "minecraft:overworld")
+     * @return The improvement score, or 0 if not available
+     */
+    default int getChunkImprovementScore(int chunkX, int chunkZ, String dimension) {
+        return 0;
+    }
+
+    /**
+     * Get the total valuation for a chunk (including all multipliers)
+     * @param chunkX The chunk X coordinate
+     * @param chunkZ The chunk Z coordinate
+     * @param dimension The dimension (e.g., "minecraft:overworld")
+     * @return The total chunk value, or 0 if not available
+     */
+    default double getChunkTotalValue(int chunkX, int chunkZ, String dimension) {
+        return 0;
+    }
+
+    // ==================== Company Economy Integration ====================
+
+    /**
+     * Called when a company is created — economy mod should create a treasury account
+     * @param companyId The UUID of the new company
+     */
+    default void onCompanyCreated(UUID companyId) {}
+
+    /**
+     * Called when a company is set as a bank — economy mod should initialize bank data.
+     * @param companyId The UUID of the company being made into a bank
+     */
+    default void onBankCreated(UUID companyId) {}
+
+    /**
+     * Called before a company is dissolved — economy mod should distribute balance
+     * to shareholders and handle bank dissolution.
+     * @param companyId The company being dissolved
+     * @param founderId The founder requesting dissolution
+     * @return true if economy-side cleanup succeeded (or no economy loaded)
+     */
+    default boolean onCompanyDissolving(UUID companyId, UUID founderId) {
+        return true;
+    }
+
+    /**
+     * Get a company's treasury balance
+     * @param companyId The company UUID
+     * @return The balance, or 0 if not available
+     */
+    default double getCompanyBalance(UUID companyId) {
+        return 0;
+    }
+
+    /**
+     * Check if dividends are enabled for a company
+     */
+    default boolean isDividendsEnabled(UUID companyId) {
+        return false;
+    }
+
+    /**
+     * Get the dividend rate for a company (0.0 - 1.0)
+     */
+    default double getDividendRate(UUID companyId) {
+        return 0;
+    }
+
+    /**
+     * Get the dividend period in ticks for a company
+     */
+    default long getDividendPeriodTicks(UUID companyId) {
+        return 72000;
+    }
+
+    /**
+     * Set dividend configuration for a company
+     * @param companyId The company UUID
+     * @param enabled Whether dividends are enabled
+     * @param rate The dividend rate (0.0 - 1.0)
+     * @param periodTicks The period between dividend payouts in game ticks
+     */
+    default void setDividendConfig(UUID companyId, boolean enabled, double rate, long periodTicks) {}
+
+    /**
+     * Enable or disable dividends for a company
+     */
+    default void setDividendsEnabled(UUID companyId, boolean enabled) {}
+
+    /**
+     * Set the dividend rate for a company
+     */
+    default void setDividendRate(UUID companyId, double rate) {}
+
+    /**
+     * Set the dividend period for a company
+     */
+    default void setDividendPeriodTicks(UUID companyId, long ticks) {}
 }
 

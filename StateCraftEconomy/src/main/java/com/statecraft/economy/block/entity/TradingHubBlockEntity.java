@@ -19,6 +19,7 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import com.statecraft.economy.StateCraftEconomy;
 import net.minecraftforge.common.capabilities.Capability;
 import net.minecraftforge.common.capabilities.ForgeCapabilities;
 import net.minecraftforge.common.util.LazyOptional;
@@ -62,6 +63,7 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
     // Owner tracking
     private UUID ownerUUID;
     private String ownerName = "";
+    private UUID cityId;
 
     // Settings
     private boolean depositToATM = true; // true = deposit to bank, false = leave as currency items
@@ -75,14 +77,20 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
      * Represents a profit share entry
      */
     public static class ProfitShare {
-        public final UUID playerUUID;
-        public String playerName;
-        public double percentage; // 0.0 to 1.0
+        public final UUID playerUUID;  // Player UUID or Company UUID
+        public String playerName;      // Player name or Company name
+        public double percentage;      // 0.0 to 1.0
+        public final boolean isCompany; // true if this share goes to a company treasury
 
         public ProfitShare(UUID playerUUID, String playerName, double percentage) {
+            this(playerUUID, playerName, percentage, false);
+        }
+
+        public ProfitShare(UUID playerUUID, String playerName, double percentage, boolean isCompany) {
             this.playerUUID = playerUUID;
             this.playerName = playerName;
             this.percentage = Math.max(0.0, Math.min(1.0, percentage));
+            this.isCompany = isCompany;
         }
 
         public CompoundTag toNBT() {
@@ -90,6 +98,7 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
             tag.putUUID("uuid", playerUUID);
             tag.putString("name", playerName);
             tag.putDouble("percentage", percentage);
+            tag.putBoolean("isCompany", isCompany);
             return tag;
         }
 
@@ -97,7 +106,8 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
             UUID uuid = tag.getUUID("uuid");
             String name = tag.getString("name");
             double percentage = tag.getDouble("percentage");
-            return new ProfitShare(uuid, name, percentage);
+            boolean isCompany = tag.getBoolean("isCompany");
+            return new ProfitShare(uuid, name, percentage, isCompany);
         }
     }
 
@@ -123,11 +133,46 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
         this.ownerUUID = player.getUUID();
         this.ownerName = player.getName().getString();
 
+        // Resolve the city this block is placed in
+        if (level != null && !level.isClientSide) {
+            this.cityId = resolveCityId();
+        }
+
         // Default profit share: 100% to owner
         profitShares.clear();
         profitShares.add(new ProfitShare(ownerUUID, ownerName, 1.0));
 
         setChanged();
+    }
+
+    /**
+     * Resolve the city ID for this block's position via StateCraft integration.
+     */
+    private UUID resolveCityId() {
+        if (level == null) return null;
+        try {
+            var managerClass = Class.forName("com.statecraft.core.ChunkClaimManager");
+            var getInstance = managerClass.getMethod("getInstance");
+            var manager = getInstance.invoke(null);
+
+            ChunkPos chunkPos = new ChunkPos(worldPosition);
+            var getChunk = managerClass.getMethod("getClaimedChunk",
+                ChunkPos.class, level.dimension().getClass());
+            Object chunk = getChunk.invoke(manager, chunkPos, level.dimension());
+            if (chunk != null) {
+                return (UUID) chunk.getClass().getMethod("getCityId").invoke(chunk);
+            }
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.debug("Could not resolve city for trading hub block: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Check if this block is placed in a claimed city chunk.
+     */
+    public boolean isInCity() {
+        return cityId != null;
     }
 
     /**
@@ -187,18 +232,22 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
 
     /**
      * Calculate the total tax amount for all items
+     * Uses the full sales tax calculation including city/state/nation taxes
      */
     public double calculateTotalTaxAmount() {
-        double total = 0;
+        double grossValue = 0;
         for (int i = 0; i < itemHandler.getSlots(); i++) {
             ItemStack stack = itemHandler.getStackInSlot(i);
             if (!stack.isEmpty() && ItemValueConfig.canSell(stack)) {
-                total += ItemValueConfig.getStackValue(stack);
+                grossValue += ItemValueConfig.getStackValue(stack);
             }
         }
 
-        double taxRate = ItemValueConfig.SELL_TAX_RATE.get();
-        return total * taxRate;
+        if (grossValue <= 0) return 0;
+
+        // Use the same tax calculation as sellAllItems for accurate preview
+        SalesTaxInfo taxInfo = calculateSalesTax(grossValue);
+        return taxInfo.totalTax;
     }
 
     /**
@@ -589,7 +638,12 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
             double shareValue = netValue * (share.percentage / totalPercentage);
             if (shareValue <= 0) continue;
 
-            if (depositToATM) {
+            if (share.isCompany) {
+                // Company share — deposit to company treasury
+                com.statecraft.economy.core.EconomyManager.getInstance().depositToCompanyTreasury(
+                    share.playerUUID, shareValue,
+                    "Trading Hub profit share (" + (int)sharePercentage + "%)");
+            } else if (depositToATM) {
                 EconomyManager.getInstance().deposit(share.playerUUID, shareValue,
                     "Trading Hub profit share (" + (int)sharePercentage + "%)");
             } else {
@@ -604,9 +658,11 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
                 }
             }
 
-            // Send mail notification to this share recipient
-            sendSaleMail(share.playerUUID, share.playerName, grossValue, taxInfo, netValue,
-                sharePercentage, shareValue, itemsSold, locationStr);
+            // Send mail notification to this share recipient (skip for companies)
+            if (!share.isCompany) {
+                sendSaleMail(share.playerUUID, share.playerName, grossValue, taxInfo, netValue,
+                    sharePercentage, shareValue, itemsSold, locationStr);
+            }
         }
     }
 
@@ -795,6 +851,9 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
             tag.putUUID("owner", ownerUUID);
             tag.putString("ownerName", ownerName);
         }
+        if (cityId != null) {
+            tag.putUUID("cityId", cityId);
+        }
 
         // Save settings
         tag.putBoolean("depositToATM", depositToATM);
@@ -838,6 +897,9 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
         if (tag.hasUUID("owner")) {
             ownerUUID = tag.getUUID("owner");
             ownerName = tag.getString("ownerName");
+        }
+        if (tag.contains("cityId")) {
+            cityId = tag.getUUID("cityId");
         }
 
         // Load settings

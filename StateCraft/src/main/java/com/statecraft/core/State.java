@@ -41,8 +41,10 @@ public class State {
         this.cityPassThroughRate = 0.20; // Default 20% from cities
         this.salesTaxRate = 0.0; // Default 0% state sales tax
 
-        // Governor is automatically a citizen
-        citizens.add(governorId);
+        // Governor is automatically a citizen (if not vacant)
+        if (governorId != null) {
+            citizens.add(governorId);
+        }
     }
 
     public UUID getId() {
@@ -242,7 +244,9 @@ public class State {
         tag.putUUID("id", id);
         tag.putString("name", name);
         tag.putUUID("nationId", nationId);
-        tag.putUUID("governorId", governorId);
+        if (governorId != null) {
+            tag.putUUID("governorId", governorId);
+        }
         tag.putInt("maxCities", maxCities);
         tag.putInt("maxChunks", maxChunks);
         tag.putString("description", description);
@@ -273,7 +277,7 @@ public class State {
         UUID id = tag.getUUID("id");
         String name = tag.getString("name");
         UUID nationId = tag.getUUID("nationId");
-        UUID governorId = tag.getUUID("governorId");
+        UUID governorId = tag.contains("governorId") ? tag.getUUID("governorId") : null;
 
         State state = new State(id, name, nationId, governorId);
         state.maxCities = tag.getInt("maxCities");

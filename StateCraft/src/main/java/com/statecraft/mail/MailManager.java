@@ -26,6 +26,7 @@ public class MailManager {
     private final Map<UUID, Mailbox> cityMailboxes = new ConcurrentHashMap<>();
     private final Map<UUID, Mailbox> stateMailboxes = new ConcurrentHashMap<>();
     private final Map<UUID, Mailbox> nationMailboxes = new ConcurrentHashMap<>();
+    private final Map<UUID, Mailbox> companyMailboxes = new ConcurrentHashMap<>();
 
     // System sender info
     private static final String SYSTEM_SENDER_NAME = "§6StateCraft System";
@@ -87,6 +88,14 @@ public class MailManager {
     }
 
     /**
+     * Get or create a company's mailbox
+     */
+    public Mailbox getCompanyMailbox(UUID companyId) {
+        return companyMailboxes.computeIfAbsent(companyId,
+            id -> new Mailbox(id, Mail.RecipientType.COMPANY));
+    }
+
+    /**
      * Get mailbox by type and ID
      */
     @Nullable
@@ -96,6 +105,7 @@ public class MailManager {
             case CITY -> getCityMailbox(id);
             case STATE -> getStateMailbox(id);
             case NATION -> getNationMailbox(id);
+            case COMPANY -> getCompanyMailbox(id);
         };
     }
 
@@ -112,6 +122,18 @@ public class MailManager {
     }
 
     /**
+     * Send mail with a currency attachment from one player to another.
+     * The sender's balance must have already been withdrawn before calling this.
+     */
+    public void sendPlayerMailWithCurrency(UUID senderId, String senderName, UUID recipientId,
+                                           String subject, String body, double currencyAmount) {
+        Mail mail = new Mail(senderId, senderName, recipientId, Mail.RecipientType.PLAYER,
+            Mail.MailType.CURRENCY_TRANSFER, subject, body);
+        mail.setAttachedCurrency(currencyAmount);
+        deliverMail(mail);
+    }
+
+    /**
      * Send system mail to a player
      */
     public void sendSystemMail(UUID recipientId, Mail.MailType type, String subject, String body) {
@@ -121,12 +143,55 @@ public class MailManager {
     }
 
     /**
+     * Send broadcast mail from a leader to all nation members.
+     * Each member receives their own copy of the mail.
+     *
+     * @param senderId    UUID of the sender (nation leader)
+     * @param senderName  Display name of the sender
+     * @param memberIds   Set of all nation member UUIDs to receive the mail
+     * @param subject     Mail subject
+     * @param body        Mail body
+     * @return number of mails delivered
+     */
+    public int sendBroadcastMail(UUID senderId, String senderName, java.util.Set<UUID> memberIds,
+                                  String subject, String body) {
+        int delivered = 0;
+        for (UUID memberId : memberIds) {
+            if (memberId.equals(senderId)) continue; // Don't send to self
+            Mail mail = new Mail(senderId, senderName, memberId, Mail.RecipientType.PLAYER,
+                Mail.MailType.BROADCAST, subject, body);
+            deliverMail(mail);
+            delivered++;
+        }
+        return delivered;
+    }
+
+    /**
      * Send mail to a government entity
      */
     public void sendGovMail(UUID entityId, Mail.RecipientType entityType,
                            @Nullable UUID senderId, String senderName,
                            Mail.MailType type, String subject, String body) {
         Mail mail = new Mail(senderId, senderName, entityId, entityType, type, subject, body);
+        deliverMail(mail);
+    }
+
+    /**
+     * Send system mail to a company's mailbox
+     */
+    public void sendCompanySystemMail(UUID companyId, Mail.MailType type, String subject, String body) {
+        Mail mail = new Mail(null, SYSTEM_SENDER_NAME, companyId, Mail.RecipientType.COMPANY,
+            type, subject, body);
+        deliverMail(mail);
+    }
+
+    /**
+     * Send mail from a player to a company's mailbox
+     */
+    public void sendCompanyMail(UUID companyId, UUID senderId, String senderName,
+                                 Mail.MailType type, String subject, String body) {
+        Mail mail = new Mail(senderId, senderName, companyId, Mail.RecipientType.COMPANY,
+            type, subject, body);
         deliverMail(mail);
     }
 
@@ -377,6 +442,13 @@ public class MailManager {
             }
             root.add("nations", nationsJson);
 
+            // Save company mailboxes
+            JsonObject companiesJson = new JsonObject();
+            for (Map.Entry<UUID, Mailbox> entry : companyMailboxes.entrySet()) {
+                companiesJson.add(entry.getKey().toString(), serializeMailbox(entry.getValue()));
+            }
+            root.add("companies", companiesJson);
+
             Gson gson = new GsonBuilder().setPrettyPrinting().create();
             Files.writeString(savePath, gson.toJson(root));
 
@@ -441,8 +513,20 @@ public class MailManager {
                 }
             }
 
-            StateCraft.LOGGER.info("Loaded mail data: {} player, {} city, {} state, {} nation mailboxes",
-                playerMailboxes.size(), cityMailboxes.size(), stateMailboxes.size(), nationMailboxes.size());
+            // Load company mailboxes
+            if (root.has("companies")) {
+                JsonObject companiesJson = root.getAsJsonObject("companies");
+                for (Map.Entry<String, JsonElement> entry : companiesJson.entrySet()) {
+                    UUID id = UUID.fromString(entry.getKey());
+                    Mailbox mailbox = deserializeMailbox(entry.getValue().getAsJsonObject(),
+                        id, Mail.RecipientType.COMPANY);
+                    companyMailboxes.put(id, mailbox);
+                }
+            }
+
+            StateCraft.LOGGER.info("Loaded mail data: {} player, {} city, {} state, {} nation, {} company mailboxes",
+                playerMailboxes.size(), cityMailboxes.size(), stateMailboxes.size(),
+                nationMailboxes.size(), companyMailboxes.size());
         } catch (Exception e) {
             StateCraft.LOGGER.error("Failed to load mail data", e);
         }
@@ -502,6 +586,10 @@ public class MailManager {
         obj.addProperty("timestamp", mail.getTimestamp());
         obj.addProperty("read", mail.isRead());
         obj.addProperty("archived", mail.isArchived());
+        if (mail.getAttachedCurrency() > 0) {
+            obj.addProperty("attachedCurrency", mail.getAttachedCurrency());
+            obj.addProperty("currencyClaimed", mail.isCurrencyClaimed());
+        }
         return obj;
     }
 
@@ -521,8 +609,16 @@ public class MailManager {
             boolean read = obj.get("read").getAsBoolean();
             boolean archived = obj.get("archived").getAsBoolean();
 
-            return new Mail(id, senderId, senderName, recipientId, recipientType,
+            Mail mail = new Mail(id, senderId, senderName, recipientId, recipientType,
                 type, subject, body, timestamp, read, archived);
+
+            // Load currency attachment (backward compatible)
+            if (obj.has("attachedCurrency")) {
+                mail.setAttachedCurrency(obj.get("attachedCurrency").getAsDouble());
+                mail.setCurrencyClaimed(obj.has("currencyClaimed") && obj.get("currencyClaimed").getAsBoolean());
+            }
+
+            return mail;
         } catch (Exception e) {
             StateCraft.LOGGER.warn("Failed to deserialize mail", e);
             return null;

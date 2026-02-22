@@ -5,10 +5,12 @@ import com.statecraft.network.packets.RequestContractsPacket;
 import com.statecraft.network.packets.SyncContractsPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Main Government Contracts screen - Hub for viewing and managing contracts
@@ -34,6 +36,10 @@ public class ContractsMainScreen extends StateCraftScreen {
     private int scrollOffset = 0;
     private static final int MAX_VISIBLE_CONTRACTS = 4;
 
+    // Search/Filter
+    private EditBox searchField;
+    private String searchQuery = "";
+
     // Dynamic action buttons
     private List<Button> contractButtons = new ArrayList<>();
 
@@ -55,8 +61,8 @@ public class ContractsMainScreen extends StateCraftScreen {
     public ContractsMainScreen(String nationName) {
         super(Component.literal("Government Contracts"));
         this.nationName = nationName;
-        this.guiWidth = 360;
-        this.guiHeight = 280;
+        this.guiWidth = 340;
+        this.guiHeight = 260;
     }
 
     @Override
@@ -81,6 +87,14 @@ public class ContractsMainScreen extends StateCraftScreen {
                 btn -> switchTab(tab)
             ));
         }
+
+        // Search field
+        searchField = new EditBox(this.font, guiLeft + guiWidth - 130, guiTop + 44, 115, 14, Component.literal("Search"));
+        searchField.setMaxLength(30);
+        searchField.setHint(Component.literal("Search contracts..."));
+        searchField.setResponder(this::onSearchChanged);
+        searchField.setValue(searchQuery);
+        this.addRenderableWidget(searchField);
 
         // Bottom buttons
         int buttonY = guiTop + guiHeight - 28;
@@ -114,6 +128,36 @@ public class ContractsMainScreen extends StateCraftScreen {
         rebuildContractButtons();
     }
 
+    private void onSearchChanged(String query) {
+        this.searchQuery = query.toLowerCase().trim();
+        this.scrollOffset = 0;
+        rebuildContractButtons();
+    }
+
+    /**
+     * Filter contracts based on search query
+     */
+    private List<SyncContractsPacket.ContractSummary> filterContracts(List<SyncContractsPacket.ContractSummary> contracts) {
+        if (searchQuery.isEmpty()) {
+            return contracts;
+        }
+        return contracts.stream()
+            .filter(c -> matchesSearch(c))
+            .collect(Collectors.toList());
+    }
+
+    private boolean matchesSearch(SyncContractsPacket.ContractSummary contract) {
+        String query = searchQuery;
+        // Match against contract number, title, description, contractor name, creator name
+        if (contract.getContractNumber().toLowerCase().contains(query)) return true;
+        if (contract.getTitle().toLowerCase().contains(query)) return true;
+        if (contract.getDescription() != null && contract.getDescription().toLowerCase().contains(query)) return true;
+        if (contract.getContractorName() != null && contract.getContractorName().toLowerCase().contains(query)) return true;
+        if (contract.getCreatorName() != null && contract.getCreatorName().toLowerCase().contains(query)) return true;
+        // Match against status
+        if (contract.getStatus().toLowerCase().contains(query)) return true;
+        return false;
+    }
     private void rebuildContractButtons() {
         // Remove old buttons
         for (Button btn : contractButtons) {
@@ -193,22 +237,24 @@ public class ContractsMainScreen extends StateCraftScreen {
     }
 
     private List<SyncContractsPacket.ContractSummary> getCurrentList() {
-        return switch (currentTab) {
+        List<SyncContractsPacket.ContractSummary> baseList = switch (currentTab) {
             case OPEN_BIDDING -> openBidding;
             case PENDING -> pendingApproval;
             case ACTIVE -> activeContracts;
             case MY_CONTRACTS -> myContracts;
             case HISTORY -> history;
         };
+        return filterContracts(baseList);
     }
 
     @Override
     protected void renderContent(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderDivider(graphics, guiLeft + 10, guiTop + 22, guiWidth - 20);
 
-        // Treasury balance display
-        String treasuryText = String.format("§6Treasury: §a$%.2f", nationTreasuryBalance);
-        graphics.drawString(this.font, treasuryText, guiLeft + guiWidth - font.width(treasuryText.replaceAll("§.", "")) - 15, guiTop + 8, COLOR_TEXT);
+        // Treasury balance display - right-aligned on the title row, compact format
+        String treasuryText = String.format("§a$%.2f", nationTreasuryBalance);
+        int treasuryWidth = font.width(treasuryText.replaceAll("§.", ""));
+        graphics.drawString(this.font, treasuryText, guiLeft + guiWidth - treasuryWidth - 10, guiTop + 8, 0xFFAAAAAA);
 
         if (!dataLoaded) {
             graphics.drawCenteredString(this.font, "§7Loading contract data...",

@@ -15,7 +15,7 @@ import java.util.List;
 public class GovMailboxScreen extends StateCraftScreen {
 
     public enum EntityType {
-        NATION, STATE, CITY
+        NATION, STATE, CITY, COMPANY
     }
 
     private final EntityType entityType;
@@ -28,7 +28,8 @@ public class GovMailboxScreen extends StateCraftScreen {
     private int unreadCount = 0;
     private int totalCount = 0;
     private int scrollOffset = 0;
-    private static final int VISIBLE_ENTRIES = 6;
+    private static final int VISIBLE_ENTRIES = 4; // Reduced to prevent overlap with buttons
+    private static final int ENTRY_HEIGHT = 26;
 
     public GovMailboxScreen(EntityType entityType, String entityName, String parentInfo) {
         super(Component.literal(getTitle(entityType, entityName)));
@@ -36,7 +37,7 @@ public class GovMailboxScreen extends StateCraftScreen {
         this.entityName = entityName;
         this.parentInfo = parentInfo;
         this.guiWidth = 300;
-        this.guiHeight = 220;
+        this.guiHeight = 240; // Increased height for better spacing
     }
 
     private static String getTitle(EntityType type, String name) {
@@ -44,6 +45,7 @@ public class GovMailboxScreen extends StateCraftScreen {
             case NATION -> "Nation Mailbox: " + name;
             case STATE -> "State Mailbox: " + name;
             case CITY -> "City Mailbox: " + name;
+            case COMPANY -> "Company Mailbox: " + name;
         };
     }
 
@@ -56,6 +58,7 @@ public class GovMailboxScreen extends StateCraftScreen {
             case NATION -> RequestGovMailDataPacket.EntityType.NATION;
             case STATE -> RequestGovMailDataPacket.EntityType.STATE;
             case CITY -> RequestGovMailDataPacket.EntityType.CITY;
+            case COMPANY -> RequestGovMailDataPacket.EntityType.COMPANY;
         };
         NetworkHandler.sendToServer(new RequestGovMailDataPacket(packetEntityType, entityName));
 
@@ -112,11 +115,12 @@ public class GovMailboxScreen extends StateCraftScreen {
         }
 
         // Render mail entries
-        int entryHeight = 24;
+        int listEndY = guiTop + guiHeight - 55; // Stop before buttons
         for (int i = scrollOffset; i < Math.min(scrollOffset + VISIBLE_ENTRIES, mailEntries.size()); i++) {
+            if (y + ENTRY_HEIGHT > listEndY) break; // Don't render beyond button area
             MailEntry entry = mailEntries.get(i);
-            renderMailEntry(graphics, leftCol, y, guiWidth - 30, entryHeight, entry, mouseX, mouseY);
-            y += entryHeight + 2;
+            renderMailEntry(graphics, leftCol, y, guiWidth - 30, ENTRY_HEIGHT - 2, entry, mouseX, mouseY);
+            y += ENTRY_HEIGHT;
         }
 
         // Scroll indicators
@@ -124,7 +128,7 @@ public class GovMailboxScreen extends StateCraftScreen {
             graphics.drawCenteredString(this.font, "§7▲ More above", this.width / 2, guiTop + 28, COLOR_SECONDARY);
         }
         if (scrollOffset + VISIBLE_ENTRIES < mailEntries.size()) {
-            graphics.drawCenteredString(this.font, "§7▼ More below", this.width / 2, guiTop + guiHeight - 50, COLOR_SECONDARY);
+            graphics.drawCenteredString(this.font, "§7▼ More below", this.width / 2, listEndY + 2, COLOR_SECONDARY);
         }
     }
 
@@ -154,18 +158,19 @@ public class GovMailboxScreen extends StateCraftScreen {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         // Check if clicking on a mail entry
         int y = guiTop + 52;
-        int entryHeight = 26;
         int leftCol = guiLeft + 15;
         int width = guiWidth - 30;
+        int listEndY = guiTop + guiHeight - 55;
 
         for (int i = scrollOffset; i < Math.min(scrollOffset + VISIBLE_ENTRIES, mailEntries.size()); i++) {
+            if (y + ENTRY_HEIGHT > listEndY) break;
             if (mouseX >= leftCol && mouseX < leftCol + width &&
-                mouseY >= y && mouseY < y + entryHeight - 2) {
+                mouseY >= y && mouseY < y + ENTRY_HEIGHT - 2) {
                 // Open this mail
                 openMailView(mailEntries.get(i));
                 return true;
             }
-            y += entryHeight;
+            y += ENTRY_HEIGHT;
         }
 
         return super.mouseClicked(mouseX, mouseY, button);
@@ -210,6 +215,7 @@ public class GovMailboxScreen extends StateCraftScreen {
             case NATION -> RequestGovMailDataPacket.EntityType.NATION;
             case STATE -> RequestGovMailDataPacket.EntityType.STATE;
             case CITY -> RequestGovMailDataPacket.EntityType.CITY;
+            case COMPANY -> RequestGovMailDataPacket.EntityType.COMPANY;
         };
         NetworkHandler.sendToServer(new RequestGovMailDataPacket(packetEntityType, entityName,
             RequestGovMailDataPacket.Action.MARK_ALL_READ));
@@ -240,6 +246,7 @@ public class GovMailboxScreen extends StateCraftScreen {
                     this.minecraft.setScreen(new MainMenuScreen());
                 }
             }
+            case COMPANY -> this.minecraft.setScreen(new CompanyScreen());
         }
     }
 

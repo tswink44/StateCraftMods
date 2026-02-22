@@ -73,17 +73,18 @@ public class TradingHubMenu extends AbstractContainerMenu {
     }
 
     private void addPlayerInventory(Inventory playerInventory) {
-        // Player inventory starts lower to accommodate trading hub slots
+        // Player inventory slots - adjusted to align with texture
         for (int row = 0; row < 3; ++row) {
             for (int col = 0; col < 9; ++col) {
-                this.addSlot(new Slot(playerInventory, col + row * 9 + 9, 8 + col * 18, 84 + row * 18));
+                this.addSlot(new Slot(playerInventory, col + row * 9 + 9, 8 + col * 18, 103 + row * 18));
             }
         }
     }
 
     private void addPlayerHotbar(Inventory playerInventory) {
+        // Hotbar slots
         for (int col = 0; col < 9; ++col) {
-            this.addSlot(new Slot(playerInventory, col, 8 + col * 18, 142));
+            this.addSlot(new Slot(playerInventory, col, 8 + col * 18, 161));
         }
     }
 

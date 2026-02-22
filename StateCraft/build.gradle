@@ -46,10 +46,15 @@ sourceSets.economy {
     runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
 }
 
-// Ensure compileEconomyJava can see all economy classes
+// Ensure the economy output directory exists before compilation
 tasks.named('compileEconomyJava') {
     // The economy source set needs to compile all its files together
     options.sourcepath = files(economyJava)
+
+    // Ensure output directory exists
+    doFirst {
+        destinationDirectory.get().asFile.mkdirs()
+    }
 }
 
 minecraft {
@@ -62,6 +67,9 @@ minecraft {
             workingDirectory project.file('run')
             property 'forge.logging.markers', 'REGISTRIES'
             property 'forge.logging.console.level', 'debug'
+
+            // Limit RAM allocation to 4GB (default can be very high)
+            jvmArgs '-Xmx4G', '-Xms2G'
 
             mods {
                 statecraft {
@@ -83,6 +91,13 @@ minecraft {
             parent runs.client
             workingDirectory project.file('run-client2')
             args '--username', 'Dev2'
+        }
+
+        // Third client for multiplayer testing
+        client3 {
+            parent runs.client
+            workingDirectory project.file('run-client3')
+            args '--username', 'Dev3'
         }
 
         server {

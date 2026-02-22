@@ -5,6 +5,7 @@ package com.statecraft.core;
  */
 public enum OwnershipType {
     HIERARCHY,  // Owned by the city/state/nation (public land)
-    PLAYER      // Owned by an individual player (private land)
+    PLAYER,     // Owned by an individual player (private land)
+    COMPANY     // Owned by a company (corporate land)
 }
 

@@ -129,7 +129,7 @@ public class LegislatureScreen extends StateCraftScreen {
         for (int i = scrollOffset; i < endIndex; i++) {
             SyncLegislatureDataPacket.BillSummary bill = activeBills.get(i);
             int billIndex = i - scrollOffset;
-            int yOffset = billIndex * 48; // Space per bill entry
+            int yOffset = billIndex * 37; // Space per bill entry (11+11+11+4)
 
             // Add vote buttons for VOTING bills (if player is legislature member and hasn't voted)
             if (bill.getStatus().equals("VOTING") && isLegislatureMember && !bill.hasPlayerVoted()) {
@@ -203,17 +203,9 @@ public class LegislatureScreen extends StateCraftScreen {
             return;
         }
 
-        if (!isLegislatureMember && !isNationLeader) {
-            graphics.drawCenteredString(this.font, "§cYou are not a legislature member",
-                this.width / 2, guiTop + 80, COLOR_WARNING);
-            graphics.drawCenteredString(this.font, "§7Only governors and officers can access this.",
-                this.width / 2, guiTop + 95, 0xFFAAAAAA);
-            return;
-        }
-
-        // Draw role indicator
+        // Draw role indicator — citizens can view but only members/leader can propose/vote
         String roleText = isNationLeader ? "§6★ Nation Leader" :
-            (isLegislatureMember ? "§b✦ Voting Member" : "§7Observer");
+            (isLegislatureMember ? "§b✦ Voting Member" : "§7☉ Citizen Observer");
         graphics.drawString(this.font, roleText, guiLeft + guiWidth - font.width(roleText.replaceAll("§.", "")) - 15, guiTop + 8, 0xFFFFFFFF);
 
         // Draw tab indicator
@@ -261,7 +253,7 @@ public class LegislatureScreen extends StateCraftScreen {
         int y = startY;
 
         // Header
-        graphics.drawString(this.font, "§6Recent History §7(" + recentHistory.size() + ")", x, y, COLOR_PRIMARY);
+        graphics.drawString(this.font, "§6Recent History §7(" + recentHistory.size() + ") §8- click to view", x, y, COLOR_PRIMARY);
         y += 14;
 
         if (recentHistory.isEmpty()) {
@@ -269,10 +261,24 @@ public class LegislatureScreen extends StateCraftScreen {
             return;
         }
 
-        // History list
+        // History list - render with hover detection
+        // History entries have 2 lines (title + author) = 11+11+4 = 26px each
+        int entryHeight = 26;
         int endIndex = Math.min(scrollOffset + MAX_VISIBLE_BILLS, recentHistory.size());
         for (int i = scrollOffset; i < endIndex; i++) {
             SyncLegislatureDataPacket.BillSummary bill = recentHistory.get(i);
+
+            // Check if this entry is hovered
+            int entryTop = y;
+            int entryBottom = y + entryHeight;
+            boolean isHovered = mouseX >= x && mouseX < guiLeft + guiWidth - 30 &&
+                                mouseY >= entryTop && mouseY < entryBottom;
+
+            // Draw highlight if hovered
+            if (isHovered) {
+                graphics.fill(x - 3, entryTop - 1, guiLeft + guiWidth - 25, entryBottom - 1, 0x33FFFFFF);
+            }
+
             y = renderBillEntry(graphics, bill, x, y, mouseX, mouseY, false);
         }
 
@@ -406,6 +412,64 @@ public class LegislatureScreen extends StateCraftScreen {
         return true;
     }
 
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // Handle clicking on history entries to open detail view
+        if (button == 0 && currentTab == Tab.HISTORY && !recentHistory.isEmpty()) {
+            int startY = guiTop + 48 + 14; // After tab content header
+            int x = guiLeft + 15;
+            int entryHeight = 26; // 2 lines (title + author): 11+11+4 spacing
+
+            int endIndex = Math.min(scrollOffset + MAX_VISIBLE_BILLS, recentHistory.size());
+            int y = startY;
+
+            for (int i = scrollOffset; i < endIndex; i++) {
+                int entryTop = y;
+                int entryBottom = y + entryHeight;
+
+                if (mouseX >= x && mouseX < guiLeft + guiWidth - 30 &&
+                    mouseY >= entryTop && mouseY < entryBottom) {
+
+                    SyncLegislatureDataPacket.BillSummary bill = recentHistory.get(i);
+                    openLawDetail(bill);
+                    return true;
+                }
+
+                y += entryHeight;
+            }
+        }
+
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    private void openLawDetail(SyncLegislatureDataPacket.BillSummary bill) {
+        // Create LawInfo from BillSummary
+        java.util.Map<String, String> policyChanges = new java.util.HashMap<>();
+        // Policy changes would need to be sent from server - for now we show what we have
+        if (bill.getPolicyChanges() != null) {
+            policyChanges = bill.getPolicyChanges();
+        }
+
+        LawDetailScreen.LawInfo lawInfo = new LawDetailScreen.LawInfo(
+            bill.getBillNumber(),
+            bill.getTitle(),
+            bill.getDescription(),
+            bill.getAuthorName(),
+            bill.getEnactedTime(),
+            bill.getYesVotes(),
+            bill.getNoVotes(),
+            bill.getAbstainVotes(),
+            bill.isVetoProof(),
+            bill.isConstitutionalAmendment(),
+            policyChanges,
+            bill.getFullText()
+        );
+
+        this.minecraft.setScreen(new LawDetailScreen(nationName, lawInfo, () -> {
+            this.minecraft.setScreen(this);
+        }));
+    }
+
     private void openProposeBillScreen() {
         this.minecraft.setScreen(new ProposeBillScreen(nationName));
     }
@@ -434,14 +498,14 @@ public class LegislatureScreen extends StateCraftScreen {
         this.totalMembers = totalMembers;
         this.dataLoaded = true;
 
-        // Enable propose button if player is a legislature member
+        // Enable propose button if player is a legislature member or nation leader
         // Find and enable the propose button
         this.children().stream()
             .filter(w -> w instanceof Button)
             .map(w -> (Button)w)
             .filter(b -> b.getMessage().getString().contains("Propose"))
             .findFirst()
-            .ifPresent(b -> b.active = isLegislatureMember);
+            .ifPresent(b -> b.active = isLegislatureMember || isNationLeader);
 
         // Rebuild bill action buttons with new data
         rebuildBillButtons();

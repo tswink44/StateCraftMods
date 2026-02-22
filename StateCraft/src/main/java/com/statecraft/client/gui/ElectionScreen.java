@@ -64,7 +64,7 @@ public class ElectionScreen extends Screen {
         registerButton.active = false;
 
         // Back button
-        addRenderableWidget(Button.builder(Component.literal("Back"), btn -> onClose())
+        addRenderableWidget(Button.builder(Component.literal("Back"), btn -> goBack())
             .bounds(centerX - 50, this.height - 30, 100, 20)
             .build());
 
@@ -125,6 +125,18 @@ public class ElectionScreen extends Screen {
     private void registerAsCandidate() {
         NetworkHandler.sendToServer(new RegisterCandidatePacket());
         registerButton.active = false;
+    }
+
+    private void goBack() {
+        if (minecraft != null) {
+            // Return to nation info screen if we have the nation name
+            if (electionData != null && electionData.getNationName() != null && !electionData.getNationName().isEmpty()) {
+                minecraft.setScreen(new NationInfoScreen(electionData.getNationName()));
+            } else {
+                // Fallback to main menu if no nation data
+                minecraft.setScreen(new MainMenuScreen());
+            }
+        }
     }
 
     @Override

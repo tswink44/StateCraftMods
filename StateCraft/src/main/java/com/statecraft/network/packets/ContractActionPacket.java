@@ -11,8 +11,9 @@ public class ContractActionPacket {
         OPEN_BIDDING,       // Open contract for bidding
         CLOSE_BIDDING,      // Close bidding early
         APPROVE_BID,        // Legislature approves a specific bid
-        UPDATE_PROGRESS,    // Update progress percentage
-        COMPLETE_MILESTONE, // Mark a milestone as complete
+        UPDATE_PROGRESS,    // Update progress percentage (contractor)
+        REQUEST_MILESTONE_APPROVAL, // Contractor requests milestone approval
+        COMPLETE_MILESTONE, // Mark a milestone as complete (legislature approval)
         COMPLETE_CONTRACT,  // Mark contract as complete
         CANCEL_CONTRACT,    // Cancel the contract
         FAIL_CONTRACT       // Mark contract as failed

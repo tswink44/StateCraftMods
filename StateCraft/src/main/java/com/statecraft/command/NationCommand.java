@@ -198,7 +198,7 @@ public class NationCommand {
                 return 0;
             }
 
-            if (!nation.isAdmin(sender.getUUID())) {
+            if (!nation.isLeaderOrOfficer(sender.getUUID())) {
                 context.getSource().sendFailure(Component.literal("You don't have permission to invite players!"));
                 return 0;
             }
@@ -493,7 +493,7 @@ public class NationCommand {
                 return 0;
             }
 
-            if (!nation.isAdmin(sender.getUUID())) {
+            if (!nation.isLeaderOrOfficer(sender.getUUID())) {
                 context.getSource().sendFailure(Component.literal("You don't have permission to kick players!"));
                 return 0;
             }
@@ -511,9 +511,9 @@ public class NationCommand {
                 return 0;
             }
 
-            // Can't kick other admins unless you're the leader
-            if (nation.isAdmin(target.getUUID()) && !sender.getUUID().equals(nation.getLeaderId())) {
-                context.getSource().sendFailure(Component.literal("Only the leader can kick other admins!"));
+            // Can't kick other officers unless you're the leader
+            if (nation.isLeaderOrOfficer(target.getUUID()) && !sender.getUUID().equals(nation.getLeaderId())) {
+                context.getSource().sendFailure(Component.literal("Only the leader can kick officers!"));
                 return 0;
             }
 
@@ -620,7 +620,7 @@ public class NationCommand {
                 return 0;
             }
 
-            if (!nation.isAdmin(player.getUUID())) {
+            if (!nation.isLeaderOrOfficer(player.getUUID())) {
                 context.getSource().sendFailure(Component.literal("You don't have permission to change nation settings!"));
                 return 0;
             }

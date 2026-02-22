@@ -460,6 +460,13 @@ public class NetworkHandler {
             .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncOfficerManagementData(pkt, ctx), ctx))
             .add();
 
+        // Appointment packets (Client -> Server)
+        CHANNEL.messageBuilder(AppointLeaderPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(AppointLeaderPacket::encode)
+            .decoder(AppointLeaderPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleAppointLeader)
+            .add();
+
         // Contract packets (Client -> Server)
         CHANNEL.messageBuilder(RequestContractsPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
             .encoder(RequestContractsPacket::encode)
@@ -490,6 +497,130 @@ public class NetworkHandler {
             .encoder(SyncContractsPacket::encode)
             .decoder(SyncContractsPacket::new)
             .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncContracts(pkt, ctx), ctx))
+            .add();
+
+        // City chunks packets
+        CHANNEL.messageBuilder(RequestCityChunksPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestCityChunksPacket::encode)
+            .decoder(RequestCityChunksPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestCityChunks)
+            .add();
+
+        CHANNEL.messageBuilder(SyncCityChunksPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncCityChunksPacket::encode)
+            .decoder(SyncCityChunksPacket::new)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncCityChunks(pkt, ctx), ctx))
+            .add();
+
+        // Eminent domain / nation private chunks packets
+        CHANNEL.messageBuilder(RequestNationPrivateChunksPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestNationPrivateChunksPacket::encode)
+            .decoder(RequestNationPrivateChunksPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestNationPrivateChunks)
+            .add();
+
+        CHANNEL.messageBuilder(SyncNationPrivateChunksPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncNationPrivateChunksPacket::encode)
+            .decoder(SyncNationPrivateChunksPacket::new)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncNationPrivateChunks(pkt, ctx), ctx))
+            .add();
+
+        // Emergency power packets
+        CHANNEL.messageBuilder(RequestEmergencyPowerDataPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestEmergencyPowerDataPacket::encode)
+            .decoder(RequestEmergencyPowerDataPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestEmergencyPowerData)
+            .add();
+
+        CHANNEL.messageBuilder(InvokeEmergencyPowerPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(InvokeEmergencyPowerPacket::encode)
+            .decoder(InvokeEmergencyPowerPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleInvokeEmergencyPower)
+            .add();
+
+        CHANNEL.messageBuilder(SyncEmergencyPowerDataPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncEmergencyPowerDataPacket::encode)
+            .decoder(SyncEmergencyPowerDataPacket::new)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncEmergencyPowerData(pkt, ctx), ctx))
+            .add();
+
+        // Diplomacy packets (Client -> Server)
+        CHANNEL.messageBuilder(RequestDiplomacyDataPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestDiplomacyDataPacket::encode)
+            .decoder(RequestDiplomacyDataPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestDiplomacyData)
+            .add();
+
+        CHANNEL.messageBuilder(DiplomacyActionPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(DiplomacyActionPacket::encode)
+            .decoder(DiplomacyActionPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleDiplomacyAction)
+            .add();
+
+        // Diplomacy packets (Server -> Client)
+        CHANNEL.messageBuilder(SyncDiplomacyDataPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncDiplomacyDataPacket::encode)
+            .decoder(SyncDiplomacyDataPacket::new)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncDiplomacyData(pkt, ctx), ctx))
+            .add();
+
+        // Peace Terms packets (Client -> Server)
+        CHANNEL.messageBuilder(PeaceTermsProposalPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(PeaceTermsProposalPacket::encode)
+            .decoder(PeaceTermsProposalPacket::new)
+            .consumerMainThread(ServerPacketHandler::handlePeaceTermsProposal)
+            .add();
+
+        CHANNEL.messageBuilder(RequestTargetNationChunksPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestTargetNationChunksPacket::encode)
+            .decoder(RequestTargetNationChunksPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestTargetNationChunks)
+            .add();
+
+        // Peace Terms packets (Server -> Client)
+        CHANNEL.messageBuilder(SyncTargetNationChunksPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncTargetNationChunksPacket::encode)
+            .decoder(SyncTargetNationChunksPacket::new)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncTargetNationChunks(pkt, ctx), ctx))
+            .add();
+
+        // Company packets (Client -> Server)
+        CHANNEL.messageBuilder(RequestCompanyDataPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestCompanyDataPacket::encode)
+            .decoder(RequestCompanyDataPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestCompanyData)
+            .add();
+
+        CHANNEL.messageBuilder(CreateCompanyPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(CreateCompanyPacket::encode)
+            .decoder(CreateCompanyPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleCreateCompany)
+            .add();
+
+        CHANNEL.messageBuilder(CompanyActionPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(CompanyActionPacket::encode)
+            .decoder(CompanyActionPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleCompanyAction)
+            .add();
+
+        // Company packets (Server -> Client)
+        CHANNEL.messageBuilder(SyncCompanyDataPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncCompanyDataPacket::encode)
+            .decoder(SyncCompanyDataPacket::new)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncCompanyData(pkt, ctx), ctx))
+            .add();
+
+        // Shareholder voting packets
+        CHANNEL.messageBuilder(ShareholderVotePacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(ShareholderVotePacket::encode)
+            .decoder(ShareholderVotePacket::new)
+            .consumerMainThread(ServerPacketHandler::handleShareholderVote)
+            .add();
+
+        CHANNEL.messageBuilder(SyncShareholderVotesPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncShareholderVotesPacket::encode)
+            .decoder(SyncShareholderVotesPacket::new)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncShareholderVotes(pkt, ctx), ctx))
             .add();
 
         StateCraft.LOGGER.info("StateCraft network packets registered");

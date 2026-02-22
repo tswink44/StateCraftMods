@@ -3,15 +3,19 @@ package com.statecraft.integration;
 import com.statecraft.StateCraft;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
- * Registry for economy integration
- * Economy mods can register their implementation to receive callbacks
+ * Registry for economy and minimap integrations.
+ * Economy mods can register their implementation to receive callbacks.
+ * Minimap mods can register their implementation to receive territory overlay updates.
  */
 public class IntegrationRegistry {
 
     private static EconomyIntegration economyIntegration = null;
+    private static final List<MinimapIntegration> minimapIntegrations = new ArrayList<>();
 
     /**
      * Register an economy integration handler
@@ -193,6 +197,22 @@ public class IntegrationRegistry {
     }
 
     /**
+     * Force withdraw funds from a nation's treasury, allowing negative balance.
+     * Used for mandatory government actions like eminent domain.
+     * @return true if successful
+     */
+    public static boolean forceWithdrawFromNation(String nationName, double amount, String description) {
+        if (economyIntegration != null) {
+            try {
+                return economyIntegration.forceWithdrawFromNation(nationName, amount, description);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error force-withdrawing from nation: {}", e.getMessage());
+            }
+        }
+        return false;
+    }
+
+    /**
      * Deposit funds to a nation's treasury
      * @return true if successful
      */
@@ -229,6 +249,214 @@ public class IntegrationRegistry {
             }
         }
         return String.format("$%.2f", amount);
+    }
+
+    /**
+     * Get the improvement score for a chunk
+     * @param chunkX The chunk X coordinate
+     * @param chunkZ The chunk Z coordinate
+     * @param dimension The dimension (e.g., "minecraft:overworld")
+     * @return The improvement score, or 0 if not available
+     */
+    public static int getChunkImprovementScore(int chunkX, int chunkZ, String dimension) {
+        if (economyIntegration != null) {
+            try {
+                return economyIntegration.getChunkImprovementScore(chunkX, chunkZ, dimension);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error getting chunk improvement score: {}", e.getMessage());
+            }
+        }
+        return 0;
+    }
+
+    /**
+     * Get the total valuation for a chunk (including all multipliers)
+     * @param chunkX The chunk X coordinate
+     * @param chunkZ The chunk Z coordinate
+     * @param dimension The dimension (e.g., "minecraft:overworld")
+     * @return The total chunk value, or 0 if not available
+     */
+    public static double getChunkTotalValue(int chunkX, int chunkZ, String dimension) {
+        if (economyIntegration != null) {
+            try {
+                return economyIntegration.getChunkTotalValue(chunkX, chunkZ, dimension);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error getting chunk total value: {}", e.getMessage());
+            }
+        }
+        return 0;
+    }
+
+    // ==================== Company Economy ====================
+
+    public static void notifyCompanyCreated(UUID companyId) {
+        if (economyIntegration != null) {
+            try {
+                economyIntegration.onCompanyCreated(companyId);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error notifying economy integration of company creation: {}", e.getMessage());
+            }
+        }
+    }
+
+    public static void notifyBankCreated(UUID companyId) {
+        if (economyIntegration != null) {
+            try {
+                economyIntegration.onBankCreated(companyId);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error notifying economy integration of bank creation: {}", e.getMessage());
+            }
+        }
+    }
+
+    public static boolean notifyCompanyDissolving(UUID companyId, UUID founderId) {
+        if (economyIntegration != null) {
+            try {
+                return economyIntegration.onCompanyDissolving(companyId, founderId);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error notifying economy integration of company dissolution: {}", e.getMessage());
+            }
+        }
+        return true;
+    }
+
+    public static double getCompanyBalance(UUID companyId) {
+        if (economyIntegration != null) {
+            try {
+                return economyIntegration.getCompanyBalance(companyId);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error getting company balance: {}", e.getMessage());
+            }
+        }
+        return 0;
+    }
+
+    public static boolean isDividendsEnabled(UUID companyId) {
+        if (economyIntegration != null) {
+            try {
+                return economyIntegration.isDividendsEnabled(companyId);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error checking dividends enabled: {}", e.getMessage());
+            }
+        }
+        return false;
+    }
+
+    public static double getDividendRate(UUID companyId) {
+        if (economyIntegration != null) {
+            try {
+                return economyIntegration.getDividendRate(companyId);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error getting dividend rate: {}", e.getMessage());
+            }
+        }
+        return 0;
+    }
+
+    public static void setDividendsEnabled(UUID companyId, boolean enabled) {
+        if (economyIntegration != null) {
+            try {
+                economyIntegration.setDividendsEnabled(companyId, enabled);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error setting dividends enabled: {}", e.getMessage());
+            }
+        }
+    }
+
+    public static void setDividendRate(UUID companyId, double rate) {
+        if (economyIntegration != null) {
+            try {
+                economyIntegration.setDividendRate(companyId, rate);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error setting dividend rate: {}", e.getMessage());
+            }
+        }
+    }
+
+    public static void setDividendPeriodTicks(UUID companyId, long ticks) {
+        if (economyIntegration != null) {
+            try {
+                economyIntegration.setDividendPeriodTicks(companyId, ticks);
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error setting dividend period: {}", e.getMessage());
+            }
+        }
+    }
+
+    // ==================== Minimap Integration ====================
+
+    /**
+     * Register a minimap integration handler
+     */
+    public static void registerMinimapIntegration(MinimapIntegration integration) {
+        minimapIntegrations.add(integration);
+        StateCraft.LOGGER.info("Minimap integration registered: {} ({})",
+            integration.getMinimapName(), integration.getClass().getName());
+    }
+
+    /**
+     * Unregister a minimap integration handler
+     */
+    public static void unregisterMinimapIntegration(MinimapIntegration integration) {
+        minimapIntegrations.remove(integration);
+    }
+
+    /**
+     * Get all registered minimap integrations
+     */
+    public static List<MinimapIntegration> getMinimapIntegrations() {
+        return minimapIntegrations;
+    }
+
+    /**
+     * Check if any minimap integration is available
+     */
+    public static boolean hasMinimapIntegration() {
+        return !minimapIntegrations.isEmpty();
+    }
+
+    /**
+     * Notify all minimap integrations that chunk data has been updated
+     */
+    public static void notifyMinimapChunkDataUpdated(int centerX, int centerZ, int radius) {
+        for (MinimapIntegration integration : minimapIntegrations) {
+            try {
+                if (integration.isAvailable()) {
+                    integration.onChunkDataUpdated(centerX, centerZ, radius);
+                }
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error notifying minimap integration {}: {}",
+                    integration.getMinimapName(), e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Notify all minimap integrations of a dimension change
+     */
+    public static void notifyMinimapDimensionChange() {
+        for (MinimapIntegration integration : minimapIntegrations) {
+            try {
+                if (integration.isAvailable()) {
+                    integration.onDimensionChange();
+                }
+            } catch (Exception e) {
+                StateCraft.LOGGER.warn("Error notifying minimap integration {} of dimension change: {}",
+                    integration.getMinimapName(), e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Clean up all minimap integrations
+     */
+    public static void cleanupMinimapIntegrations() {
+        for (MinimapIntegration integration : minimapIntegrations) {
+            try {
+                integration.cleanup();
+            } catch (Exception ignored) {}
+        }
+        minimapIntegrations.clear();
     }
 }
 

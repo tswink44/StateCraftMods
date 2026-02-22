@@ -12,7 +12,8 @@ public class RequestMailDataPacket {
         MARK_READ,      // Mark a specific mail as read
         MARK_ALL_READ,  // Mark all mail as read
         DELETE,         // Delete a specific mail
-        ARCHIVE         // Archive a specific mail
+        ARCHIVE,        // Archive a specific mail
+        CLAIM_CURRENCY  // Claim currency attachment from a mail
     }
 
     private final Action action;

@@ -20,13 +20,16 @@ public class MailViewScreen extends StateCraftScreen {
     private final String senderName;
     private final String timeAgo;
     private final Mail.MailType mailType;
+    private final double attachedCurrency;
+    private final boolean currencyClaimed;
 
     private List<String> wrappedBody;
     private int scrollOffset = 0;
     private static final int LINES_VISIBLE = 10;
 
     public MailViewScreen(String mailId, String subject, String body,
-                          String senderName, String timeAgo, Mail.MailType mailType) {
+                          String senderName, String timeAgo, Mail.MailType mailType,
+                          double attachedCurrency, boolean currencyClaimed) {
         super(Component.literal("View Mail"));
         this.mailId = mailId;
         this.subject = subject;
@@ -34,8 +37,16 @@ public class MailViewScreen extends StateCraftScreen {
         this.senderName = senderName;
         this.timeAgo = timeAgo;
         this.mailType = mailType;
+        this.attachedCurrency = attachedCurrency;
+        this.currencyClaimed = currencyClaimed;
         this.guiWidth = 320;
         this.guiHeight = 240;
+    }
+
+    /** Backward-compatible constructor for code that doesn't pass currency fields */
+    public MailViewScreen(String mailId, String subject, String body,
+                          String senderName, String timeAgo, Mail.MailType mailType) {
+        this(mailId, subject, body, senderName, timeAgo, mailType, 0, false);
     }
 
     @Override
@@ -80,6 +91,15 @@ public class MailViewScreen extends StateCraftScreen {
             Component.literal("Back"),
             btn -> goBack()
         ));
+
+        // Claim Currency button (if applicable)
+        if (attachedCurrency > 0 && !currencyClaimed) {
+            this.addRenderableWidget(createButton(
+                guiLeft + 10, buttonY - 24, guiWidth - 20, 20,
+                Component.literal("§a💰 Claim $" + String.format("%.2f", attachedCurrency)),
+                btn -> claimCurrency()
+            ));
+        }
     }
 
     @Override
@@ -97,7 +117,18 @@ public class MailViewScreen extends StateCraftScreen {
         graphics.drawString(this.font, "§7From: §f" + senderName, x, y, COLOR_TEXT);
         y += 11;
         graphics.drawString(this.font, "§8" + timeAgo, x, y, COLOR_SECONDARY);
-        y += 14;
+        y += 4;
+
+        // Currency attachment indicator
+        if (attachedCurrency > 0) {
+            y += 10;
+            if (currencyClaimed) {
+                graphics.drawString(this.font, "§8💰 $" + String.format("%.2f", attachedCurrency) + " (claimed)", x, y, COLOR_SECONDARY);
+            } else {
+                graphics.drawString(this.font, "§a💰 $" + String.format("%.2f", attachedCurrency) + " attached §7— click Claim below!", x, y, COLOR_TEXT);
+            }
+        }
+        y += 10;
 
         renderDivider(graphics, guiLeft + 10, y, guiWidth - 20);
         y += 8;
@@ -178,6 +209,11 @@ public class MailViewScreen extends StateCraftScreen {
     private void openReply() {
         // Open compose screen with recipient pre-filled
         this.minecraft.setScreen(new MailComposeScreen(senderName, "Re: " + subject));
+    }
+
+    private void claimCurrency() {
+        NetworkHandler.sendToServer(new RequestMailDataPacket(RequestMailDataPacket.Action.CLAIM_CURRENCY, mailId));
+        goBack();
     }
 
     private void deleteMail() {

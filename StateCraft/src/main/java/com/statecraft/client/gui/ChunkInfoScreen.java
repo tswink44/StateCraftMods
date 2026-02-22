@@ -33,11 +33,17 @@ public class ChunkInfoScreen extends StateCraftScreen {
 
     private Button abandonButton;
 
+    // Scrolling
+    private int scrollOffset = 0;
+    private int contentHeight = 0;
+    private static final int SCROLL_AREA_HEIGHT = 138;
+    private static final int LINE_HEIGHT = 12;
+
     public ChunkInfoScreen(int chunkX, int chunkZ) {
         super(Component.literal("Chunk Info"));
         this.chunkX = chunkX;
         this.chunkZ = chunkZ;
-        this.guiWidth = 260; this.guiHeight = 280;
+        this.guiWidth = 260; this.guiHeight = 240;
     }
 
     @Override
@@ -115,14 +121,20 @@ public class ChunkInfoScreen extends StateCraftScreen {
             return;
         }
 
-        int y = guiTop + 30;
+        int scrollAreaTop = guiTop + 28;
+        int scrollAreaBottom = scrollAreaTop + SCROLL_AREA_HEIGHT;
         int leftCol = guiLeft + 15;
+
+        // Enable scissoring to clip content to scroll area
+        graphics.enableScissor(guiLeft + 5, scrollAreaTop, guiLeft + guiWidth - 5, scrollAreaBottom);
+
+        int y = scrollAreaTop - (scrollOffset * LINE_HEIGHT);
 
         // Chunk coordinates
         graphics.drawString(this.font, "§6Chunk Coordinates", leftCol, y, COLOR_PRIMARY);
         y += 14;
         graphics.drawString(this.font, "§7X: §f" + chunkX + "  §7Z: §f" + chunkZ, leftCol + 10, y, COLOR_TEXT);
-        y += 18;
+        y += 16;
 
         // Ownership section
         graphics.drawString(this.font, "§6Ownership", leftCol, y, COLOR_PRIMARY);
@@ -130,22 +142,26 @@ public class ChunkInfoScreen extends StateCraftScreen {
 
         if (ownershipType.equals("UNCLAIMED")) {
             graphics.drawString(this.font, "§8Wilderness (Unclaimed)", leftCol + 10, y, 0xFF888888);
+            y += 12;
         } else if (ownershipType.equals("PLAYER")) {
             graphics.drawString(this.font, "§7Type: §ePrivate", leftCol + 10, y, COLOR_TEXT);
             y += 12;
             graphics.drawString(this.font, "§7Owner: §f" + ownerName, leftCol + 10, y, COLOR_TEXT);
+            y += 12;
         } else {
             graphics.drawString(this.font, "§7Type: §aGovernment", leftCol + 10, y, COLOR_TEXT);
             y += 12;
             if (!cityName.isEmpty()) {
                 graphics.drawString(this.font, "§7City: §f" + cityName, leftCol + 10, y, COLOR_TEXT);
+                y += 12;
             }
         }
-        y += 18;
+        y += 6;
 
         // Hierarchy section (if in a nation)
         if (!nationName.isEmpty()) {
-            renderDivider(graphics, guiLeft + 10, y - 4, guiWidth - 20);
+            renderDivider(graphics, guiLeft + 10, y, guiWidth - 20);
+            y += 4;
             graphics.drawString(this.font, "§6Territory Hierarchy", leftCol, y, COLOR_PRIMARY);
             y += 14;
 
@@ -165,21 +181,53 @@ public class ChunkInfoScreen extends StateCraftScreen {
 
         // Permits section
         y += 6;
-        renderDivider(graphics, guiLeft + 10, y - 4, guiWidth - 20);
+        renderDivider(graphics, guiLeft + 10, y, guiWidth - 20);
+        y += 4;
         graphics.drawString(this.font, "§6Building Permits", leftCol, y, COLOR_PRIMARY);
         y += 14;
 
         if (permitHolders.isEmpty()) {
             graphics.drawString(this.font, "§8No permits granted", leftCol + 10, y, 0xFF888888);
+            y += 12;
         } else {
-            for (int i = 0; i < Math.min(3, permitHolders.size()); i++) {
-                graphics.drawString(this.font, "§7• §f" + permitHolders.get(i), leftCol + 10, y, COLOR_TEXT);
+            for (String permitHolder : permitHolders) {
+                graphics.drawString(this.font, "§7• §f" + permitHolder, leftCol + 10, y, COLOR_TEXT);
                 y += 12;
             }
-            if (permitHolders.size() > 3) {
-                graphics.drawString(this.font, "§8...and " + (permitHolders.size() - 3) + " more", leftCol + 10, y, 0xFF888888);
-            }
         }
+
+        // Calculate content height for scroll bounds
+        contentHeight = y - (scrollAreaTop - (scrollOffset * LINE_HEIGHT));
+
+        graphics.disableScissor();
+
+        // Scroll indicators
+        int maxScroll = getMaxScroll();
+        if (scrollOffset > 0) {
+            graphics.drawCenteredString(this.font, "§7▲", guiLeft + guiWidth - 15, scrollAreaTop + 2, 0xFF888888);
+        }
+        if (scrollOffset < maxScroll) {
+            graphics.drawCenteredString(this.font, "§7▼", guiLeft + guiWidth - 15, scrollAreaBottom - 10, 0xFF888888);
+        }
+    }
+
+    private int getMaxScroll() {
+        int overflow = contentHeight - SCROLL_AREA_HEIGHT;
+        if (overflow <= 0) return 0;
+        return (overflow + LINE_HEIGHT - 1) / LINE_HEIGHT; // ceiling division
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        int maxScroll = getMaxScroll();
+        if (delta > 0 && scrollOffset > 0) {
+            scrollOffset--;
+            return true;
+        } else if (delta < 0 && scrollOffset < maxScroll) {
+            scrollOffset++;
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, delta);
     }
 
     private void openPermitsScreen() {

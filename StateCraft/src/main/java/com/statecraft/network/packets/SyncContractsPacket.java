@@ -100,6 +100,7 @@ public class SyncContractsPacket {
         private final String description;
         private final String creatorName;
         private final String status;
+        private final String compensationType;  // FIXED, MILESTONE, VALUATION_BASED
         private final double budget;
         private final double bondAmount;
         private final int chunkCount;
@@ -108,18 +109,27 @@ public class SyncContractsPacket {
         private final String contractorName;
         private final int progressPercent;
         private final boolean playerHasBid;
+        private final boolean isPlayerContractor;  // Is the current player the contractor?
         private final List<BidSummary> bids;  // Only populated for pending approval
+        private final java.util.Map<Integer, Boolean> milestonesCompleted;  // Milestone completion status
+        private final java.util.Set<Integer> pendingMilestoneApprovals;  // Milestones waiting for approval
+        private final java.util.List<int[]> chunkCoordinates;  // List of [x, z] chunk coordinates
+        private final String dimension;  // e.g., "minecraft:overworld"
 
         public ContractSummary(String contractId, String contractNumber, String title, String description,
-                               String creatorName, String status, double budget, double bondAmount,
+                               String creatorName, String status, String compensationType, double budget, double bondAmount,
                                int chunkCount, int bidCount, long timeRemaining, String contractorName,
-                               int progressPercent, boolean playerHasBid, List<BidSummary> bids) {
+                               int progressPercent, boolean playerHasBid, boolean isPlayerContractor,
+                               List<BidSummary> bids, java.util.Map<Integer, Boolean> milestonesCompleted,
+                               java.util.Set<Integer> pendingMilestoneApprovals,
+                               java.util.List<int[]> chunkCoordinates, String dimension) {
             this.contractId = contractId;
             this.contractNumber = contractNumber;
             this.title = title;
             this.description = description;
             this.creatorName = creatorName;
             this.status = status;
+            this.compensationType = compensationType;
             this.budget = budget;
             this.bondAmount = bondAmount;
             this.chunkCount = chunkCount;
@@ -128,7 +138,12 @@ public class SyncContractsPacket {
             this.contractorName = contractorName;
             this.progressPercent = progressPercent;
             this.playerHasBid = playerHasBid;
+            this.isPlayerContractor = isPlayerContractor;
             this.bids = bids;
+            this.milestonesCompleted = milestonesCompleted;
+            this.pendingMilestoneApprovals = pendingMilestoneApprovals;
+            this.chunkCoordinates = chunkCoordinates;
+            this.dimension = dimension;
         }
 
         public void encode(FriendlyByteBuf buf) {
@@ -138,6 +153,7 @@ public class SyncContractsPacket {
             buf.writeUtf(description, 512);
             buf.writeUtf(creatorName, 64);
             buf.writeUtf(status, 32);
+            buf.writeUtf(compensationType != null ? compensationType : "MILESTONE", 32);
             buf.writeDouble(budget);
             buf.writeDouble(bondAmount);
             buf.writeVarInt(chunkCount);
@@ -146,11 +162,33 @@ public class SyncContractsPacket {
             buf.writeUtf(contractorName != null ? contractorName : "", 64);
             buf.writeVarInt(progressPercent);
             buf.writeBoolean(playerHasBid);
+            buf.writeBoolean(isPlayerContractor);
 
             buf.writeVarInt(bids.size());
             for (BidSummary bid : bids) {
                 bid.encode(buf);
             }
+
+            // Write milestone completion status
+            buf.writeVarInt(milestonesCompleted.size());
+            for (java.util.Map.Entry<Integer, Boolean> entry : milestonesCompleted.entrySet()) {
+                buf.writeVarInt(entry.getKey());
+                buf.writeBoolean(entry.getValue());
+            }
+
+            // Write pending milestone approvals
+            buf.writeVarInt(pendingMilestoneApprovals.size());
+            for (Integer milestone : pendingMilestoneApprovals) {
+                buf.writeVarInt(milestone);
+            }
+
+            // Write chunk coordinates
+            buf.writeVarInt(chunkCoordinates.size());
+            for (int[] chunk : chunkCoordinates) {
+                buf.writeVarInt(chunk[0]);
+                buf.writeVarInt(chunk[1]);
+            }
+            buf.writeUtf(dimension != null ? dimension : "minecraft:overworld", 128);
         }
 
         public static ContractSummary decode(FriendlyByteBuf buf) {
@@ -160,6 +198,7 @@ public class SyncContractsPacket {
             String description = buf.readUtf(512);
             String creatorName = buf.readUtf(64);
             String status = buf.readUtf(32);
+            String compensationType = buf.readUtf(32);
             double budget = buf.readDouble();
             double bondAmount = buf.readDouble();
             int chunkCount = buf.readVarInt();
@@ -168,6 +207,7 @@ public class SyncContractsPacket {
             String contractorName = buf.readUtf(64);
             int progressPercent = buf.readVarInt();
             boolean playerHasBid = buf.readBoolean();
+            boolean isPlayerContractor = buf.readBoolean();
 
             int bidListSize = buf.readVarInt();
             List<BidSummary> bids = new ArrayList<>(bidListSize);
@@ -175,9 +215,34 @@ public class SyncContractsPacket {
                 bids.add(BidSummary.decode(buf));
             }
 
+            // Read milestone completion status
+            int milestoneCount = buf.readVarInt();
+            java.util.Map<Integer, Boolean> milestonesCompleted = new java.util.HashMap<>();
+            for (int i = 0; i < milestoneCount; i++) {
+                int milestone = buf.readVarInt();
+                boolean completed = buf.readBoolean();
+                milestonesCompleted.put(milestone, completed);
+            }
+
+            // Read pending milestone approvals
+            int pendingCount = buf.readVarInt();
+            java.util.Set<Integer> pendingMilestoneApprovals = new java.util.HashSet<>();
+            for (int i = 0; i < pendingCount; i++) {
+                pendingMilestoneApprovals.add(buf.readVarInt());
+            }
+
+            // Read chunk coordinates
+            int chunkCoordCount = buf.readVarInt();
+            java.util.List<int[]> chunkCoordinates = new java.util.ArrayList<>(chunkCoordCount);
+            for (int i = 0; i < chunkCoordCount; i++) {
+                chunkCoordinates.add(new int[]{buf.readVarInt(), buf.readVarInt()});
+            }
+            String dimension = buf.readUtf(128);
+
             return new ContractSummary(contractId, contractNumber, title, description, creatorName,
-                status, budget, bondAmount, chunkCount, bidCount, timeRemaining, contractorName,
-                progressPercent, playerHasBid, bids);
+                status, compensationType, budget, bondAmount, chunkCount, bidCount, timeRemaining, contractorName,
+                progressPercent, playerHasBid, isPlayerContractor, bids, milestonesCompleted, pendingMilestoneApprovals,
+                chunkCoordinates, dimension);
         }
 
         // Getters
@@ -187,6 +252,7 @@ public class SyncContractsPacket {
         public String getDescription() { return description; }
         public String getCreatorName() { return creatorName; }
         public String getStatus() { return status; }
+        public String getCompensationType() { return compensationType; }
         public double getBudget() { return budget; }
         public double getBondAmount() { return bondAmount; }
         public int getChunkCount() { return chunkCount; }
@@ -195,7 +261,12 @@ public class SyncContractsPacket {
         public String getContractorName() { return contractorName; }
         public int getProgressPercent() { return progressPercent; }
         public boolean hasPlayerBid() { return playerHasBid; }
+        public boolean isPlayerContractor() { return isPlayerContractor; }
         public List<BidSummary> getBids() { return bids; }
+        public java.util.Map<Integer, Boolean> getMilestonesCompleted() { return milestonesCompleted; }
+        public java.util.Set<Integer> getPendingMilestoneApprovals() { return pendingMilestoneApprovals; }
+        public java.util.List<int[]> getChunkCoordinates() { return chunkCoordinates; }
+        public String getDimension() { return dimension; }
     }
 
     /**

@@ -34,6 +34,15 @@ public class ProposeBillScreen extends StateCraftScreen {
     private int dropdownScrollOffset = 0;
     private static final int DROPDOWN_MAX_VISIBLE = 6;
 
+    // Boolean toggle state (for BOOLEAN policies)
+    private boolean booleanToggleValue = false;
+
+    // TEXT policy value (stored separately to persist across screen changes)
+    private String textPolicyValue = "";
+
+    // CHUNK_TARGET value (stored separately, format: "chunkX,chunkZ,dimension")
+    private String chunkTargetValue = "";
+
     // Current bill policy changes
     private final Map<PolicyType, String> policyChanges = new HashMap<>();
 
@@ -144,17 +153,74 @@ public class ProposeBillScreen extends StateCraftScreen {
             renderDropdownButton(graphics, policyDropdownX, y, policyDropdownWidth, policyText, mouseX, mouseY, showPolicyDropdown);
         }
 
-        // Value hint
+        // Value input area - depends on policy type
         if (selectedPolicy != null) {
-            String hint = getValueHint(selectedPolicy);
-            graphics.drawString(this.font, "§8" + hint, guiLeft + guiWidth - 72, y + 18, 0xFF888888);
+            PolicyType.ValueType valueType = selectedPolicy.getValueType();
+
+            if (valueType == PolicyType.ValueType.BOOLEAN) {
+                // Hide the text field, show toggle button
+                policyValueField.visible = false;
+                int toggleX = guiLeft + guiWidth - 75;
+                int toggleY = y;
+                boolean hovered = mouseX >= toggleX && mouseX < toggleX + 60 && mouseY >= toggleY && mouseY < toggleY + 14;
+                int bgColor = hovered ? 0xFF4A4A6A : 0xFF2A2A4A;
+                graphics.fill(toggleX, toggleY, toggleX + 60, toggleY + 14, bgColor);
+                graphics.fill(toggleX, toggleY, toggleX + 60, toggleY + 1, 0xFF5A5A7A);
+                graphics.fill(toggleX, toggleY + 13, toggleX + 60, toggleY + 14, 0xFF1A1A2A);
+                String boolText = booleanToggleValue ? "§aTrue" : "§cFalse";
+                graphics.drawCenteredString(this.font, boolText, toggleX + 30, toggleY + 3, COLOR_TEXT);
+            } else if (valueType == PolicyType.ValueType.TEXT) {
+                // For TEXT type, show "Edit..." button that opens a larger text editor
+                policyValueField.visible = false;
+                int btnX = guiLeft + guiWidth - 75;
+                int btnY = y;
+                boolean hovered = mouseX >= btnX && mouseX < btnX + 60 && mouseY >= btnY && mouseY < btnY + 14;
+                int bgColor = hovered ? 0xFF4A6A4A : 0xFF2A4A2A;
+                graphics.fill(btnX, btnY, btnX + 60, btnY + 14, bgColor);
+                graphics.fill(btnX, btnY, btnX + 60, btnY + 1, 0xFF5A7A5A);
+                graphics.fill(btnX, btnY + 13, btnX + 60, btnY + 14, 0xFF1A2A1A);
+                String btnText = textPolicyValue.isEmpty() ? "§eEdit..." : "§aEdited";
+                graphics.drawCenteredString(this.font, btnText, btnX + 30, btnY + 3, COLOR_TEXT);
+            } else if (valueType == PolicyType.ValueType.CHUNK_TARGET) {
+                // For CHUNK_TARGET type, show "Select..." button that opens the chunk selector
+                policyValueField.visible = false;
+                int btnX = guiLeft + guiWidth - 80;
+                int btnY = y;
+                boolean hovered = mouseX >= btnX && mouseX < btnX + 65 && mouseY >= btnY && mouseY < btnY + 14;
+                int bgColor = hovered ? 0xFF6A4A4A : 0xFF4A2A2A;
+                graphics.fill(btnX, btnY, btnX + 65, btnY + 14, bgColor);
+                graphics.fill(btnX, btnY, btnX + 65, btnY + 1, 0xFF7A5A5A);
+                graphics.fill(btnX, btnY + 13, btnX + 65, btnY + 14, 0xFF2A1A1A);
+                String btnText = chunkTargetValue.isEmpty() ? "§eSelect..." : "§aSelected";
+                graphics.drawCenteredString(this.font, btnText, btnX + 32, btnY + 3, COLOR_TEXT);
+            } else {
+                // Show normal value field
+                policyValueField.visible = true;
+                // Set the hint in the field itself to avoid text overlap with Add button
+                policyValueField.setHint(Component.literal(getValueHint(selectedPolicy)));
+            }
+        } else {
+            policyValueField.visible = true;
+        }
+
+        // Policy description (when a policy is selected)
+        if (selectedPolicy != null) {
+            int descY = y + 34; // Below the Add button row (y + 18 for button row + 16 for spacing)
+            String desc = selectedPolicy.getDescription();
+            // Wrap description text to fit within full width minus margins
+            int maxWidth = guiWidth - 30;
+            List<String> wrappedLines = wrapText(desc, maxWidth);
+            graphics.drawString(this.font, "§8" + wrappedLines.get(0), guiLeft + 12, descY, 0xFF888888);
+            if (wrappedLines.size() > 1) {
+                graphics.drawString(this.font, "§8" + wrappedLines.get(1), guiLeft + 12, descY + 10, 0xFF888888);
+            }
         }
 
         // Render dropdowns (on top of everything else, so render last)
         // These are rendered after the rest so they appear on top
 
         // Divider before added policies
-        int policiesY = guiTop + 125;
+        int policiesY = guiTop + 140;
         renderDivider(graphics, guiLeft + 5, policiesY, guiWidth - 10);
 
         // Added Policies Section
@@ -284,6 +350,49 @@ public class ProposeBillScreen extends StateCraftScreen {
         return text.substring(0, maxLen - 2) + "..";
     }
 
+    /**
+     * Wrap text to fit within a given pixel width, returning up to 2 lines
+     */
+    private List<String> wrapText(String text, int maxWidth) {
+        List<String> lines = new ArrayList<>();
+        if (text == null || text.isEmpty()) {
+            lines.add("");
+            return lines;
+        }
+
+        String[] words = text.split(" ");
+        StringBuilder currentLine = new StringBuilder();
+
+        for (String word : words) {
+            String testLine = currentLine.length() == 0 ? word : currentLine + " " + word;
+            if (this.font.width(testLine) <= maxWidth) {
+                if (currentLine.length() > 0) currentLine.append(" ");
+                currentLine.append(word);
+            } else {
+                if (currentLine.length() > 0) {
+                    lines.add(currentLine.toString());
+                    currentLine = new StringBuilder(word);
+                } else {
+                    // Single word too long, truncate it
+                    lines.add(truncate(word, maxWidth / 6));
+                    currentLine = new StringBuilder();
+                }
+                // Only keep 2 lines max
+                if (lines.size() >= 2) break;
+            }
+        }
+
+        if (currentLine.length() > 0 && lines.size() < 2) {
+            lines.add(currentLine.toString());
+        }
+
+        if (lines.isEmpty()) {
+            lines.add("");
+        }
+
+        return lines;
+    }
+
     private List<PolicyType> getPoliciesForCategory(PolicyType.Category category) {
         List<PolicyType> result = new ArrayList<>();
         if (category == null) return result;
@@ -303,6 +412,7 @@ public class ProposeBillScreen extends StateCraftScreen {
             case CURRENCY -> "$amount";
             case TEXT -> "text";
             case NATION_TARGET -> "nation";
+            case CHUNK_TARGET -> "Select chunk...";
         };
     }
 
@@ -312,6 +422,10 @@ public class ProposeBillScreen extends StateCraftScreen {
                 case BOOLEAN -> value.equalsIgnoreCase("true") ? "Yes" : "No";
                 case PERCENTAGE -> String.format("%.0f%%", Double.parseDouble(value) * 100);
                 case CURRENCY -> "$" + value;
+                case CHUNK_TARGET -> {
+                    String[] parts = value.split(",", 3);
+                    yield "Chunk (" + parts[0] + ", " + parts[1] + ")";
+                }
                 default -> value;
             };
         } catch (Exception e) {
@@ -326,6 +440,51 @@ public class ProposeBillScreen extends StateCraftScreen {
             int dropdownWidth = 90;
             int policyDropdownX = guiLeft + 12 + dropdownWidth + 5;
             int policyDropdownWidth = 100;
+
+            // Boolean toggle click
+            if (selectedPolicy != null && selectedPolicy.getValueType() == PolicyType.ValueType.BOOLEAN) {
+                int toggleX = guiLeft + guiWidth - 75;
+                int toggleY = y;
+                if (mouseX >= toggleX && mouseX < toggleX + 60 && mouseY >= toggleY && mouseY < toggleY + 14) {
+                    booleanToggleValue = !booleanToggleValue;
+                    return true;
+                }
+            }
+
+            // TEXT edit button click - open text editor screen
+            if (selectedPolicy != null && selectedPolicy.getValueType() == PolicyType.ValueType.TEXT) {
+                int btnX = guiLeft + guiWidth - 75;
+                int btnY = y;
+                if (mouseX >= btnX && mouseX < btnX + 60 && mouseY >= btnY && mouseY < btnY + 14) {
+                    // Open text editor screen
+                    this.minecraft.setScreen(new LongTextEditorScreen(
+                        selectedPolicy.getDisplayName(),
+                        textPolicyValue,
+                        text -> {
+                            textPolicyValue = text;
+                            this.minecraft.setScreen(this);
+                        },
+                        () -> this.minecraft.setScreen(this)
+                    ));
+                    return true;
+                }
+
+            // CHUNK_TARGET select button click - open eminent domain chunk selector
+            } else if (selectedPolicy != null && selectedPolicy.getValueType() == PolicyType.ValueType.CHUNK_TARGET) {
+                int btnX = guiLeft + guiWidth - 80;
+                int btnY = y;
+                if (mouseX >= btnX && mouseX < btnX + 65 && mouseY >= btnY && mouseY < btnY + 14) {
+                    this.minecraft.setScreen(new EminentDomainScreen(
+                        nationName,
+                        chunkValue -> {
+                            chunkTargetValue = chunkValue;
+                            this.minecraft.setScreen(this);
+                        },
+                        () -> this.minecraft.setScreen(this)
+                    ));
+                    return true;
+                }
+            }
 
             // Category dropdown button click
             if (mouseX >= guiLeft + 12 && mouseX < guiLeft + 12 + dropdownWidth &&
@@ -448,10 +607,32 @@ public class ProposeBillScreen extends StateCraftScreen {
             return;
         }
 
-        String value = policyValueField.getValue().trim();
-        if (value.isEmpty()) {
-            showError("Enter a value");
-            return;
+        String value;
+
+        // Handle different value types
+        if (selectedPolicy.getValueType() == PolicyType.ValueType.BOOLEAN) {
+            // Use the toggle state
+            value = String.valueOf(booleanToggleValue);
+        } else if (selectedPolicy.getValueType() == PolicyType.ValueType.TEXT) {
+            // Use the stored text value (set by the text editor)
+            value = textPolicyValue.trim();
+            if (value.isEmpty()) {
+                showError("Enter text using the Edit button");
+                return;
+            }
+        } else if (selectedPolicy.getValueType() == PolicyType.ValueType.CHUNK_TARGET) {
+            // Use the stored chunk target value (set by the chunk selector screen)
+            value = chunkTargetValue.trim();
+            if (value.isEmpty()) {
+                showError("Select a chunk using the Select button");
+                return;
+            }
+        } else {
+            value = policyValueField.getValue().trim();
+            if (value.isEmpty()) {
+                showError("Enter a value");
+                return;
+            }
         }
 
         // Convert percentage input (e.g., "25" -> "0.25")
@@ -472,6 +653,9 @@ public class ProposeBillScreen extends StateCraftScreen {
         policyChanges.put(selectedPolicy, value);
         selectedPolicy = null;
         policyValueField.setValue("");
+        textPolicyValue = "";
+        chunkTargetValue = "";
+        booleanToggleValue = false;
     }
 
     private void submitBill() {
@@ -515,6 +699,8 @@ public class ProposeBillScreen extends StateCraftScreen {
         selectedCategory = null;
         selectedPolicy = null;
         policyValueField.setValue("");
+        booleanToggleValue = false;
+        textPolicyValue = "";
         errorMessage = null;
         addedPoliciesScrollOffset = 0;
     }

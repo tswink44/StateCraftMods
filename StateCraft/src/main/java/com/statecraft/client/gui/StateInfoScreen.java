@@ -30,6 +30,7 @@ public class StateInfoScreen extends StateCraftScreen {
     private int memberCount = 0;
     private boolean isGovernor = false;
     private boolean canManage = false;
+    private boolean isNationLeader = false;
     private String flagUrl = "";
     private List<String> cityNames = new ArrayList<>();
 
@@ -43,6 +44,7 @@ public class StateInfoScreen extends StateCraftScreen {
     private Button settingsButton;
     private Button mailButton;
     private Button leaveButton;
+    private Button appointButton;
 
     @Override
     protected void init() {
@@ -63,16 +65,9 @@ public class StateInfoScreen extends StateCraftScreen {
             btn -> openCitiesScreen()
         ));
 
-        // Create City button
-        this.addRenderableWidget(createButton(
-            startX + spacing, buttonY, buttonWidth, 20,
-            Component.literal("New"),
-            btn -> openCreateCityScreen()
-        ));
-
         // Mailbox button - hidden until we know permissions
         mailButton = this.addRenderableWidget(createButton(
-            startX + spacing * 2, buttonY, buttonWidth, 20,
+            startX + spacing, buttonY, buttonWidth, 20,
             Component.literal("§eMail"),
             btn -> openMailboxScreen()
         ));
@@ -80,15 +75,23 @@ public class StateInfoScreen extends StateCraftScreen {
 
         // Settings button - hidden until we know permissions
         settingsButton = this.addRenderableWidget(createButton(
-            startX + spacing * 3, buttonY, buttonWidth, 20,
+            startX + spacing * 2, buttonY, buttonWidth, 20,
             Component.literal("Settings"),
             btn -> openSettingsScreen()
         ));
         settingsButton.visible = false;
 
+        // Appoint Governor button - hidden until we know if player is nation leader
+        appointButton = this.addRenderableWidget(createButton(
+            startX + spacing * 3, buttonY, buttonWidth, 20,
+            Component.literal("§bAppoint"),
+            btn -> openAppointScreen()
+        ));
+        appointButton.visible = false;
+
         // Leave button - hidden until we know permissions (not governor)
         leaveButton = this.addRenderableWidget(createButton(
-            startX + spacing * 4, buttonY, buttonWidth, 20,
+            startX + spacing * 3, buttonY, buttonWidth, 20,
             Component.literal("§cLeave"),
             btn -> leaveState()
         ));
@@ -165,12 +168,15 @@ public class StateInfoScreen extends StateCraftScreen {
         this.minecraft.setScreen(new CitiesListScreen(nationName, stateName));
     }
 
-    private void openCreateCityScreen() {
-        this.minecraft.setScreen(new CreateCityScreen(nationName, stateName));
-    }
 
     private void openSettingsScreen() {
         this.minecraft.setScreen(new StateSettingsScreen(nationName, stateName));
+    }
+
+    private void openAppointScreen() {
+        this.minecraft.setScreen(new AppointScreen(nationName, stateName, null,
+            AppointScreen.AppointType.GOVERNOR,
+            () -> this.minecraft.setScreen(new StateInfoScreen(nationName, stateName))));
     }
 
     private void openMailboxScreen() {
@@ -189,8 +195,9 @@ public class StateInfoScreen extends StateCraftScreen {
     }
 
     private void renderFlag(GuiGraphics graphics) {
-        int flagX = guiLeft - FLAG_SIZE - 4;
-        int flagY = guiTop - FLAG_SIZE - 4;
+        // Position flag outside the panel to the left, same vertical height
+        int flagX = guiLeft - FLAG_SIZE - 8;
+        int flagY = guiTop + 4;
 
         // Draw flag border/background
         graphics.fill(flagX - 2, flagY - 2, flagX + FLAG_SIZE + 2, flagY + FLAG_SIZE + 2, 0xFF333333);
@@ -218,6 +225,17 @@ public class StateInfoScreen extends StateCraftScreen {
     // Called by network handler when data is received
     public void updateData(String governorName, int cityCount, int chunkCount, int memberCount,
                            boolean isGovernor, boolean canManage, List<String> cityNames, String flagUrl) {
+        updateData(governorName, cityCount, chunkCount, memberCount, isGovernor, canManage, cityNames, flagUrl, false);
+    }
+
+    public void updateData(String governorName, int cityCount, int chunkCount, int memberCount,
+                           boolean isGovernor, boolean canManage, List<String> cityNames, boolean isNationLeader) {
+        updateData(governorName, cityCount, chunkCount, memberCount, isGovernor, canManage, cityNames, "", isNationLeader);
+    }
+
+    public void updateData(String governorName, int cityCount, int chunkCount, int memberCount,
+                           boolean isGovernor, boolean canManage, List<String> cityNames, String flagUrl,
+                           boolean isNationLeader) {
         this.governorName = governorName;
         this.cityCount = cityCount;
         this.chunkCount = chunkCount;
@@ -226,6 +244,7 @@ public class StateInfoScreen extends StateCraftScreen {
         this.canManage = canManage;
         this.cityNames = cityNames;
         this.flagUrl = flagUrl != null ? flagUrl : "";
+        this.isNationLeader = isNationLeader;
         this.dataLoaded = true;
 
         // Show settings and mail buttons only for governors/admins
@@ -235,16 +254,20 @@ public class StateInfoScreen extends StateCraftScreen {
         if (mailButton != null) {
             mailButton.visible = canManage;
         }
-        // Show leave button for non-governors
+        // Show appoint button for nation leaders (they can appoint governors)
+        if (appointButton != null) {
+            appointButton.visible = isNationLeader;
+        }
+        // Show leave button for non-governors (but not if appoint is shown in same slot)
         if (leaveButton != null) {
-            leaveButton.visible = !isGovernor;
+            leaveButton.visible = !isGovernor && !isNationLeader;
         }
     }
 
     // Overload for backward compatibility
     public void updateData(String governorName, int cityCount, int chunkCount, int memberCount,
                            boolean isGovernor, boolean canManage, List<String> cityNames) {
-        updateData(governorName, cityCount, chunkCount, memberCount, isGovernor, canManage, cityNames, "");
+        updateData(governorName, cityCount, chunkCount, memberCount, isGovernor, canManage, cityNames, "", false);
     }
 }
 

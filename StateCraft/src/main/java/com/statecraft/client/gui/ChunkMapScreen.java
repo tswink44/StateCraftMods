@@ -24,8 +24,8 @@ import java.util.Map;
 public class ChunkMapScreen extends StateCraftScreen {
 
     private static final int MAP_SIZE = 17; // 17x17 chunk grid (8 chunks in each direction)
-    private static final int MIN_CELL_SIZE = 12; // Minimum cell size
-    private static final int MAX_CELL_SIZE = 24; // Maximum cell size
+    private static final int MIN_CELL_SIZE = 10; // Minimum cell size
+    private static final int MAX_CELL_SIZE = 20; // Maximum cell size
     private static final int TERRAIN_RESOLUTION = 8; // Sample 8x8 points per chunk for better building clarity
 
     // Dynamically calculated cell size based on screen
@@ -85,9 +85,9 @@ public class ChunkMapScreen extends StateCraftScreen {
     @Override
     protected void init() {
         // Calculate cell size based on available screen space
-        // Leave margins of 40 pixels on each side and 80 pixels for buttons on right
-        int availableWidth = this.width - 80 - 80; // 80 for margins, 80 for buttons
-        int availableHeight = this.height - 100; // 100 for top/bottom margins
+        // Leave margins for buttons on right and top/bottom content
+        int availableWidth = this.width - 60 - 84; // 60 for left/right margins, 84 for buttons panel
+        int availableHeight = this.height - 90; // 90 for top header + bottom legend/close
 
         // Calculate the cell size that fits
         int maxCellsWidth = availableWidth / MAP_SIZE;
@@ -98,8 +98,8 @@ public class ChunkMapScreen extends StateCraftScreen {
         cellSize = Math.max(MIN_CELL_SIZE, Math.min(MAX_CELL_SIZE, cellSize));
 
         // Now calculate GUI dimensions based on cell size
-        this.guiWidth = MAP_SIZE * cellSize + 80; // 80 for buttons on right
-        this.guiHeight = MAP_SIZE * cellSize + 80; // 80 for top/bottom content
+        this.guiWidth = MAP_SIZE * cellSize + 84; // 84 for buttons on right (8px gap + 56px button + 20px padding)
+        this.guiHeight = MAP_SIZE * cellSize + 80; // 80 for top header + bottom legend/close button
 
         super.init();
 
@@ -113,19 +113,20 @@ public class ChunkMapScreen extends StateCraftScreen {
         // Request map data from server
         NetworkHandler.sendToServer(new RequestChunkMapPacket(MAP_SIZE));
 
-        int mapRight = guiLeft + 15 + MAP_SIZE * cellSize + 10;
-        int buttonY = guiTop + 35;
+        int mapRight = guiLeft + 10 + MAP_SIZE * cellSize + 8;
+        int buttonY = guiTop + 28;
+        int buttonWidth = 56;
 
         // Toggle terrain/grid mode button
         toggleModeButton = this.addRenderableWidget(createButton(
-            mapRight, buttonY, 50, 18,
+            mapRight, buttonY, buttonWidth, 18,
             Component.literal("Terrain"),
             btn -> toggleMapMode()
         ));
 
         // Claim button
         claimButton = this.addRenderableWidget(createButton(
-            mapRight, buttonY + 22, 50, 18,
+            mapRight, buttonY + 22, buttonWidth, 18,
             Component.literal("Claim"),
             btn -> claimSelectedChunk()
         ));
@@ -133,7 +134,7 @@ public class ChunkMapScreen extends StateCraftScreen {
 
         // Unclaim button
         unclaimButton = this.addRenderableWidget(createButton(
-            mapRight, buttonY + 44, 50, 18,
+            mapRight, buttonY + 44, buttonWidth, 18,
             Component.literal("Unclaim"),
             btn -> unclaimSelectedChunk()
         ));
@@ -141,16 +142,16 @@ public class ChunkMapScreen extends StateCraftScreen {
 
         // Info button
         infoButton = this.addRenderableWidget(createButton(
-            mapRight, buttonY + 66, 50, 18,
+            mapRight, buttonY + 66, buttonWidth, 18,
             Component.literal("Info"),
             btn -> showChunkInfo()
         ));
         infoButton.active = false;
 
-        // Close button
+        // Close button - below the map, not overlapping legend
         this.addRenderableWidget(createButton(
-            guiLeft + guiWidth / 2 - 40, guiTop + guiHeight - 28,
-            80, 20,
+            guiLeft + guiWidth / 2 - 40, guiTop + guiHeight - 22,
+            80, 18,
             Component.literal("Close"),
             btn -> goBack()
         ));
@@ -410,11 +411,11 @@ public class ChunkMapScreen extends StateCraftScreen {
 
     @Override
     protected void renderContent(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        // Divider
-        renderDivider(graphics, guiLeft + 10, guiTop + 22, guiWidth - 20);
+        // Divider - only span the map area width
+        renderDivider(graphics, guiLeft + 10, guiTop + 18, MAP_SIZE * cellSize);
 
-        int mapX = guiLeft + 15;
-        int mapY = guiTop + 35;
+        int mapX = guiLeft + 10;
+        int mapY = guiTop + 28;
 
         // Render map background
         graphics.fill(mapX - 1, mapY - 1,
@@ -469,13 +470,9 @@ public class ChunkMapScreen extends StateCraftScreen {
         // Selected chunk info on right side
         renderSelectedInfo(graphics);
 
-        // Coordinates display
-        graphics.drawString(this.font, "§7Pos: §f" + playerChunkX + ", " + playerChunkZ,
-                           guiLeft + guiWidth - 80, guiTop + 24, COLOR_TEXT);
-
-        // Mode indicator
+        // Mode indicator (top-left of GUI)
         String modeText = terrainMode ? "§aTerrain" : "§7Grid";
-        graphics.drawString(this.font, modeText, guiLeft + 15, guiTop + 24, COLOR_TEXT);
+        graphics.drawString(this.font, modeText, guiLeft + 10, guiTop + 8, COLOR_TEXT);
     }
 
     private void renderGridChunk(GuiGraphics graphics, int cellX, int cellY, long key, ChunkData data) {
@@ -557,8 +554,11 @@ public class ChunkMapScreen extends StateCraftScreen {
     }
 
     private void renderLegend(GuiGraphics graphics) {
-        int legendX = guiLeft + 15;
-        int legendY = guiTop + guiHeight - 50;
+        int legendX = guiLeft + 10;
+        // Position legend below the map, above the close button
+        // Map ends at guiTop + 28 + MAP_SIZE * cellSize
+        int mapBottom = guiTop + 28 + MAP_SIZE * cellSize;
+        int legendY = mapBottom + 4;
 
         graphics.drawString(this.font, "§7Legend:", legendX, legendY, COLOR_TEXT);
         legendY += 10;
@@ -586,28 +586,31 @@ public class ChunkMapScreen extends StateCraftScreen {
     }
 
     private void renderSelectedInfo(GuiGraphics graphics) {
-        int infoX = guiLeft + 15 + MAP_SIZE * cellSize + 10;
-        int infoY = guiTop + 130;
+        int infoX = guiLeft + 10 + MAP_SIZE * cellSize + 8;
+        // Position below the last button (Info button at guiTop+94, height 18 -> guiTop+112)
+        int infoY = guiTop + 118;
+
+        // Coordinates display - in the header area, right-aligned
+        String posText = "§7Pos: §f" + playerChunkX + ", " + playerChunkZ;
+        int posTextWidth = this.font.width(posText.replaceAll("§.", ""));
+        graphics.drawString(this.font, posText,
+                           guiLeft + guiWidth - posTextWidth - 10, guiTop + 8, COLOR_TEXT);
 
         if (hasSelection) {
             ChunkData selected = chunkMap.get(chunkKey(selectedChunkX, selectedChunkZ));
 
             graphics.drawString(this.font, "§6Selected:", infoX, infoY, COLOR_TEXT);
-            graphics.drawString(this.font, "§7" + selectedChunkX + ", " + selectedChunkZ, infoX, infoY + 10, COLOR_TEXT);
+            graphics.drawString(this.font, "§7" + selectedChunkX + ", " + selectedChunkZ, infoX, infoY + 12, COLOR_TEXT);
 
             if (selected != null) {
-                graphics.drawString(this.font, "§7" + selected.nationName, infoX, infoY + 22, COLOR_TEXT);
+                graphics.drawString(this.font, "§7" + selected.nationName, infoX, infoY + 24, COLOR_TEXT);
                 if (selected.cityName != null) {
-                    graphics.drawString(this.font, "§8" + selected.cityName, infoX, infoY + 32, 0xFFAAAAAA);
+                    graphics.drawString(this.font, "§8" + selected.cityName, infoX, infoY + 36, 0xFFAAAAAA);
                 }
             } else {
-                graphics.drawString(this.font, "§8Wilderness", infoX, infoY + 22, 0xFF888888);
+                graphics.drawString(this.font, "§8Wilderness", infoX, infoY + 24, 0xFF888888);
             }
         }
-
-        // Coordinates display
-        graphics.drawString(this.font, "§7Pos: §f" + playerChunkX + ", " + playerChunkZ,
-                           guiLeft + guiWidth - 80, guiTop + 24, COLOR_TEXT);
     }
 
     private int getChunkColor(ChunkData data) {
@@ -637,8 +640,8 @@ public class ChunkMapScreen extends StateCraftScreen {
         }
 
         // Check if click is within map area
-        int mapX = guiLeft + 15;
-        int mapY = guiTop + 35;
+        int mapX = guiLeft + 10;
+        int mapY = guiTop + 28;
         int mapWidth = MAP_SIZE * cellSize;
         int mapHeight = MAP_SIZE * cellSize;
 

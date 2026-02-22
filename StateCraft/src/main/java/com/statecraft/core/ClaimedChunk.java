@@ -24,6 +24,7 @@ public class ClaimedChunk {
     // Ownership
     private OwnershipType ownershipType;
     private UUID playerOwner; // Only set if ownershipType is PLAYER
+    private UUID companyOwner; // Only set if ownershipType is COMPANY
 
     // Sale information
     private boolean forSale;
@@ -121,6 +122,44 @@ public class ClaimedChunk {
         setPlayerOwner(ownerId);
     }
 
+    /**
+     * Get the company that owns this chunk (only valid when ownershipType is COMPANY)
+     */
+    @Nullable
+    public UUID getCompanyOwner() {
+        return companyOwner;
+    }
+
+    /**
+     * Set company ownership on this chunk.
+     * Pass non-null to set COMPANY ownership, null to revert to HIERARCHY.
+     */
+    public void setCompanyOwner(@Nullable UUID companyId) {
+        this.companyOwner = companyId;
+        if (companyId != null) {
+            this.ownershipType = OwnershipType.COMPANY;
+            this.playerOwner = null; // Clear player ownership
+        } else if (this.playerOwner == null) {
+            this.ownershipType = OwnershipType.HIERARCHY;
+        }
+    }
+
+    /**
+     * Check if a player can act as owner on this chunk (player-owned or company officer).
+     * Used for permission checks where company officers should have owner-level access.
+     */
+    public boolean isEffectiveOwner(UUID playerId) {
+        if (ownershipType == OwnershipType.PLAYER && playerId.equals(playerOwner)) {
+            return true;
+        }
+        if (ownershipType == OwnershipType.COMPANY && companyOwner != null) {
+            com.statecraft.company.Company company =
+                com.statecraft.company.CompanyManager.getInstance().getCompany(companyOwner);
+            return company != null && company.isOfficer(playerId);
+        }
+        return false;
+    }
+
     // ==================== Sale Methods ====================
 
     public boolean isForSale() {
@@ -171,18 +210,33 @@ public class ClaimedChunk {
     }
 
     public boolean hasPermission(UUID playerId, Permission permission, PermissionLevel roleLevel) {
-        // Check player-specific overrides first
+        // Check if player is the chunk owner — owner always has all permissions
+        if (ownershipType == OwnershipType.PLAYER && playerId.equals(playerOwner)) {
+            return true;
+        }
+
+        // Check company ownership — officers have full permissions
+        if (ownershipType == OwnershipType.COMPANY && companyOwner != null) {
+            com.statecraft.company.Company company =
+                com.statecraft.company.CompanyManager.getInstance().getCompany(companyOwner);
+            if (company != null && company.isOfficer(playerId)) {
+                return true;
+            }
+        }
+
+        // Check player-specific overrides (building permits)
         Set<Permission> playerPerms = playerPermissions.get(playerId);
         if (playerPerms != null && playerPerms.contains(permission)) {
             return true;
         }
 
-        // Check if player is the chunk owner
-        if (ownershipType == OwnershipType.PLAYER && playerId.equals(playerOwner)) {
-            return true; // Owner has all permissions on their chunk
+        // For privately owned chunks (player or company), non-owners without permits are treated as OUTSIDER
+        if (ownershipType == OwnershipType.PLAYER || ownershipType == OwnershipType.COMPANY) {
+            Set<Permission> outsiderPerms = rolePermissions.get(PermissionLevel.OUTSIDER);
+            return outsiderPerms != null && outsiderPerms.contains(permission);
         }
 
-        // Check role-based permissions
+        // Government-owned chunks: check role-based permissions as normal
         Set<Permission> rolePerms = rolePermissions.get(roleLevel);
         return rolePerms != null && rolePerms.contains(permission);
     }
@@ -224,12 +278,13 @@ public class ClaimedChunk {
     }
 
     /**
-     * Grant a building permit to a player (gives BUILD and BREAK permissions)
+     * Grant a building permit to a player (gives BUILD, BREAK, and INTERACT permissions)
      */
     public void grantBuildingPermit(UUID playerId) {
         Set<Permission> perms = playerPermissions.computeIfAbsent(playerId, k -> EnumSet.noneOf(Permission.class));
         perms.add(Permission.BUILD);
         perms.add(Permission.BREAK);
+        perms.add(Permission.INTERACT);
     }
 
     /**
@@ -240,6 +295,7 @@ public class ClaimedChunk {
         if (perms != null) {
             perms.remove(Permission.BUILD);
             perms.remove(Permission.BREAK);
+            perms.remove(Permission.INTERACT);
             // Remove the player entry if they have no permissions left
             if (perms.isEmpty()) {
                 playerPermissions.remove(playerId);
@@ -252,7 +308,7 @@ public class ClaimedChunk {
      */
     public boolean hasBuildingPermit(UUID playerId) {
         Set<Permission> perms = playerPermissions.get(playerId);
-        return perms != null && perms.contains(Permission.BUILD) && perms.contains(Permission.BREAK);
+        return perms != null && perms.contains(Permission.BUILD) && perms.contains(Permission.BREAK) && perms.contains(Permission.INTERACT);
     }
 
     /**
@@ -274,6 +330,10 @@ public class ClaimedChunk {
 
         if (playerOwner != null) {
             tag.putUUID("playerOwner", playerOwner);
+        }
+
+        if (companyOwner != null) {
+            tag.putUUID("companyOwner", companyOwner);
         }
 
         // Save sale information
@@ -320,6 +380,10 @@ public class ClaimedChunk {
 
         if (tag.hasUUID("playerOwner")) {
             chunk.playerOwner = tag.getUUID("playerOwner");
+        }
+
+        if (tag.hasUUID("companyOwner")) {
+            chunk.companyOwner = tag.getUUID("companyOwner");
         }
 
         // Load sale information

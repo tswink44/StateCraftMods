@@ -1,7 +1,9 @@
 package com.statecraft.economy.network;
 
+import com.statecraft.economy.client.screen.AccountActivityScreen;
 import com.statecraft.economy.client.screen.ATMScreen;
 import com.statecraft.economy.client.screen.ChunkMarketScreen;
+import com.statecraft.economy.client.screen.MarketplaceScreen;
 import com.statecraft.economy.client.screen.SimpleATMScreen;
 import com.statecraft.economy.network.packets.*;
 import net.minecraft.client.Minecraft;
@@ -113,7 +115,9 @@ public class ClientPacketHandler {
                     packet.getCityName(),
                     packet.isPrivatelyOwned(),
                     packet.canListForSale(),
-                    packet.canBuy()
+                    packet.canBuy(),
+                    packet.getValuation(),
+                    packet.getEstimatedTax()
                 );
             }
         });
@@ -191,6 +195,38 @@ public class ClientPacketHandler {
         }
     }
 
+    public static void handleSyncAccountActivity(SyncAccountActivityPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            // Open the AccountActivityScreen with the received data
+            mc.setScreen(new AccountActivityScreen(
+                packet.getAccountType(),
+                packet.getAccountName(),
+                packet.getAccountId(),
+                packet.getEntries()
+            ));
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleOpenMarketplaceScreen(OpenMarketplaceScreenPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            mc.setScreen(new MarketplaceScreen());
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncMarketListings(SyncMarketListingsPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof MarketplaceScreen marketScreen) {
+                marketScreen.updateListings(packet.getEntries(), packet.isMyListingsView());
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
     public static double getCachedBalance() {
         return cachedBalance;
     }
@@ -209,6 +245,24 @@ public class ClientPacketHandler {
 
     public static List<SyncTransferRecipientsPacket.RecipientInfo> getCachedRecipients() {
         return cachedRecipients;
+    }
+
+    public static void handleOpenStockMarketScreen(OpenStockMarketScreenPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            mc.setScreen(new com.statecraft.economy.client.screen.StockMarketScreen());
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncStockListings(SyncStockListingsPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof com.statecraft.economy.client.screen.StockMarketScreen stockScreen) {
+                stockScreen.updateListings(packet.getEntries(), packet.isMyListingsView(), packet.getPlayerShares());
+            }
+        });
+        ctx.get().setPacketHandled(true);
     }
 }
 

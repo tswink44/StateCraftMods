@@ -192,7 +192,7 @@ public class ElectionManager {
             return "No active election for this nation";
         }
 
-        if (!nation.isMember(playerId) && !nation.isAdmin(playerId) && !nation.getLeaderId().equals(playerId)) {
+        if (!nation.isMember(playerId) && !nation.isLeaderOrOfficer(playerId) && !nation.getLeaderId().equals(playerId)) {
             // Check if citizen of any city
             boolean isCitizen = false;
             for (State state : nation.getAllStates()) {
@@ -208,6 +208,16 @@ public class ElectionManager {
 
         if (election.isCandidate(playerId)) {
             return "You are already registered as a candidate";
+        }
+
+        // Check if player is already leader of a different nation
+        if (!playerId.equals(nation.getLeaderId())) {
+            ChunkClaimManager manager = ChunkClaimManager.getInstance();
+            if (manager.isLeaderOfAnyNation(playerId)) {
+                String existingNation = manager.getLeaderNationName(playerId);
+                return "You are already the leader of " + (existingNation != null ? existingNation : "another nation") +
+                    "! You can only lead one nation at a time.";
+            }
         }
 
         // Check and charge candidate fee
@@ -370,18 +380,18 @@ public class ElectionManager {
     }
 
     /**
-     * Check if a player is a citizen of a nation (member, admin, leader, or city resident)
+     * Check if a player is a citizen of a nation (member, officer, leader, or city resident)
      */
     private boolean isNationCitizen(Nation nation, UUID playerId) {
         if (nation.getLeaderId().equals(playerId)) return true;
-        if (nation.isAdmin(playerId)) return true;
+        if (nation.isLeaderOrOfficer(playerId)) return true;
         if (nation.isMember(playerId)) return true;
 
         for (State state : nation.getAllStates()) {
-            if (state.getGovernorId().equals(playerId)) return true;
+            if (playerId.equals(state.getGovernorId())) return true;
             if (state.isCitizen(playerId)) return true;
             for (City city : state.getAllCities()) {
-                if (city.getMayorId().equals(playerId)) return true;
+                if (playerId.equals(city.getMayorId())) return true;
                 if (city.isResident(playerId)) return true;
             }
         }
@@ -394,7 +404,7 @@ public class ElectionManager {
     public Set<UUID> getAllNationCitizens(Nation nation) {
         Set<UUID> citizens = new HashSet<>();
         citizens.add(nation.getLeaderId());
-        citizens.addAll(nation.getAdmins());
+        citizens.addAll(nation.getOfficers());
         citizens.addAll(nation.getMembers());
 
         for (State state : nation.getAllStates()) {

@@ -48,8 +48,10 @@ public class City {
         this.statePassThroughRate = 0.20; // Default 20% to state
         this.maxChunks = 50; // Default 50 chunks per city
 
-        // Mayor is automatically a resident
-        residents.add(mayorId);
+        // Mayor is automatically a resident (if not vacant)
+        if (mayorId != null) {
+            residents.add(mayorId);
+        }
     }
 
     public UUID getId() {
@@ -184,6 +186,15 @@ public class City {
         return chunk;
     }
 
+    /**
+     * Add an existing ClaimedChunk to this city's chunk map (used for transfers like peace treaties).
+     * Does NOT create a new chunk — re-uses the existing one.
+     */
+    public void claimChunkDirect(ClaimedChunk chunk, ChunkPos pos, ResourceKey<Level> dimension) {
+        String key = getChunkKey(pos, dimension);
+        chunks.put(key, chunk);
+    }
+
     public boolean unclaimChunk(ChunkPos pos, ResourceKey<Level> dimension) {
         String key = getChunkKey(pos, dimension);
         return chunks.remove(key) != null;
@@ -232,7 +243,9 @@ public class City {
         tag.putUUID("id", id);
         tag.putString("name", name);
         tag.putUUID("stateId", stateId);
-        tag.putUUID("mayorId", mayorId);
+        if (mayorId != null) {
+            tag.putUUID("mayorId", mayorId);
+        }
         tag.putBoolean("publicJoin", publicJoin);
         tag.putString("description", description);
         tag.putString("flagUrl", flagUrl);
@@ -265,7 +278,7 @@ public class City {
         UUID id = tag.getUUID("id");
         String name = tag.getString("name");
         UUID stateId = tag.getUUID("stateId");
-        UUID mayorId = tag.getUUID("mayorId");
+        UUID mayorId = tag.contains("mayorId") ? tag.getUUID("mayorId") : null;
 
         City city = new City(id, name, stateId, mayorId);
         city.publicJoin = tag.getBoolean("publicJoin");

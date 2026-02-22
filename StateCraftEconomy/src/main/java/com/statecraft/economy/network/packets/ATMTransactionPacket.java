@@ -1,8 +1,10 @@
 package com.statecraft.economy.network.packets;
 
 import com.statecraft.economy.core.EconomyManager;
+import com.statecraft.economy.core.SpendingLimitManager;
 import com.statecraft.economy.core.TransactionResult;
 import com.statecraft.economy.gui.ATMMenu;
+import com.statecraft.economy.integration.StateCraftIntegration;
 import com.statecraft.economy.network.NetworkHandler;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
@@ -27,16 +29,22 @@ public class ATMTransactionPacket {
     private final double amount;
     private final String recipient; // Player name for transfers
     private final String sourceAccount; // Source account for transfers: empty = personal, or "TYPE:uuid"
+    private final String note; // Optional user note for deposits/withdrawals
 
     public ATMTransactionPacket(Action action, double amount, String recipient) {
-        this(action, amount, recipient, "");
+        this(action, amount, recipient, "", "");
     }
 
     public ATMTransactionPacket(Action action, double amount, String recipient, String sourceAccount) {
+        this(action, amount, recipient, sourceAccount, "");
+    }
+
+    public ATMTransactionPacket(Action action, double amount, String recipient, String sourceAccount, String note) {
         this.action = action;
         this.amount = amount;
         this.recipient = recipient;
         this.sourceAccount = sourceAccount != null ? sourceAccount : "";
+        this.note = note != null ? note : "";
     }
 
     public static void encode(ATMTransactionPacket packet, FriendlyByteBuf buffer) {
@@ -44,6 +52,7 @@ public class ATMTransactionPacket {
         buffer.writeDouble(packet.amount);
         buffer.writeUtf(packet.recipient);
         buffer.writeUtf(packet.sourceAccount);
+        buffer.writeUtf(packet.note);
     }
 
     public static ATMTransactionPacket decode(FriendlyByteBuf buffer) {
@@ -51,7 +60,8 @@ public class ATMTransactionPacket {
         double amount = buffer.readDouble();
         String recipient = buffer.readUtf();
         String sourceAccount = buffer.readUtf();
-        return new ATMTransactionPacket(action, amount, recipient, sourceAccount);
+        String note = buffer.readUtf();
+        return new ATMTransactionPacket(action, amount, recipient, sourceAccount, note);
     }
 
     public static void handle(ATMTransactionPacket packet, Supplier<NetworkEvent.Context> ctx) {
@@ -71,6 +81,9 @@ public class ATMTransactionPacket {
                     String accountTarget = packet.recipient;
                     boolean isGovernmentAccount = accountTarget != null && !accountTarget.isEmpty()
                         && accountTarget.contains(":");
+
+                    // Build description with optional note
+                    String noteSuffix = (packet.note != null && !packet.note.isEmpty()) ? " - " + packet.note : "";
 
                     // Check player inventory for currency items worth the specified amount
                     double requiredAmount = packet.amount;
@@ -142,16 +155,39 @@ public class ATMTransactionPacket {
                                 case "NATION" -> manager.getOrCreateNationTreasury(targetUUID).add(requiredAmount);
                                 case "STATE" -> manager.getOrCreateStateTreasury(targetUUID).add(requiredAmount);
                                 case "CITY" -> manager.getOrCreateCityTreasury(targetUUID).add(requiredAmount);
+                                case "COMPANY" -> manager.getOrCreateCompanyTreasury(targetUUID).add(requiredAmount);
+                                case "BANK_DEPOSIT" -> {
+                                    // Add to both the bank treasury and the player's depositor balance
+                                    manager.getOrCreateCompanyTreasury(targetUUID).add(requiredAmount);
+                                    var bankMgr = com.statecraft.economy.company.BankManager.getInstance();
+                                    var bank = bankMgr.getBank(targetUUID);
+                                    if (bank != null) {
+                                        bank.addDepositorBalance(player.getUUID(), requiredAmount);
+                                        bankMgr.markDirty();
+                                    }
+                                }
                                 default -> {
                                     // Unknown type, deposit to personal account as fallback
-                                    manager.deposit(player.getUUID(), requiredAmount, "ATM deposit");
+                                    manager.deposit(player.getUUID(), requiredAmount, "ATM deposit" + noteSuffix);
                                 }
                             }
+
+                            // Record transaction on the government account with initiator info
+                            manager.recordAccountTransaction(targetUUID,
+                                com.statecraft.economy.core.Transaction.Type.DEPOSIT,
+                                requiredAmount, player.getUUID(),
+                                "ATM deposit to " + targetType.toLowerCase() + " treasury" + noteSuffix,
+                                player.getUUID(), player.getName().getString());
 
                             double entityBalance = switch (targetType) {
                                 case "NATION" -> manager.getNationBalance(targetUUID);
                                 case "STATE" -> manager.getStateBalance(targetUUID);
                                 case "CITY" -> manager.getCityBalance(targetUUID);
+                                case "COMPANY" -> manager.getCompanyBalance(targetUUID);
+                                case "BANK_DEPOSIT" -> {
+                                    var bank = com.statecraft.economy.company.BankManager.getInstance().getBank(targetUUID);
+                                    yield bank != null ? bank.getDepositorBalance(player.getUUID()) : 0;
+                                }
                                 default -> manager.getBalance(player.getUUID());
                             };
 
@@ -160,14 +196,14 @@ public class ATMTransactionPacket {
                                 entityBalance), player);
                         } catch (IllegalArgumentException e) {
                             // Invalid UUID, deposit to personal as fallback
-                            manager.deposit(player.getUUID(), requiredAmount, "ATM deposit");
+                            manager.deposit(player.getUUID(), requiredAmount, "ATM deposit" + noteSuffix);
                             double newBalance = manager.getBalance(player.getUUID());
                             NetworkHandler.sendToPlayer(new TransactionResultPacket(true,
                                 "Deposited " + manager.formatCurrency(requiredAmount) + changeMessage, newBalance), player);
                         }
                     } else {
                         // Personal account deposit
-                        manager.deposit(player.getUUID(), requiredAmount, "ATM deposit");
+                        manager.deposit(player.getUUID(), requiredAmount, "ATM deposit" + noteSuffix);
                         double newBalance = manager.getBalance(player.getUUID());
                         NetworkHandler.sendToPlayer(new TransactionResultPacket(true,
                             "Deposited " + manager.formatCurrency(requiredAmount) + changeMessage, newBalance), player);
@@ -178,6 +214,9 @@ public class ATMTransactionPacket {
                     String accountTarget = packet.recipient;
                     boolean isGovernmentAccount = accountTarget != null && !accountTarget.isEmpty()
                         && accountTarget.contains(":");
+
+                    // Build description with optional note
+                    String noteSuffix = (packet.note != null && !packet.note.isEmpty()) ? " - " + packet.note : "";
 
                     TransactionResult result;
 
@@ -192,6 +231,11 @@ public class ATMTransactionPacket {
                                 case "NATION" -> manager.getNationBalance(targetUUID);
                                 case "STATE" -> manager.getStateBalance(targetUUID);
                                 case "CITY" -> manager.getCityBalance(targetUUID);
+                                case "COMPANY" -> manager.getCompanyBalance(targetUUID);
+                                case "BANK_DEPOSIT" -> {
+                                    var bank = com.statecraft.economy.company.BankManager.getInstance().getBank(targetUUID);
+                                    yield bank != null ? bank.getDepositorBalance(player.getUUID()) : 0;
+                                }
                                 default -> 0;
                             };
 
@@ -201,17 +245,102 @@ public class ATMTransactionPacket {
                                 return;
                             }
 
+                            // Check daily spending limit
+                            SpendingLimitManager spendingMgr = SpendingLimitManager.getInstance();
+                            SpendingLimitManager.GovernmentRole role =
+                                StateCraftIntegration.getPlayerGovernmentRole(player, targetType, targetUUID);
+                            UUID nationIdForLimit = StateCraftIntegration.getNationIdForAccount(targetType, targetUUID);
+                            String limitError = spendingMgr.checkSpendingLimit(
+                                player.getUUID(), targetType, targetUUID, packet.amount, role, nationIdForLimit);
+                            if (limitError != null) {
+                                NetworkHandler.sendToPlayer(new TransactionResultPacket(false,
+                                    limitError, treasuryBalance), player);
+                                return;
+                            }
+
+                            // Check economic emergency — only leader can withdraw during emergency
+                            if (targetType.equals("NATION") || targetType.equals("STATE") || targetType.equals("CITY")) {
+                                UUID emergencyNationId = nationIdForLimit != null ? nationIdForLimit : targetUUID;
+                                if (StateCraftIntegration.isEconomicEmergencyActive(emergencyNationId) &&
+                                    !StateCraftIntegration.isNationLeader(player.getUUID(), emergencyNationId)) {
+                                    NetworkHandler.sendToPlayer(new TransactionResultPacket(false,
+                                        "§c[ECONOMIC EMERGENCY] Treasury withdrawals are frozen. Only the nation leader can withdraw.",
+                                        treasuryBalance), player);
+                                    return;
+                                }
+                            }
+
                             // Withdraw from government treasury
                             switch (targetType) {
                                 case "NATION" -> manager.getOrCreateNationTreasury(targetUUID).subtract(packet.amount);
                                 case "STATE" -> manager.getOrCreateStateTreasury(targetUUID).subtract(packet.amount);
                                 case "CITY" -> manager.getOrCreateCityTreasury(targetUUID).subtract(packet.amount);
+                                case "COMPANY" -> manager.getOrCreateCompanyTreasury(targetUUID).subtract(packet.amount);
+                                case "BANK_DEPOSIT" -> {
+                                    var bankMgr = com.statecraft.economy.company.BankManager.getInstance();
+                                    var bank = bankMgr.getBank(targetUUID);
+                                    if (bank != null) {
+                                        // Calculate withdrawal fee from the bank's registry entry
+                                        com.statecraft.economy.core.Bank registryBank =
+                                            manager.getBankRegistry().getBank(targetUUID);
+                                        double withdrawalFeeRate = registryBank != null ? registryBank.getWithdrawalFee() : 0;
+                                        double withdrawalFee = packet.amount * withdrawalFeeRate;
+                                        double totalWithdrawal = packet.amount + withdrawalFee;
+
+                                        double depositorBal = bank.getDepositorBalance(player.getUUID());
+                                        if (depositorBal < totalWithdrawal) {
+                                            NetworkHandler.sendToPlayer(new TransactionResultPacket(false,
+                                                "Insufficient depositor balance" +
+                                                (withdrawalFee > 0 ? " (including " + manager.formatCurrency(withdrawalFee) + " withdrawal fee)" : ""),
+                                                depositorBal), player);
+                                            return;
+                                        }
+
+                                        double compTreasury = manager.getCompanyBalance(targetUUID);
+                                        if (!bank.subtractDepositorBalance(player.getUUID(), packet.amount, compTreasury)) {
+                                            NetworkHandler.sendToPlayer(new TransactionResultPacket(false,
+                                                "Withdrawal denied — bank reserve requirements would be breached",
+                                                bank.getDepositorBalance(player.getUUID())), player);
+                                            return;
+                                        }
+                                        // Deduct the withdrawal amount from the bank's company treasury
+                                        manager.getOrCreateCompanyTreasury(targetUUID).subtract(packet.amount);
+
+                                        // Deduct fee from depositor balance; fee stays in bank treasury as revenue
+                                        if (withdrawalFee > 0) {
+                                            bank.subtractDepositorBalanceRaw(player.getUUID(), withdrawalFee);
+                                            manager.recordTransaction(player.getUUID(),
+                                                com.statecraft.economy.core.Transaction.Type.FEE, withdrawalFee, targetUUID,
+                                                "Bank withdrawal fee", null, "Bank Fee");
+                                            manager.recordTransaction(targetUUID,
+                                                com.statecraft.economy.core.Transaction.Type.FEE, withdrawalFee, player.getUUID(),
+                                                "Withdrawal fee from " + player.getName().getString(),
+                                                null, "Bank Fee System");
+                                        }
+                                        bankMgr.markDirty();
+                                    }
+                                }
                             }
+
+                            // Record transaction on the government account with initiator info
+                            manager.recordAccountTransaction(targetUUID,
+                                com.statecraft.economy.core.Transaction.Type.WITHDRAWAL,
+                                packet.amount, player.getUUID(),
+                                "ATM withdrawal from " + targetType.toLowerCase() + " treasury" + noteSuffix,
+                                player.getUUID(), player.getName().getString());
+
+                            // Record spending against daily limit
+                            spendingMgr.recordSpending(player.getUUID(), targetType, targetUUID, packet.amount);
 
                             double newTreasuryBalance = switch (targetType) {
                                 case "NATION" -> manager.getNationBalance(targetUUID);
                                 case "STATE" -> manager.getStateBalance(targetUUID);
                                 case "CITY" -> manager.getCityBalance(targetUUID);
+                                case "COMPANY" -> manager.getCompanyBalance(targetUUID);
+                                case "BANK_DEPOSIT" -> {
+                                    var bank = com.statecraft.economy.company.BankManager.getInstance().getBank(targetUUID);
+                                    yield bank != null ? bank.getDepositorBalance(player.getUUID()) : 0;
+                                }
                                 default -> 0;
                             };
 
@@ -220,11 +349,11 @@ public class ATMTransactionPacket {
                                 newTreasuryBalance);
                         } catch (IllegalArgumentException e) {
                             // Invalid UUID, use personal account as fallback
-                            result = manager.withdraw(player.getUUID(), packet.amount, "ATM withdrawal");
+                            result = manager.withdraw(player.getUUID(), packet.amount, "ATM withdrawal" + noteSuffix);
                         }
                     } else {
                         // Personal account withdrawal
-                        result = manager.withdraw(player.getUUID(), packet.amount, "ATM withdrawal");
+                        result = manager.withdraw(player.getUUID(), packet.amount, "ATM withdrawal" + noteSuffix);
                     }
 
                     if (result.isSuccess()) {
@@ -312,6 +441,11 @@ public class ATMTransactionPacket {
                                     result = transferFromEntity(manager, player, sourceAccount, targetUUID, packet.amount, false);
                                     if (result.isSuccess()) {
                                         manager.getOrCreateNationTreasury(targetUUID).add(packet.amount);
+                                        // Record on target government account
+                                        manager.recordAccountTransaction(targetUUID,
+                                            com.statecraft.economy.core.Transaction.Type.TRANSFER_IN,
+                                            packet.amount, null, "Transfer from government account",
+                                            player.getUUID(), player.getName().getString());
                                         result = new TransactionResult(true,
                                             "Transferred " + manager.formatCurrency(packet.amount) + " to nation treasury",
                                             result.getNewBalance());
@@ -326,6 +460,11 @@ public class ATMTransactionPacket {
                                     result = transferFromEntity(manager, player, sourceAccount, targetUUID, packet.amount, false);
                                     if (result.isSuccess()) {
                                         manager.getOrCreateStateTreasury(targetUUID).add(packet.amount);
+                                        // Record on target government account
+                                        manager.recordAccountTransaction(targetUUID,
+                                            com.statecraft.economy.core.Transaction.Type.TRANSFER_IN,
+                                            packet.amount, null, "Transfer from government account",
+                                            player.getUUID(), player.getName().getString());
                                         result = new TransactionResult(true,
                                             "Transferred " + manager.formatCurrency(packet.amount) + " to state treasury",
                                             result.getNewBalance());
@@ -340,12 +479,79 @@ public class ATMTransactionPacket {
                                     result = transferFromEntity(manager, player, sourceAccount, targetUUID, packet.amount, false);
                                     if (result.isSuccess()) {
                                         manager.getOrCreateCityTreasury(targetUUID).add(packet.amount);
+                                        // Record on target government account
+                                        manager.recordAccountTransaction(targetUUID,
+                                            com.statecraft.economy.core.Transaction.Type.TRANSFER_IN,
+                                            packet.amount, null, "Transfer from government account",
+                                            player.getUUID(), player.getName().getString());
                                         result = new TransactionResult(true,
                                             "Transferred " + manager.formatCurrency(packet.amount) + " to city treasury",
                                             result.getNewBalance());
                                     }
                                 } else {
                                     result = transferToEntity(manager, player, targetUUID, packet.amount, "city");
+                                }
+                            }
+                            case "COMPANY" -> {
+                                // Transfer to company treasury
+                                if (isSourceGovernment) {
+                                    result = transferFromEntity(manager, player, sourceAccount, targetUUID, packet.amount, false);
+                                    if (result.isSuccess()) {
+                                        manager.getOrCreateCompanyTreasury(targetUUID).add(packet.amount);
+                                        manager.recordAccountTransaction(targetUUID,
+                                            com.statecraft.economy.core.Transaction.Type.TRANSFER_IN,
+                                            packet.amount, null, "Transfer from account",
+                                            player.getUUID(), player.getName().getString());
+                                        result = new TransactionResult(true,
+                                            "Transferred " + manager.formatCurrency(packet.amount) + " to company treasury",
+                                            result.getNewBalance());
+                                    }
+                                } else {
+                                    result = transferToEntity(manager, player, targetUUID, packet.amount, "company");
+                                }
+                            }
+                            case "BANK_DEPOSIT" -> {
+                                // Transfer to a bank deposit account
+                                if (isSourceGovernment) {
+                                    result = transferFromEntity(manager, player, sourceAccount, targetUUID, packet.amount, false);
+                                    if (result.isSuccess()) {
+                                        manager.getOrCreateCompanyTreasury(targetUUID).add(packet.amount);
+                                        var bankMgr = com.statecraft.economy.company.BankManager.getInstance();
+                                        var bank = bankMgr.getBank(targetUUID);
+                                        if (bank != null && bank.isMember(player.getUUID())) {
+                                            bank.addDepositorBalance(player.getUUID(), packet.amount);
+                                            bankMgr.markDirty();
+                                        }
+                                        manager.recordAccountTransaction(targetUUID,
+                                            com.statecraft.economy.core.Transaction.Type.TRANSFER_IN,
+                                            packet.amount, null, "Transfer from account",
+                                            player.getUUID(), player.getName().getString());
+                                        result = new TransactionResult(true,
+                                            "Transferred " + manager.formatCurrency(packet.amount) + " to bank deposit",
+                                            result.getNewBalance());
+                                    }
+                                } else {
+                                    // Withdraw from player personal, add to bank deposit
+                                    double playerBalance = manager.getBalance(player.getUUID());
+                                    if (playerBalance < packet.amount) {
+                                        result = new TransactionResult(false, "Insufficient funds", playerBalance);
+                                    } else {
+                                        manager.withdraw(player.getUUID(), packet.amount, "Bank deposit via transfer");
+                                        manager.getOrCreateCompanyTreasury(targetUUID).add(packet.amount);
+                                        var bankMgr = com.statecraft.economy.company.BankManager.getInstance();
+                                        var bank = bankMgr.getBank(targetUUID);
+                                        if (bank != null && bank.isMember(player.getUUID())) {
+                                            bank.addDepositorBalance(player.getUUID(), packet.amount);
+                                            bankMgr.markDirty();
+                                        }
+                                        manager.recordAccountTransaction(targetUUID,
+                                            com.statecraft.economy.core.Transaction.Type.TRANSFER_IN,
+                                            packet.amount, player.getUUID(), "Bank deposit from " + player.getName().getString(),
+                                            player.getUUID(), player.getName().getString());
+                                        result = new TransactionResult(true,
+                                            "Deposited " + manager.formatCurrency(packet.amount) + " to bank account",
+                                            manager.getBalance(player.getUUID()));
+                                    }
                                 }
                             }
                             default -> {
@@ -398,12 +604,22 @@ public class ATMTransactionPacket {
             case "city" -> {
                 manager.getOrCreateCityTreasury(entityId).add(amount);
             }
+            case "company" -> {
+                manager.getOrCreateCompanyTreasury(entityId).add(amount);
+            }
             default -> {
                 // Shouldn't happen, but refund just in case
                 manager.deposit(player.getUUID(), amount, "Transfer refund");
                 return new TransactionResult(false, "Unknown entity type", manager.getBalance(player.getUUID()));
             }
         }
+
+        // Record transaction on the government account with initiator info
+        manager.recordAccountTransaction(entityId,
+            com.statecraft.economy.core.Transaction.Type.TRANSFER_IN,
+            amount, player.getUUID(),
+            "Transfer from " + player.getName().getString(),
+            player.getUUID(), player.getName().getString());
 
         return new TransactionResult(true,
             "Transferred " + manager.formatCurrency(amount) + " to " + entityType + " treasury",
@@ -439,6 +655,11 @@ public class ATMTransactionPacket {
             case "NATION" -> manager.getNationBalance(sourceUUID);
             case "STATE" -> manager.getStateBalance(sourceUUID);
             case "CITY" -> manager.getCityBalance(sourceUUID);
+            case "COMPANY" -> manager.getCompanyBalance(sourceUUID);
+            case "BANK_DEPOSIT" -> {
+                var bank = com.statecraft.economy.company.BankManager.getInstance().getBank(sourceUUID);
+                yield bank != null ? bank.getDepositorBalance(player.getUUID()) : 0;
+            }
             default -> 0;
         };
 
@@ -446,15 +667,59 @@ public class ATMTransactionPacket {
             return new TransactionResult(false, "Insufficient funds in " + sourceType.toLowerCase() + " treasury", sourceBalance);
         }
 
+        // Check daily spending limit
+        SpendingLimitManager spendingMgr = SpendingLimitManager.getInstance();
+        SpendingLimitManager.GovernmentRole role =
+            StateCraftIntegration.getPlayerGovernmentRole(player, sourceType, sourceUUID);
+        UUID nationIdForLimit = StateCraftIntegration.getNationIdForAccount(sourceType, sourceUUID);
+        String limitError = spendingMgr.checkSpendingLimit(
+            player.getUUID(), sourceType, sourceUUID, amount, role, nationIdForLimit);
+        if (limitError != null) {
+            return new TransactionResult(false, limitError, sourceBalance);
+        }
+
+        // Check economic emergency — only leader can transfer from government accounts during emergency
+        if (sourceType.equals("NATION") || sourceType.equals("STATE") || sourceType.equals("CITY")) {
+            UUID emergencyNationId = nationIdForLimit != null ? nationIdForLimit : sourceUUID;
+            if (StateCraftIntegration.isEconomicEmergencyActive(emergencyNationId) &&
+                !StateCraftIntegration.isNationLeader(player.getUUID(), emergencyNationId)) {
+                return new TransactionResult(false,
+                    "§c[ECONOMIC EMERGENCY] Treasury transfers are frozen. Only the nation leader can transfer funds.",
+                    sourceBalance);
+            }
+        }
+
         // Withdraw from source treasury
         switch (sourceType) {
             case "NATION" -> manager.getOrCreateNationTreasury(sourceUUID).subtract(amount);
             case "STATE" -> manager.getOrCreateStateTreasury(sourceUUID).subtract(amount);
             case "CITY" -> manager.getOrCreateCityTreasury(sourceUUID).subtract(amount);
+            case "COMPANY" -> manager.getOrCreateCompanyTreasury(sourceUUID).subtract(amount);
+            case "BANK_DEPOSIT" -> {
+                var bankMgr = com.statecraft.economy.company.BankManager.getInstance();
+                var bank = bankMgr.getBank(sourceUUID);
+                if (bank != null) {
+                    double compTreasury = manager.getCompanyBalance(sourceUUID);
+                    bank.subtractDepositorBalance(player.getUUID(), amount, compTreasury);
+                    manager.getOrCreateCompanyTreasury(sourceUUID).subtract(amount);
+                    bankMgr.markDirty();
+                }
+            }
             default -> {
                 return new TransactionResult(false, "Unknown source type: " + sourceType, 0);
             }
         }
+
+        // Record transaction on the source government account with initiator info
+        String targetDesc = depositToPlayer ? "Transfer to player" : "Transfer out";
+        manager.recordAccountTransaction(sourceUUID,
+            com.statecraft.economy.core.Transaction.Type.TRANSFER_OUT,
+            amount, targetId,
+            targetDesc,
+            player.getUUID(), player.getName().getString());
+
+        // Record spending against daily limit
+        spendingMgr.recordSpending(player.getUUID(), sourceType, sourceUUID, amount);
 
         // Deposit to target if requested
         if (depositToPlayer) {
@@ -466,6 +731,11 @@ public class ATMTransactionPacket {
             case "NATION" -> manager.getNationBalance(sourceUUID);
             case "STATE" -> manager.getStateBalance(sourceUUID);
             case "CITY" -> manager.getCityBalance(sourceUUID);
+            case "COMPANY" -> manager.getCompanyBalance(sourceUUID);
+            case "BANK_DEPOSIT" -> {
+                var bank = com.statecraft.economy.company.BankManager.getInstance().getBank(sourceUUID);
+                yield bank != null ? bank.getDepositorBalance(player.getUUID()) : 0;
+            }
             default -> 0;
         };
 

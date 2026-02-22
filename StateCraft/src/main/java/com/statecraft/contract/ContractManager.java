@@ -349,22 +349,188 @@ public class ContractManager {
         return true;
     }
 
+    /**
+     * Admin: Force remove a contract regardless of status
+     */
+    public boolean removeContract(UUID contractId) {
+        Contract contract = contracts.get(contractId);
+        if (contract == null) return false;
+
+        contracts.remove(contractId);
+
+        // Remove from nation index
+        Set<UUID> nationIds = nationContracts.get(contract.getNationId());
+        if (nationIds != null) {
+            nationIds.remove(contractId);
+        }
+
+        // Remove from contractor index
+        if (contract.getContractorId() != null) {
+            Set<UUID> contractorIds = contractorContracts.get(contract.getContractorId());
+            if (contractorIds != null) {
+                contractorIds.remove(contractId);
+            }
+        }
+
+        dirty = true;
+        return true;
+    }
+
     // ==================== Tick Processing ====================
 
     /**
      * Process expired bidding periods
      * Should be called periodically (e.g., every minute)
+     * @return List of contracts whose bidding just closed (for notifications)
      */
-    public void processBiddingExpirations() {
+    public java.util.List<Contract> processBiddingExpirations() {
+        java.util.List<Contract> closedContracts = new java.util.ArrayList<>();
         for (Contract contract : contracts.values()) {
             if (contract.isBiddingExpired()) {
                 contract.closeBidding();
+                closedContracts.add(contract);
                 dirty = true;
             }
         }
+        return closedContracts;
     }
 
-    // ==================== NBT Serialization ====================
+    /**
+     * Get all contracts that are past their deadline
+     * These require legislative review but don't auto-fail
+     */
+    public java.util.List<Contract> getOverdueContracts() {
+        java.util.List<Contract> overdueContracts = new java.util.ArrayList<>();
+        for (Contract contract : contracts.values()) {
+            if (contract.isOverdue()) {
+                overdueContracts.add(contract);
+            }
+        }
+        return overdueContracts;
+    }
+
+    /**
+     * Process overdue contracts and return those that are newly overdue (for notification)
+     * Marks contracts as notified to avoid repeat notifications
+     */
+    public java.util.List<Contract> processOverdueContracts() {
+        java.util.List<Contract> newlyOverdueContracts = new java.util.ArrayList<>();
+        for (Contract contract : contracts.values()) {
+            if (contract.isOverdue() && !contract.isOverdueNotificationSent()) {
+                contract.setOverdueNotificationSent(true);
+                newlyOverdueContracts.add(contract);
+                dirty = true;
+            }
+        }
+        return newlyOverdueContracts;
+    }
+
+    /**
+     * Notification data for deadline warnings
+     */
+    public static class DeadlineWarning {
+        public final Contract contract;
+        public final long timeRemaining;  // ms until deadline
+        public final String warningType;  // "1_DAY" or "1_HOUR"
+
+        public DeadlineWarning(Contract contract, long timeRemaining, String warningType) {
+            this.contract = contract;
+            this.timeRemaining = timeRemaining;
+            this.warningType = warningType;
+        }
+    }
+
+    /**
+     * Process deadline warnings for active contracts
+     * @return List of contracts approaching their deadline (for notifications)
+     */
+    public java.util.List<DeadlineWarning> processDeadlineWarnings() {
+        java.util.List<DeadlineWarning> warnings = new java.util.ArrayList<>();
+        long oneDayMs = 24 * 60 * 60 * 1000;
+        long oneHourMs = 60 * 60 * 1000;
+
+        for (Contract contract : contracts.values()) {
+            if (contract.getStatus() != Contract.Status.ACTIVE) continue;
+
+            long timeRemaining = contract.getDeadlineTimeRemaining();
+            if (timeRemaining <= 0) continue;  // Already overdue, handled separately
+
+            // 1 hour warning
+            if (timeRemaining <= oneHourMs && !contract.isDeadlineWarning1HourSent()) {
+                contract.setDeadlineWarning1HourSent(true);
+                warnings.add(new DeadlineWarning(contract, timeRemaining, "1_HOUR"));
+                dirty = true;
+            }
+            // 1 day warning (only if 1 hour hasn't been sent yet to avoid duplicate)
+            else if (timeRemaining <= oneDayMs && timeRemaining > oneHourMs && !contract.isDeadlineWarning1DaySent()) {
+                contract.setDeadlineWarning1DaySent(true);
+                warnings.add(new DeadlineWarning(contract, timeRemaining, "1_DAY"));
+                dirty = true;
+            }
+        }
+        return warnings;
+    }
+
+    /**
+     * Notification data for bidding ending warnings
+     */
+    public static class BiddingEndingWarning {
+        public final Contract contract;
+        public final long timeRemaining;  // ms until bidding ends
+        public final String warningType;  // "1_DAY" or "1_HOUR"
+
+        public BiddingEndingWarning(Contract contract, long timeRemaining, String warningType) {
+            this.contract = contract;
+            this.timeRemaining = timeRemaining;
+            this.warningType = warningType;
+        }
+    }
+
+    /**
+     * Process bidding ending warnings for contracts open for bidding
+     * @return List of contracts whose bidding is about to end (for notifications)
+     */
+    public java.util.List<BiddingEndingWarning> processBiddingEndingWarnings() {
+        java.util.List<BiddingEndingWarning> warnings = new java.util.ArrayList<>();
+        long oneDayMs = 24 * 60 * 60 * 1000;
+        long oneHourMs = 60 * 60 * 1000;
+
+        for (Contract contract : contracts.values()) {
+            if (contract.getStatus() != Contract.Status.BIDDING) continue;
+
+            long timeRemaining = contract.getBiddingTimeRemaining();
+            if (timeRemaining <= 0) continue;  // Already closed, handled separately
+
+            // 1 hour warning
+            if (timeRemaining <= oneHourMs && !contract.isBiddingEnding1HourSent()) {
+                contract.setBiddingEnding1HourSent(true);
+                warnings.add(new BiddingEndingWarning(contract, timeRemaining, "1_HOUR"));
+                dirty = true;
+            }
+            // 1 day warning
+            else if (timeRemaining <= oneDayMs && timeRemaining > oneHourMs && !contract.isBiddingEnding1DaySent()) {
+                contract.setBiddingEnding1DaySent(true);
+                warnings.add(new BiddingEndingWarning(contract, timeRemaining, "1_DAY"));
+                dirty = true;
+            }
+        }
+        return warnings;
+    }
+
+    /**
+     * Get contracts with pending milestone approval requests
+     * Used for notifying legislature of pending approvals
+     */
+    public java.util.List<Contract> getContractsWithPendingMilestones() {
+        java.util.List<Contract> contractsWithPending = new java.util.ArrayList<>();
+        for (Contract contract : contracts.values()) {
+            if (contract.getStatus() == Contract.Status.ACTIVE &&
+                !contract.getMilestoneApprovalRequests().isEmpty()) {
+                contractsWithPending.add(contract);
+            }
+        }
+        return contractsWithPending;
+    }    // ==================== NBT Serialization ====================
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();

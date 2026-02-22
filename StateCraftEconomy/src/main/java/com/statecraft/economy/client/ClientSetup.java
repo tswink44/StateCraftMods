@@ -2,6 +2,7 @@ package com.statecraft.economy.client;
 
 import com.statecraft.economy.StateCraftEconomy;
 import com.statecraft.economy.client.screen.ATMScreen;
+import com.statecraft.economy.client.screen.CompanyVaultScreen;
 import com.statecraft.economy.client.screen.TradingHubScreen;
 import com.statecraft.economy.gui.ModMenuTypes;
 import net.minecraft.client.gui.screens.MenuScreens;
@@ -22,6 +23,7 @@ public class ClientSetup {
             // Register screens
             MenuScreens.register(ModMenuTypes.ATM.get(), ATMScreen::new);
             MenuScreens.register(ModMenuTypes.TRADING_HUB.get(), TradingHubScreen::new);
+            MenuScreens.register(ModMenuTypes.COMPANY_VAULT.get(), CompanyVaultScreen::new);
 
             StateCraftEconomy.LOGGER.info("Client setup complete - screens registered");
         });

@@ -16,9 +16,15 @@ public class SyncCityDetailsPacket {
     private final boolean isMayor;
     private final boolean canManage;
     private final List<String> residentNames;
+    private final boolean canAppoint; // true if player is governor or nation leader (can appoint mayor)
 
     public SyncCityDetailsPacket(String cityName, String mayorName, int chunkCount, int residentCount,
                                   boolean isMayor, boolean canManage, List<String> residentNames) {
+        this(cityName, mayorName, chunkCount, residentCount, isMayor, canManage, residentNames, false);
+    }
+
+    public SyncCityDetailsPacket(String cityName, String mayorName, int chunkCount, int residentCount,
+                                  boolean isMayor, boolean canManage, List<String> residentNames, boolean canAppoint) {
         this.cityName = cityName;
         this.mayorName = mayorName;
         this.chunkCount = chunkCount;
@@ -26,6 +32,7 @@ public class SyncCityDetailsPacket {
         this.isMayor = isMayor;
         this.canManage = canManage;
         this.residentNames = residentNames;
+        this.canAppoint = canAppoint;
     }
 
     public SyncCityDetailsPacket(FriendlyByteBuf buf) {
@@ -40,6 +47,7 @@ public class SyncCityDetailsPacket {
         for (int i = 0; i < count; i++) {
             residentNames.add(buf.readUtf(64));
         }
+        this.canAppoint = buf.readBoolean();
     }
 
     public void encode(FriendlyByteBuf buf) {
@@ -53,6 +61,7 @@ public class SyncCityDetailsPacket {
         for (String name : residentNames) {
             buf.writeUtf(name, 64);
         }
+        buf.writeBoolean(canAppoint);
     }
 
     public String getCityName() { return cityName; }
@@ -62,5 +71,6 @@ public class SyncCityDetailsPacket {
     public boolean isMayor() { return isMayor; }
     public boolean canManage() { return canManage; }
     public List<String> getResidentNames() { return residentNames; }
+    public boolean canAppoint() { return canAppoint; }
 }
 

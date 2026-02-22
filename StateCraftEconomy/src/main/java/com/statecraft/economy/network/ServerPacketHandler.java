@@ -172,6 +172,32 @@ public class ServerPacketHandler {
                 accounts.addAll(govAccounts);
             }
 
+            // Add company accounts the player can manage (founder or officer)
+            var companyManager = com.statecraft.company.CompanyManager.getInstance();
+            for (var company : companyManager.getPlayerManagedCompanies(player.getUUID())) {
+                double companyBalance = manager.getCompanyBalance(company.getId());
+                accounts.add(new SyncAccountsPacket.AccountInfo(
+                    "COMPANY",
+                    company.getName(),
+                    company.getId().toString(),
+                    companyBalance
+                ));
+            }
+
+            // Add bank deposit accounts (banks where the player is a member)
+            var bankManager = com.statecraft.economy.company.BankManager.getInstance();
+            for (var bank : bankManager.getPlayerBanks(player.getUUID())) {
+                var company = companyManager.getCompany(bank.getCompanyId());
+                String bankName = company != null ? company.getName() : "Bank";
+                double depositorBalance = bank.getDepositorBalance(player.getUUID());
+                accounts.add(new SyncAccountsPacket.AccountInfo(
+                    "BANK_DEPOSIT",
+                    bankName,
+                    bank.getCompanyId().toString(),
+                    depositorBalance
+                ));
+            }
+
             NetworkHandler.sendToPlayer(new SyncAccountsPacket(accounts), player);
         });
         ctx.get().setPacketHandled(true);
@@ -367,6 +393,21 @@ public class ServerPacketHandler {
             canBuy = chunkInfo.isForSale() && !playerId.equals(chunkInfo.sellerId());
         }
 
+        // Get actual chunk valuation from the valuation system
+        String dimension = player.level().dimension().location().toString();
+        com.statecraft.economy.valuation.ChunkValuation chunkValuation =
+            com.statecraft.economy.valuation.ChunkValuationManager.getInstance()
+                .getValuation(chunkX, chunkZ, dimension);
+        double valuation = chunkValuation.getTotalValue();
+
+        // Calculate estimated tax using actual valuation
+        double estimatedTax = 0;
+        double cityTaxRate = StateCraftIntegration.getChunkCityTaxRate(player.getServer(), chunkX, chunkZ, dimension);
+        if (cityTaxRate > 0 && valuation > 0) {
+            // Tax = valuation * rate (rate is stored as percentage, e.g., 5 = 5%)
+            estimatedTax = valuation * (cityTaxRate / 100.0);
+        }
+
         NetworkHandler.sendToPlayer(new SyncChunkMarketInfoPacket(
             chunkX, chunkZ,
             true, // isClaimed
@@ -377,7 +418,9 @@ public class ServerPacketHandler {
             cityName,
             chunkInfo.isPrivatelyOwned(),
             canListForSale,
-            canBuy
+            canBuy,
+            valuation,
+            estimatedTax
         ), player);
     }
 
@@ -422,6 +465,300 @@ public class ServerPacketHandler {
                 valuation.getTotalValue(),
                 cityTaxRate
             ), player);
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    /**
+     * Handle request for account activity/transaction history
+     */
+    public static void handleRequestAccountActivity(RequestAccountActivityPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            EconomyManager manager = EconomyManager.getInstance();
+            String accountType = packet.getAccountType();
+            String accountId = packet.getAccountId();
+            UUID accountUUID;
+
+            try {
+                accountUUID = UUID.fromString(accountId);
+            } catch (IllegalArgumentException e) {
+                return; // Invalid UUID, ignore
+            }
+
+            // Permission check: players can always view their own account
+            // For government accounts, verify they have admin access
+            String accountName = "";
+
+            switch (accountType) {
+                case "PERSONAL" -> {
+                    if (!accountUUID.equals(player.getUUID())) {
+                        return; // Can't view other player's activity
+                    }
+                    accountName = player.getName().getString();
+                }
+                case "NATION", "STATE", "CITY" -> {
+                    if (!StateCraftEconomy.isStateCraftLoaded()) return;
+
+                    // Verify player has admin access to this government account
+                    var govAccounts = StateCraftIntegration.getPlayerAdminAccounts(player);
+                    boolean hasAccess = govAccounts.stream()
+                        .anyMatch(a -> a.type().equals(accountType) && a.id().equals(accountId));
+
+                    if (!hasAccess) {
+                        // Also allow members to view (read-only) - check membership
+                        boolean isMember = StateCraftIntegration.isPlayerMemberOfEntity(player, accountType, accountUUID);
+                        if (!isMember) {
+                            return; // No access
+                        }
+                    }
+
+                    // Get account name
+                    accountName = govAccounts.stream()
+                        .filter(a -> a.type().equals(accountType) && a.id().equals(accountId))
+                        .map(SyncAccountsPacket.AccountInfo::name)
+                        .findFirst()
+                        .orElse(StateCraftIntegration.getEntityName(accountType, accountUUID));
+                }
+                default -> {
+                    return; // Unknown account type
+                }
+            }
+
+            // Get transaction history for this account
+            java.util.List<com.statecraft.economy.core.Transaction> transactions = manager.getTransactionHistory(accountUUID);
+
+            // Get current account balance to compute running balances.
+            // Transactions are newest-first, so we start from the current balance
+            // and work backwards: each entry's running balance is the balance AFTER
+            // that transaction occurred.
+            double currentBalance;
+            switch (accountType) {
+                case "PERSONAL" -> currentBalance = manager.getBalance(accountUUID);
+                case "NATION" -> currentBalance = manager.getNationTreasuryBalance(accountUUID);
+                case "STATE" -> currentBalance = manager.getGovernmentBalance("state", accountUUID);
+                case "CITY" -> currentBalance = manager.getGovernmentBalance("city", accountUUID);
+                default -> currentBalance = 0;
+            }
+
+            // Convert to activity entries with running balance
+            java.util.List<SyncAccountActivityPacket.ActivityEntry> entries = new java.util.ArrayList<>();
+            boolean isGovAccount = !"PERSONAL".equals(accountType);
+
+            // Track the running balance as we walk newest-to-oldest
+            double runningBal = currentBalance;
+
+            for (com.statecraft.economy.core.Transaction tx : transactions) {
+                String initiatorName = tx.getInitiatorName() != null ? tx.getInitiatorName() : "";
+
+                // For personal accounts, if no explicit initiator, it was the player themselves
+                if (initiatorName.isEmpty() && "PERSONAL".equals(accountType)) {
+                    initiatorName = player.getName().getString();
+                }
+
+                // Determine if this transaction is incoming (positive) or outgoing (negative)
+                // For government accounts, TAX and DEPOSIT are incoming revenue;
+                // TRANSFER_OUT, WITHDRAWAL are outgoing.
+                boolean incoming;
+                if (isGovAccount) {
+                    incoming = switch (tx.getType()) {
+                        case TAX, DEPOSIT, TRANSFER_IN, SALE, IMPORT_TARIFF -> true;
+                        case WITHDRAWAL, TRANSFER_OUT, FEE, PURCHASE, NATION_DEPOSIT, MARKETPLACE_PURCHASE -> false;
+                        default -> tx.isIncoming();
+                    };
+                } else {
+                    incoming = tx.isIncoming();
+                }
+
+                // The running balance at this point is the balance AFTER this transaction
+                double balanceAfter = runningBal;
+
+                entries.add(new SyncAccountActivityPacket.ActivityEntry(
+                    tx.getType().name(),
+                    tx.getAmount(),
+                    tx.getDescription(),
+                    tx.getTimestamp(),
+                    initiatorName,
+                    incoming,
+                    balanceAfter
+                ));
+
+                // Walk backwards: undo this transaction to get the balance before it
+                if (incoming) {
+                    runningBal -= tx.getAmount();
+                } else {
+                    runningBal += tx.getAmount();
+                }
+            }
+
+            NetworkHandler.sendToPlayer(new SyncAccountActivityPacket(accountType, accountName, accountId, entries), player);
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    /**
+     * Handle request for marketplace listings
+     */
+    public static void handleRequestMarketListings(RequestMarketListingsPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            com.statecraft.economy.network.packets.MarketplaceActionPacket.sendListingsToPlayer(
+                player, packet.getSearchQuery(), packet.isMyListingsOnly());
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    // ==================== Stock Market Handlers ====================
+
+    /**
+     * Handle request for stock market listings
+     */
+    public static void handleRequestStockListings(RequestStockListingsPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            com.statecraft.economy.stockmarket.StockMarketManager stockManager =
+                com.statecraft.economy.stockmarket.StockMarketManager.getInstance();
+            com.statecraft.company.CompanyManager companyManager =
+                com.statecraft.company.CompanyManager.getInstance();
+
+            UUID playerId = player.getUUID();
+
+            // Get listings based on filter
+            java.util.List<com.statecraft.economy.stockmarket.ShareListing> listings;
+            if (packet.isMyListingsOnly()) {
+                listings = stockManager.getAllListingsForSeller(playerId);
+            } else {
+                // Filter by company name if provided
+                String filter = packet.getCompanyFilter();
+                java.util.List<com.statecraft.economy.stockmarket.ShareListing> all = stockManager.getActiveListings(null);
+                if (filter != null && !filter.isEmpty()) {
+                    String lowerFilter = filter.toLowerCase();
+                    listings = all.stream()
+                        .filter(l -> l.getCompanyName().toLowerCase().contains(lowerFilter))
+                        .collect(java.util.stream.Collectors.toList());
+                } else {
+                    listings = all;
+                }
+            }
+
+            // Convert to packet entries
+            java.util.List<SyncStockListingsPacket.ListingEntry> entries = new java.util.ArrayList<>();
+            for (com.statecraft.economy.stockmarket.ShareListing listing : listings) {
+                entries.add(new SyncStockListingsPacket.ListingEntry(
+                    listing.getId().toString(),
+                    listing.getSellerName(),
+                    listing.getCompanyName(),
+                    listing.getCompanyId().toString(),
+                    listing.getQuantity(),
+                    listing.getPricePerShare(),
+                    listing.getListedTime(),
+                    listing.getStatus().name(),
+                    listing.getSellerId().equals(playerId)
+                ));
+            }
+
+            // Build player's share info for the Sell tab
+            java.util.List<SyncStockListingsPacket.CompanyShareInfo> playerShares = new java.util.ArrayList<>();
+            for (com.statecraft.company.Company company : companyManager.getAllCompanies()) {
+                int owned = company.getShareCount(playerId);
+                if (owned > 0) {
+                    int listed = stockManager.getActiveListingsForSeller(playerId).stream()
+                        .filter(l -> l.getCompanyId().equals(company.getId()))
+                        .mapToInt(com.statecraft.economy.stockmarket.ShareListing::getQuantity)
+                        .sum();
+                    playerShares.add(new SyncStockListingsPacket.CompanyShareInfo(
+                        company.getId().toString(),
+                        company.getName(),
+                        owned,
+                        company.getTotalShares(),
+                        listed
+                    ));
+                }
+            }
+
+            NetworkHandler.sendToPlayer(
+                new SyncStockListingsPacket(entries, packet.isMyListingsOnly(), playerShares),
+                player);
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    /**
+     * Handle stock market actions (buy, sell, cancel)
+     */
+    public static void handleStockMarketAction(StockMarketActionPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            com.statecraft.economy.stockmarket.StockMarketManager stockManager =
+                com.statecraft.economy.stockmarket.StockMarketManager.getInstance();
+            com.statecraft.company.CompanyManager companyManager =
+                com.statecraft.company.CompanyManager.getInstance();
+            String result;
+
+            switch (packet.getAction()) {
+                case BUY -> {
+                    UUID listingId = UUID.fromString(packet.getListingId());
+                    result = stockManager.purchaseShares(
+                        listingId, player.getUUID(), player.getName().getString(),
+                        packet.getQuantity(), player.server);
+                }
+                case SELL -> {
+                    UUID companyId = UUID.fromString(packet.getCompanyId());
+                    com.statecraft.economy.stockmarket.ShareListing listing = stockManager.createListing(
+                        player.getUUID(), player.getName().getString(),
+                        companyId, packet.getQuantity(), packet.getPrice());
+                    if (listing != null) {
+                        result = "§aListed " + packet.getQuantity() + " shares at $" +
+                                 String.format("%.2f", packet.getPrice()) + " per share.";
+                    } else {
+                        result = "§cFailed to create listing. Check you own enough unlisted shares.";
+                    }
+                }
+                case CANCEL -> {
+                    UUID listingId = UUID.fromString(packet.getListingId());
+                    result = stockManager.cancelListing(listingId, player.getUUID());
+                }
+                default -> result = "§cUnknown action.";
+            }
+
+            // Send result message
+            player.sendSystemMessage(net.minecraft.network.chat.Component.literal(result));
+
+            // Refresh listings for the player (inline instead of nested handler call)
+            UUID playerId = player.getUUID();
+            java.util.List<com.statecraft.economy.stockmarket.ShareListing> listings = stockManager.getActiveListings(null);
+            java.util.List<SyncStockListingsPacket.ListingEntry> entries = new java.util.ArrayList<>();
+            for (com.statecraft.economy.stockmarket.ShareListing l : listings) {
+                entries.add(new SyncStockListingsPacket.ListingEntry(
+                    l.getId().toString(), l.getSellerName(), l.getCompanyName(),
+                    l.getCompanyId().toString(), l.getQuantity(), l.getPricePerShare(),
+                    l.getListedTime(), l.getStatus().name(), l.getSellerId().equals(playerId)));
+            }
+
+            java.util.List<SyncStockListingsPacket.CompanyShareInfo> playerShares = new java.util.ArrayList<>();
+            for (com.statecraft.company.Company company : companyManager.getAllCompanies()) {
+                int owned = company.getShareCount(playerId);
+                if (owned > 0) {
+                    int listed = stockManager.getActiveListingsForSeller(playerId).stream()
+                        .filter(l -> l.getCompanyId().equals(company.getId()))
+                        .mapToInt(com.statecraft.economy.stockmarket.ShareListing::getQuantity)
+                        .sum();
+                    playerShares.add(new SyncStockListingsPacket.CompanyShareInfo(
+                        company.getId().toString(), company.getName(),
+                        owned, company.getTotalShares(), listed));
+                }
+            }
+
+            NetworkHandler.sendToPlayer(
+                new SyncStockListingsPacket(entries, false, playerShares), player);
         });
         ctx.get().setPacketHandled(true);
     }

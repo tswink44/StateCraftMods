@@ -35,12 +35,15 @@ public class EconomyManager {
     // City treasuries: cityId -> balance
     private final Map<UUID, BankAccount> cityTreasuries = new ConcurrentHashMap<>();
 
+    // Company treasuries: companyId -> balance
+    private final Map<UUID, BankAccount> companyTreasuries = new ConcurrentHashMap<>();
+
     // Cached currency values: itemId -> value
     private Map<String, Double> currencyValues = new HashMap<>();
 
-    // Transaction history (limited)
+    // Transaction history (limited) - keyed by account UUID (player, nation, state, or city)
     private final Map<UUID, List<Transaction>> transactionHistory = new ConcurrentHashMap<>();
-    private static final int MAX_HISTORY_PER_PLAYER = 50;
+    private static final int MAX_HISTORY_PER_ACCOUNT = 100;
 
     private boolean dirty = false;
 
@@ -217,15 +220,30 @@ public class EconomyManager {
 
         BankAccount account = getOrCreateAccount(playerId);
 
-        if (account.getBalance() < amount) {
+        // Calculate bank withdrawal fee
+        double fee = getWithdrawalFee(account, amount);
+        double totalDeducted = amount + fee;
+
+        if (account.getBalance() < totalDeducted) {
+            if (fee > 0) {
+                return new TransactionResult(false, "Insufficient funds (including " + formatCurrency(fee) + " withdrawal fee)", account.getBalance());
+            }
             return new TransactionResult(false, "Insufficient funds", account.getBalance());
         }
 
-        account.subtract(amount);
+        account.subtract(totalDeducted);
         recordTransaction(playerId, Transaction.Type.WITHDRAWAL, amount, null, description);
+        if (fee > 0) {
+            recordTransaction(playerId, Transaction.Type.FEE, fee, null, "Bank withdrawal fee");
+            // Credit the fee to the bank's company treasury (if it's a player-made bank)
+            creditBankFee(account, fee, "Withdrawal fee from " + playerId);
+        }
         dirty = true;
 
-        return new TransactionResult(true, "Withdrew " + formatCurrency(amount), account.getBalance());
+        String message = fee > 0
+            ? "Withdrew " + formatCurrency(amount) + " (fee: " + formatCurrency(fee) + ")"
+            : "Withdrew " + formatCurrency(amount);
+        return new TransactionResult(true, message, account.getBalance());
     }
 
     /**
@@ -238,7 +256,7 @@ public class EconomyManager {
         }
 
         BankAccount account = getOrCreateAccount(playerId);
-        account.subtract(amount);
+        account.forceSubtract(amount);
         recordTransaction(playerId, Transaction.Type.WITHDRAWAL, amount, null, "[FORCED] " + description);
         dirty = true;
 
@@ -375,13 +393,15 @@ public class EconomyManager {
         BankAccount fromAccount = getOrCreateAccount(fromId);
         BankAccount toAccount = getOrCreateAccount(toId);
 
-        // Calculate fee
-        double feePercent = EconomyConfig.TRANSFER_FEE_PERCENT.get();
-        double fee = amount * feePercent;
+        // Calculate bank transfer fee
+        double fee = getTransferFee(fromAccount, amount);
         double totalDeducted = amount + fee;
 
         if (fromAccount.getBalance() < totalDeducted) {
-            return new TransactionResult(false, "Insufficient funds (including " + formatCurrency(fee) + " fee)", fromAccount.getBalance());
+            if (fee > 0) {
+                return new TransactionResult(false, "Insufficient funds (including " + formatCurrency(fee) + " transfer fee)", fromAccount.getBalance());
+            }
+            return new TransactionResult(false, "Insufficient funds", fromAccount.getBalance());
         }
 
         double maxBalance = EconomyConfig.MAX_BALANCE.get();
@@ -394,9 +414,9 @@ public class EconomyManager {
 
         recordTransaction(fromId, Transaction.Type.TRANSFER_OUT, amount, toId, description);
         recordTransaction(toId, Transaction.Type.TRANSFER_IN, amount, fromId, description);
-
         if (fee > 0) {
-            recordTransaction(fromId, Transaction.Type.FEE, fee, null, "Transfer fee");
+            recordTransaction(fromId, Transaction.Type.FEE, fee, null, "Bank transfer fee");
+            creditBankFee(fromAccount, fee, "Transfer fee from " + fromId);
         }
 
         dirty = true;
@@ -405,6 +425,53 @@ public class EconomyManager {
             ? "Transferred " + formatCurrency(amount) + " (fee: " + formatCurrency(fee) + ")"
             : "Transferred " + formatCurrency(amount);
         return new TransactionResult(true, message, fromAccount.getBalance());
+    }
+
+    // ==================== Bank Fee Helpers ====================
+
+    /**
+     * Get the withdrawal fee for an account based on its bank's fee schedule.
+     * Default bank has 0 fees; player-made banks may charge fees.
+     */
+    public double getWithdrawalFee(BankAccount account, double amount) {
+        if (account == null || account.getBankId() == null) return 0;
+        Bank bank = bankRegistry.getBank(account.getBankId());
+        if (bank == null) return 0;
+        double feeRate = bank.getWithdrawalFee();
+        return feeRate > 0 ? amount * feeRate : 0;
+    }
+
+    /**
+     * Get the transfer fee for an account based on its bank's fee schedule.
+     * Default bank has 0 fees; player-made banks may charge fees.
+     */
+    public double getTransferFee(BankAccount account, double amount) {
+        if (account == null || account.getBankId() == null) return 0;
+        Bank bank = bankRegistry.getBank(account.getBankId());
+        if (bank == null) return 0;
+        double feeRate = bank.getTransferFee();
+        return feeRate > 0 ? amount * feeRate : 0;
+    }
+
+    /**
+     * Credit a fee to the bank's company treasury (for player-made banks).
+     * Fees from the default bank are discarded (burned) since the default bank
+     * has 0 fees anyway. Player-made banks receive fees as revenue.
+     */
+    private void creditBankFee(BankAccount account, double fee, String description) {
+        if (account == null || account.getBankId() == null || fee <= 0) return;
+        UUID bankId = account.getBankId();
+
+        // Only credit to player-made banks (which are registered as BankCompany companies)
+        var bankMgr = com.statecraft.economy.company.BankManager.getInstance();
+        var bankCompany = bankMgr.getBank(bankId);
+        if (bankCompany != null) {
+            // Credit to the bank's company treasury
+            getOrCreateCompanyTreasury(bankId).add(fee);
+            recordTransaction(bankId, Transaction.Type.FEE, fee, account.getOwnerId(),
+                description, null, "Bank Fee System");
+            dirty = true;
+        }
     }
 
     // ==================== Nation Treasury (StateCraft Integration) ====================
@@ -427,6 +494,70 @@ public class EconomyManager {
     }
 
     /**
+     * Alias for getNationBalance for clarity
+     */
+    public double getNationTreasuryBalance(UUID nationId) {
+        return getNationBalance(nationId);
+    }
+
+    /**
+     * Withdraw directly from nation treasury (no player involved)
+     * Used for government contract payments, etc.
+     */
+    public TransactionResult withdrawFromNationTreasury(UUID nationId, double amount, String description) {
+        if (amount <= 0) {
+            return new TransactionResult(false, "Amount must be positive", 0);
+        }
+
+        BankAccount nationTreasury = getOrCreateNationTreasury(nationId);
+        if (nationTreasury.getBalance() < amount) {
+            return new TransactionResult(false, "Insufficient funds in nation treasury", nationTreasury.getBalance());
+        }
+
+        nationTreasury.subtract(amount);
+        recordAccountTransaction(nationId, Transaction.Type.WITHDRAWAL, amount, null, description, null, "System");
+        dirty = true;
+
+        return new TransactionResult(true, "Withdrew " + formatCurrency(amount) + " from nation treasury", nationTreasury.getBalance());
+    }
+
+    /**
+     * Force withdraw from nation treasury, allowing negative balance.
+     * Used for mandatory government actions like eminent domain where the
+     * nation must pay compensation even if treasury is insufficient.
+     */
+    public TransactionResult forceWithdrawFromNationTreasury(UUID nationId, double amount, String description) {
+        if (amount <= 0) {
+            return new TransactionResult(false, "Amount must be positive", 0);
+        }
+
+        BankAccount nationTreasury = getOrCreateNationTreasury(nationId);
+        nationTreasury.forceSubtract(amount);
+        String prefix = nationTreasury.getBalance() < 0 ? "[FORCED] " : "";
+        recordAccountTransaction(nationId, Transaction.Type.WITHDRAWAL, amount, null, prefix + description, null, "System");
+        dirty = true;
+
+        return new TransactionResult(true, "Withdrew " + formatCurrency(amount) + " from nation treasury (balance may be negative)", nationTreasury.getBalance());
+    }
+
+    /**
+     * Deposit directly to nation treasury (no player involved)
+     * Used for tax collection, contract payments, etc.
+     */
+    public TransactionResult depositToNationTreasury(UUID nationId, double amount, String description) {
+        if (amount <= 0) {
+            return new TransactionResult(false, "Amount must be positive", 0);
+        }
+
+        BankAccount nationTreasury = getOrCreateNationTreasury(nationId);
+        nationTreasury.add(amount);
+        recordAccountTransaction(nationId, Transaction.Type.DEPOSIT, amount, null, description, null, "System");
+        dirty = true;
+
+        return new TransactionResult(true, "Deposited " + formatCurrency(amount) + " to nation treasury", nationTreasury.getBalance());
+    }
+
+    /**
      * Get balance for any government entity (state or city)
      * @param type "state" or "city"
      * @param entityId The UUID of the state or city
@@ -438,6 +569,9 @@ public class EconomyManager {
             return treasury.getBalance();
         } else if ("city".equalsIgnoreCase(type)) {
             BankAccount treasury = getOrCreateCityTreasury(entityId);
+            return treasury.getBalance();
+        } else if ("company".equalsIgnoreCase(type)) {
+            BankAccount treasury = getOrCreateCompanyTreasury(entityId);
             return treasury.getBalance();
         }
         return 0;
@@ -467,6 +601,8 @@ public class EconomyManager {
         nationTreasury.add(amount);
 
         recordTransaction(playerId, Transaction.Type.NATION_DEPOSIT, amount, nationId, description);
+        // Also record on the nation treasury account
+        recordAccountTransaction(nationId, Transaction.Type.DEPOSIT, amount, playerId, description, playerId, null);
         dirty = true;
 
         return new TransactionResult(true, "Deposited " + formatCurrency(amount) + " to nation treasury", playerAccount.getBalance());
@@ -484,6 +620,8 @@ public class EconomyManager {
         playerAccount.add(amount);
 
         recordTransaction(playerId, Transaction.Type.NATION_WITHDRAWAL, amount, nationId, description);
+        // Also record on the nation treasury account
+        recordAccountTransaction(nationId, Transaction.Type.WITHDRAWAL, amount, playerId, description, playerId, null);
         dirty = true;
 
         return new TransactionResult(true, "Withdrew " + formatCurrency(amount) + " from nation treasury", nationTreasury.getBalance());
@@ -522,22 +660,93 @@ public class EconomyManager {
         });
     }
 
+    // ==================== Company Treasury ====================
+
+    public BankAccount getOrCreateCompanyTreasury(UUID companyId) {
+        return companyTreasuries.computeIfAbsent(companyId, id -> {
+            BankAccount account = new BankAccount(id, BankAccount.AccountType.COMPANY, 0);
+            if (account.getBankId() == null) {
+                account.setBankId(bankRegistry.getDefaultBank().getId());
+            }
+            dirty = true;
+            return account;
+        });
+    }
+
+    public double getCompanyBalance(UUID companyId) {
+        BankAccount treasury = getOrCreateCompanyTreasury(companyId);
+        return treasury.getBalance();
+    }
+
+    /**
+     * Deposit directly to company treasury (no player involved).
+     * Used for Trading Hub profit shares, contract payments, etc.
+     */
+    public TransactionResult depositToCompanyTreasury(UUID companyId, double amount, String description) {
+        if (amount <= 0) {
+            return new TransactionResult(false, "Amount must be positive", 0);
+        }
+
+        BankAccount treasury = getOrCreateCompanyTreasury(companyId);
+        treasury.add(amount);
+        recordAccountTransaction(companyId, Transaction.Type.DEPOSIT, amount, null, description, null, "System");
+        dirty = true;
+
+        return new TransactionResult(true, "Deposited " + formatCurrency(amount) + " to company treasury", treasury.getBalance());
+    }
+
+    public Map<UUID, BankAccount> getCompanyTreasuries() {
+        return companyTreasuries;
+    }
+
     // ==================== Transaction History ====================
 
     private void recordTransaction(UUID playerId, Transaction.Type type, double amount, UUID otherId, String description) {
-        List<Transaction> history = transactionHistory.computeIfAbsent(playerId, k -> new ArrayList<>());
+        recordTransaction(playerId, type, amount, otherId, description, null, null);
+    }
 
-        Transaction tx = new Transaction(type, amount, otherId, description, System.currentTimeMillis());
+    /**
+     * Record a transaction with initiator info (who performed the action)
+     */
+    public void recordTransaction(UUID accountId, Transaction.Type type, double amount, UUID otherId, String description,
+                                   UUID initiatorId, String initiatorName) {
+        List<Transaction> history = transactionHistory.computeIfAbsent(accountId, k -> new ArrayList<>());
+
+        Transaction tx = new Transaction(type, amount, otherId, description, System.currentTimeMillis(), initiatorId, initiatorName);
         history.add(0, tx); // Add at beginning
 
         // Trim history
-        while (history.size() > MAX_HISTORY_PER_PLAYER) {
+        while (history.size() > MAX_HISTORY_PER_ACCOUNT) {
             history.remove(history.size() - 1);
         }
     }
 
+    /**
+     * Record a transaction on a government account (nation/state/city treasury)
+     */
+    public void recordAccountTransaction(UUID accountId, Transaction.Type type, double amount,
+                                          UUID otherId, String description,
+                                          UUID initiatorId, String initiatorName) {
+        recordTransaction(accountId, type, amount, otherId, description, initiatorId, initiatorName);
+    }
+
     public List<Transaction> getTransactionHistory(UUID playerId) {
         return transactionHistory.getOrDefault(playerId, Collections.emptyList());
+    }
+
+    /**
+     * Get the full transaction history map (for persistence)
+     */
+    public Map<UUID, List<Transaction>> getTransactionHistoryMap() {
+        return transactionHistory;
+    }
+
+    /**
+     * Load transaction history from saved data
+     */
+    public void setTransactionHistory(Map<UUID, List<Transaction>> history) {
+        transactionHistory.clear();
+        transactionHistory.putAll(history);
     }
 
     // ==================== Utilities ====================
@@ -559,16 +768,18 @@ public class EconomyManager {
         nationTreasuries.clear();
         stateTreasuries.clear();
         cityTreasuries.clear();
+        companyTreasuries.clear();
         transactionHistory.clear();
 
         playerAccounts.putAll(data.getPlayerAccounts());
         nationTreasuries.putAll(data.getNationTreasuries());
         stateTreasuries.putAll(data.getStateTreasuries());
         cityTreasuries.putAll(data.getCityTreasuries());
+        companyTreasuries.putAll(data.getCompanyTreasuries());
 
         dirty = false;
-        StateCraftEconomy.LOGGER.info("Loaded {} player accounts, {} nation treasuries, {} state treasuries, {} city treasuries",
-            playerAccounts.size(), nationTreasuries.size(), stateTreasuries.size(), cityTreasuries.size());
+        StateCraftEconomy.LOGGER.info("Loaded {} player accounts, {} nation treasuries, {} state treasuries, {} city treasuries, {} company treasuries",
+            playerAccounts.size(), nationTreasuries.size(), stateTreasuries.size(), cityTreasuries.size(), companyTreasuries.size());
     }
 
     public Map<UUID, BankAccount> getPlayerAccounts() {

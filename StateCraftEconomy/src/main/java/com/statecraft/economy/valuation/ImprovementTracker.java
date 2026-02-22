@@ -35,7 +35,9 @@ public class ImprovementTracker {
     private final Map<String, Integer> improvementScores = new ConcurrentHashMap<>();
 
     // Block categories and their score values
+    // NATURAL_BLOCKS: blocks that generate naturally and should NOT count as improvements
     private static final Set<Block> NATURAL_BLOCKS = Set.of(
+        // Terrain basics
         Blocks.DIRT, Blocks.GRASS_BLOCK, Blocks.STONE, Blocks.DEEPSLATE,
         Blocks.GRAVEL, Blocks.SAND, Blocks.RED_SAND, Blocks.CLAY,
         Blocks.WATER, Blocks.LAVA, Blocks.BEDROCK, Blocks.NETHERRACK,
@@ -46,8 +48,65 @@ public class ImprovementTracker {
         Blocks.DRIPSTONE_BLOCK, Blocks.POINTED_DRIPSTONE, Blocks.CALCITE,
         Blocks.TUFF, Blocks.GRANITE, Blocks.DIORITE, Blocks.ANDESITE,
         Blocks.SOUL_SAND, Blocks.SOUL_SOIL, Blocks.BASALT, Blocks.BLACKSTONE,
-        Blocks.MAGMA_BLOCK, Blocks.GLOWSTONE, Blocks.OBSIDIAN
+        Blocks.MAGMA_BLOCK, Blocks.GLOWSTONE, Blocks.OBSIDIAN,
+        Blocks.SANDSTONE, Blocks.RED_SANDSTONE, Blocks.SMOOTH_BASALT,
+        Blocks.POWDER_SNOW, Blocks.DIRT_PATH, Blocks.FARMLAND,
+        Blocks.AMETHYST_BLOCK, Blocks.BUDDING_AMETHYST
     );
+
+    // Additional natural blocks checked by ID (tags/patterns for large families)
+    // Used in getBlockScore to catch ores, logs, leaves, flowers, etc.
+    private static boolean isNaturalByName(Block block) {
+        String id = block.getDescriptionId().toLowerCase();
+        // Ores (coal, iron, copper, gold, diamond, emerald, lapis, redstone + deepslate)
+        if (id.contains("_ore")) return true;
+        // Logs and wood (naturally generated trees)
+        if (id.contains("_log") || id.contains("_wood")) return true;
+        // Leaves
+        if (id.contains("_leaves") || id.contains("leaves")) return true;
+        // Small/tall plants and grass
+        if (id.contains("tall_grass") || id.contains("short_grass") || id.contains("fern")
+            || id.contains("dead_bush") || id.contains("seagrass") || id.contains("kelp")
+            || id.contains("sugar_cane") || id.contains("cactus") || id.contains("bamboo")
+            || id.contains("vine") || id.contains("hanging_roots")) return true;
+        // Flowers
+        if (id.contains("dandelion") || id.contains("poppy") || id.contains("orchid")
+            || id.contains("allium") || id.contains("azure") || id.contains("tulip")
+            || id.contains("daisy") || id.contains("cornflower") || id.contains("lily")
+            || id.contains("sunflower") || id.contains("lilac") || id.contains("rose_bush")
+            || id.contains("peony") || id.contains("wither_rose") || id.contains("spore_blossom")) return true;
+        // Mushrooms
+        if (id.contains("mushroom")) return true;
+        // Terracotta (natural in badlands)
+        if (id.contains("terracotta")) return true;
+        // Coral
+        if (id.contains("coral")) return true;
+        // Sculk (deep dark)
+        if (id.contains("sculk")) return true;
+        // Moss carpet, azalea, dripleaf
+        if (id.contains("moss_carpet") || id.contains("azalea") || id.contains("dripleaf")
+            || id.contains("glow_lichen") || id.contains("glow_berries")) return true;
+        // Nether vegetation
+        if (id.contains("nylium") || id.contains("crimson_roots") || id.contains("warped_roots")
+            || id.contains("nether_sprouts") || id.contains("twisting_vines") || id.contains("weeping_vines")
+            || id.contains("shroomlight") || id.contains("nether_wart_block") || id.contains("warped_wart_block")
+            || id.contains("crimson_fungus") || id.contains("warped_fungus")
+            || id.contains("crimson_stem") || id.contains("warped_stem")
+            || id.contains("crimson_hyphae") || id.contains("warped_hyphae")) return true;
+        // Chorus (end)
+        if (id.contains("chorus")) return true;
+        // Amethyst clusters/buds
+        if (id.contains("amethyst_cluster") || id.contains("amethyst_bud")) return true;
+        // Infested blocks
+        if (id.contains("infested")) return true;
+        // Snow layers
+        if (id.contains("snow_layer") || id.equals("block.minecraft.snow")) return true;
+        // Sweet berries, cave vines
+        if (id.contains("sweet_berry") || id.contains("cave_vines")) return true;
+        // Mangrove roots, propagule
+        if (id.contains("mangrove_roots") || id.contains("propagule")) return true;
+        return false;
+    }
 
     // Higher value blocks get more points
     private static final Map<Block, Integer> SPECIAL_BLOCK_SCORES = new HashMap<>();
@@ -214,8 +273,13 @@ public class ImprovementTracker {
      * Calculate the score value for a block
      */
     private int getBlockScore(Block block) {
-        // Natural blocks don't count
+        // Natural blocks don't count (static set)
         if (NATURAL_BLOCKS.contains(block)) {
+            return 0;
+        }
+
+        // Natural blocks don't count (name-based check for ores, logs, leaves, flowers, etc.)
+        if (isNaturalByName(block)) {
             return 0;
         }
 
