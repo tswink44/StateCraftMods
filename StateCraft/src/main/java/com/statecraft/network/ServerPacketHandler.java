@@ -197,7 +197,8 @@ public class ServerPacketHandler {
                 isMember,
                 stateNames,
                 allyNames,
-                enemyNames
+                enemyNames,
+                nation.getFlagUrl()
             ), player);
         });
         ctx.get().setPacketHandled(true);
@@ -812,7 +813,8 @@ public class ServerPacketHandler {
                 isGovernor,
                 canManage,
                 cityNames,
-                isNationLeader
+                isNationLeader,
+                state.getFlagUrl()
             ), player);
         });
         ctx.get().setPacketHandled(true);
@@ -980,7 +982,8 @@ public class ServerPacketHandler {
                 isMayor,
                 canManage,
                 residentNames,
-                canAppoint
+                canAppoint,
+                city.getFlagUrl()
             ), player);
         });
         ctx.get().setPacketHandled(true);

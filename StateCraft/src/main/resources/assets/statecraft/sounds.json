@@ -1,0 +1,12 @@
+{
+  "battle_music": {
+    "sounds": [
+      {
+        "name": "statecraft:custom/battle_music",
+        "stream": true
+      }
+    ]
+  }
+}
+
+

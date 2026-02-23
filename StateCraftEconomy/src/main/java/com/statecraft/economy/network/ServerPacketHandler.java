@@ -823,5 +823,151 @@ public class ServerPacketHandler {
         });
         ctx.get().setPacketHandled(true);
     }
+
+    /**
+     * Handle request for tax report data
+     */
+    public static void handleRequestTaxReport(RequestTaxReportPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            UUID playerId = player.getUUID();
+            EconomyManager ecoManager = EconomyManager.getInstance();
+            com.statecraft.economy.core.TaxationManager taxManager = com.statecraft.economy.core.TaxationManager.getInstance();
+
+            if (!StateCraftIntegration.isInitialized()) {
+                // Send empty report
+                NetworkHandler.sendToPlayer(new SyncTaxReportPacket(
+                    new SyncTaxReportPacket.TaxReportData(0, 0, 0, 0, 0, "N/A", "N/A", java.util.List.of())
+                ), player);
+                return;
+            }
+
+            // Collect all chunk data for this player
+            java.util.List<com.statecraft.economy.core.TaxationManager.ChunkTaxInfo> allTaxable =
+                StateCraftIntegration.getAllTaxableChunks(player.getServer());
+            com.statecraft.economy.valuation.ChunkValuationManager valuationManager =
+                com.statecraft.economy.valuation.ChunkValuationManager.getInstance();
+
+            // Group chunks by nation -> state -> city
+            java.util.Map<String, NationTaxBuilder> nationBuilders = new java.util.LinkedHashMap<>();
+            int totalChunks = 0;
+            double grandTotalValue = 0;
+            double grandTotalTax = 0;
+
+            for (com.statecraft.economy.core.TaxationManager.ChunkTaxInfo chunk : allTaxable) {
+                if (!playerId.equals(chunk.getOwnerId())) continue;
+
+                totalChunks++;
+
+                // Get valuation details
+                com.statecraft.economy.valuation.ChunkValuation valuation = valuationManager.getValuation(
+                    chunk.getChunkX(), chunk.getChunkZ(), chunk.getDimension());
+                double chunkValue = valuation.getTotalValue();
+                double taxRate = taxManager.getTaxRateForCity(chunk.getCityId());
+                double estimatedTax = chunkValue * taxRate;
+
+                grandTotalValue += chunkValue;
+                grandTotalTax += estimatedTax;
+
+                // Get hierarchy names
+                String cityName = StateCraftIntegration.getCityName(chunk.getCityId());
+                String stateName = StateCraftIntegration.getStateName(StateCraftIntegration.getStateIdForCity(chunk.getCityId()));
+                String nationName = StateCraftIntegration.getNationName(StateCraftIntegration.getNationIdForCity(chunk.getCityId()));
+
+                if (cityName == null || cityName.isEmpty()) cityName = "Unknown City";
+                if (stateName == null || stateName.isEmpty()) stateName = "Unknown State";
+                if (nationName == null || nationName.isEmpty()) nationName = "Unknown Nation";
+
+                // Build hierarchy
+                NationTaxBuilder nation = nationBuilders.computeIfAbsent(nationName, k -> new NationTaxBuilder(nationName));
+                StateTaxBuilder state = nation.states.computeIfAbsent(stateName, k -> new StateTaxBuilder(stateName));
+                CityTaxBuilder city = state.cities.computeIfAbsent(cityName, k -> new CityTaxBuilder(cityName, taxRate));
+
+                city.chunks.add(new SyncTaxReportPacket.ChunkData(
+                    chunk.getChunkX(), chunk.getChunkZ(), chunk.getDimension(),
+                    valuation.getBaseValue(),
+                    valuation.getLocationMultiplier(),
+                    valuation.getBiomeMultiplier(),
+                    valuation.getDemandMultiplier(),
+                    valuation.getGovernmentMultiplier(),
+                    valuation.getImprovementMultiplier(),
+                    valuation.getImprovementScore(),
+                    chunkValue, estimatedTax
+                ));
+                city.totalValue += chunkValue;
+                city.totalTax += estimatedTax;
+                state.totalValue += chunkValue;
+                state.totalTax += estimatedTax;
+                nation.totalValue += chunkValue;
+                nation.totalTax += estimatedTax;
+            }
+
+            // Build final data structure
+            java.util.List<SyncTaxReportPacket.NationData> nations = new java.util.ArrayList<>();
+            for (NationTaxBuilder nb : nationBuilders.values()) {
+                java.util.List<SyncTaxReportPacket.StateData> states = new java.util.ArrayList<>();
+                for (StateTaxBuilder sb : nb.states.values()) {
+                    java.util.List<SyncTaxReportPacket.CityData> cities = new java.util.ArrayList<>();
+                    for (CityTaxBuilder cb : sb.cities.values()) {
+                        cities.add(new SyncTaxReportPacket.CityData(cb.name, cb.taxRate, cb.totalValue, cb.totalTax, cb.chunks));
+                    }
+                    states.add(new SyncTaxReportPacket.StateData(sb.name, sb.totalValue, sb.totalTax, cities));
+                }
+                nations.add(new SyncTaxReportPacket.NationData(nb.name, nb.totalValue, nb.totalTax, states));
+            }
+
+            // Calculate period info
+            double balance = ecoManager.getBalance(playerId);
+            int periodsAffordable = grandTotalTax > 0 ? (int) Math.floor(balance / grandTotalTax) : Integer.MAX_VALUE;
+
+            long periodTicks = taxManager.getTaxPeriodTicks();
+            long periodMinutes = (periodTicks / 20) / 60;
+            long periodHours = periodMinutes / 60;
+            String taxPeriod = periodHours > 0
+                ? periodHours + "h " + (periodMinutes % 60) + "m"
+                : periodMinutes + " minutes";
+
+            long ticksUntilNext = taxManager.getTicksUntilNextCollection(player.getServer());
+            long nextMinutes = (ticksUntilNext / 20) / 60;
+            long nextSeconds = (ticksUntilNext / 20) % 60;
+            String nextCollection = nextMinutes + "m " + nextSeconds + "s";
+
+            SyncTaxReportPacket.TaxReportData data = new SyncTaxReportPacket.TaxReportData(
+                totalChunks, grandTotalValue, grandTotalTax, balance,
+                periodsAffordable, taxPeriod, nextCollection, nations
+            );
+
+            NetworkHandler.sendToPlayer(new SyncTaxReportPacket(data), player);
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    // Helper classes for building tax report data
+    private static class NationTaxBuilder {
+        String name;
+        java.util.Map<String, StateTaxBuilder> states = new java.util.LinkedHashMap<>();
+        double totalValue = 0;
+        double totalTax = 0;
+        NationTaxBuilder(String name) { this.name = name; }
+    }
+
+    private static class StateTaxBuilder {
+        String name;
+        java.util.Map<String, CityTaxBuilder> cities = new java.util.LinkedHashMap<>();
+        double totalValue = 0;
+        double totalTax = 0;
+        StateTaxBuilder(String name) { this.name = name; }
+    }
+
+    private static class CityTaxBuilder {
+        String name;
+        double taxRate;
+        java.util.List<SyncTaxReportPacket.ChunkData> chunks = new java.util.ArrayList<>();
+        double totalValue = 0;
+        double totalTax = 0;
+        CityTaxBuilder(String name, double taxRate) { this.name = name; this.taxRate = taxRate; }
+    }
 }
 

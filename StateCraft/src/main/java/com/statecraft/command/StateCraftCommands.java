@@ -22,7 +22,8 @@ public class StateCraftCommands {
             .then(BordersCommand.register())
             .then(AdminCommand.register())
             .then(MailCommand.register())
-            .then(ElectionCommand.register());
+            .then(ElectionCommand.register())
+            .then(MapCommand.register());
 
         dispatcher.register(statecraftCommand);
 

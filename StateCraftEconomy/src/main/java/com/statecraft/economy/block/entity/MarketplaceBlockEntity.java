@@ -2,6 +2,7 @@ package com.statecraft.economy.block.entity;
 
 import com.statecraft.economy.StateCraftEconomy;
 import com.statecraft.economy.integration.StateCraftIntegration;
+import com.statecraft.economy.util.NBTUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -80,7 +81,7 @@ public class MarketplaceBlockEntity extends BlockEntity {
     protected void saveAdditional(CompoundTag tag) {
         super.saveAdditional(tag);
         if (ownerUUID != null) tag.putUUID("Owner", ownerUUID);
-        tag.putString("OwnerName", ownerName);
+        NBTUtils.putSanitizedString(tag, "OwnerName", ownerName);
         if (cityId != null) tag.putUUID("CityId", cityId);
     }
 

@@ -240,6 +240,14 @@ public class SimpleATMScreen extends Screen {
             btn -> requestAccountActivity())
             .bounds(centerX - buttonWidth/2, y, buttonWidth, 20)
             .build());
+
+        y += 22;
+
+        // Tax Report button (full width)
+        addMenuButton(Button.builder(Component.literal("§6Tax Report"),
+            btn -> openTaxReport())
+            .bounds(centerX - buttonWidth/2, y, buttonWidth, 20)
+            .build());
     }
 
     private void buildBankSelect() {
@@ -1009,6 +1017,11 @@ public class SimpleATMScreen extends Screen {
         if (!accId.isEmpty()) {
             NetworkHandler.sendToServer(new RequestAccountActivityPacket(accType, accId));
         }
+    }
+
+    private void openTaxReport() {
+        // Open tax report screen (request data from server)
+        Minecraft.getInstance().setScreen(new TaxReportScreen(this));
     }
 
     private void performDeposit() {

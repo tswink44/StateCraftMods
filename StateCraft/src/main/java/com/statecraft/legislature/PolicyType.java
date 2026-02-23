@@ -77,6 +77,11 @@ public enum PolicyType {
         "Legislature vote to immediately cancel an active emergency power. " +
         "Requires simple majority. The leader cannot veto this."),
 
+    // Treaty ratification (auto-created when both leaders accept peace terms)
+    RATIFY_PEACE_TREATY("Ratify Peace Treaty", Category.DIPLOMACY, 0, 0, ValueType.TEXT,
+        "Legislature vote to ratify a peace treaty. Both nations' legislatures must ratify for peace to take effect. " +
+        "If either legislature votes NO, the treaty fails and war continues. Auto-created when leaders accept terms."),
+
     // Custom laws (roleplay)
     CUSTOM_LAW("Custom Law", Category.CUSTOM, 0, 0, ValueType.TEXT,
         "Custom law or regulation for roleplay purposes"),

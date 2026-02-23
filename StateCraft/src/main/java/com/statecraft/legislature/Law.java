@@ -1,5 +1,6 @@
 package com.statecraft.legislature;
 
+import com.statecraft.util.NBTUtils;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -177,20 +178,20 @@ public class Law {
         CompoundTag tag = new CompoundTag();
         tag.putUUID("lawId", lawId);
         tag.putUUID("nationId", nationId);
-        tag.putString("lawNumber", lawNumber);
+        NBTUtils.putStringSafe(tag, "lawNumber", lawNumber);
         tag.putString("type", type.name());
-        tag.putString("title", title);
-        tag.putString("description", description);
-        tag.putString("authorName", authorName);
+        NBTUtils.putSanitizedString(tag, "title", title);
+        NBTUtils.putSanitizedString(tag, "description", description);
+        NBTUtils.putSanitizedString(tag, "authorName", authorName);
         tag.putLong("enactedTime", enactedTime);
         tag.putInt("yesVotes", yesVotes);
         tag.putInt("noVotes", noVotes);
         tag.putInt("abstainVotes", abstainVotes);
         tag.putBoolean("wasVetoProof", wasVetoProof);
         tag.putBoolean("repealed", repealed);
-        tag.putString("repealedByLawNumber", repealedByLawNumber != null ? repealedByLawNumber : "");
+        NBTUtils.putStringSafe(tag, "repealedByLawNumber", repealedByLawNumber);
         tag.putLong("repealedTime", repealedTime);
-        tag.putString("fullText", fullText);
+        NBTUtils.putSanitizedString(tag, "fullText", fullText);
 
         // Policy changes
         ListTag policiesList = new ListTag();

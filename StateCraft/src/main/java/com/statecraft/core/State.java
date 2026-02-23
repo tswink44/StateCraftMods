@@ -1,5 +1,6 @@
 package com.statecraft.core;
 
+import com.statecraft.util.NBTUtils;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -242,15 +243,15 @@ public class State {
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putUUID("id", id);
-        tag.putString("name", name);
+        NBTUtils.putSanitizedString(tag, "name", name);
         tag.putUUID("nationId", nationId);
         if (governorId != null) {
             tag.putUUID("governorId", governorId);
         }
         tag.putInt("maxCities", maxCities);
         tag.putInt("maxChunks", maxChunks);
-        tag.putString("description", description);
-        tag.putString("flagUrl", flagUrl);
+        NBTUtils.putSanitizedString(tag, "description", description);
+        NBTUtils.putStringSafe(tag, "flagUrl", flagUrl);
         tag.putDouble("cityPassThroughRate", cityPassThroughRate);
         tag.putDouble("salesTaxRate", salesTaxRate);
 

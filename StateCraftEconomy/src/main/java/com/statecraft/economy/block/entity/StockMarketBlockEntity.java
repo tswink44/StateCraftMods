@@ -1,6 +1,7 @@
 package com.statecraft.economy.block.entity;
 
 import com.statecraft.economy.StateCraftEconomy;
+import com.statecraft.economy.util.NBTUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.player.Player;
@@ -73,7 +74,7 @@ public class StockMarketBlockEntity extends BlockEntity {
         super.saveAdditional(tag);
         if (ownerUUID != null) {
             tag.putUUID("Owner", ownerUUID);
-            tag.putString("OwnerName", ownerName);
+            NBTUtils.putSanitizedString(tag, "OwnerName", ownerName);
         }
         if (cityId != null) {
             tag.putUUID("CityId", cityId);

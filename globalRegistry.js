@@ -13,14 +13,14 @@ global.showPonderLayer = (scene, speed, height, exclude) => {
 };
 
 global.coinMap = [
-  { coin: "numismatics:prismatic_coin", value: 16777216 },
-  { coin: "numismatics:ancient_coin", value: 262144 },
-  { coin: "numismatics:neptunium_coin", value: 32768 },
-  { coin: "numismatics:sun", value: 4096 },
-  { coin: "numismatics:crown", value: 512 },
-  { coin: "numismatics:cog", value: 64 },
-  { coin: "numismatics:sprocket", value: 16 },
-  { coin: "numismatics:bevel", value: 8 },
+  { coin: "numismatics:prismatic_coin", value: 1677721 },
+  { coin: "numismatics:ancient_coin", value: 26214 },
+  { coin: "numismatics:neptunium_coin", value: 3276 },
+  { coin: "numismatics:sun", value: 410 },
+  { coin: "numismatics:crown", value: 51 },
+  { coin: "numismatics:cog", value: 6 },
+  { coin: "numismatics:sprocket", value: 4 },
+  { coin: "numismatics:bevel", value: 2 },
   { coin: "numismatics:spur", value: 1 },
 ];
 

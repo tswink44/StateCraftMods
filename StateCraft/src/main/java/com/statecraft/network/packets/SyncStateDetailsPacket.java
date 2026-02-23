@@ -18,15 +18,22 @@ public class SyncStateDetailsPacket {
     private final boolean canManage;
     private final List<String> cityNames;
     private final boolean isNationLeader;
+    private final String flagUrl;
 
     public SyncStateDetailsPacket(String stateName, String governorName, int cityCount, int chunkCount,
                                    int memberCount, boolean isGovernor, boolean canManage, List<String> cityNames) {
-        this(stateName, governorName, cityCount, chunkCount, memberCount, isGovernor, canManage, cityNames, false);
+        this(stateName, governorName, cityCount, chunkCount, memberCount, isGovernor, canManage, cityNames, false, "");
     }
 
     public SyncStateDetailsPacket(String stateName, String governorName, int cityCount, int chunkCount,
                                    int memberCount, boolean isGovernor, boolean canManage, List<String> cityNames,
                                    boolean isNationLeader) {
+        this(stateName, governorName, cityCount, chunkCount, memberCount, isGovernor, canManage, cityNames, isNationLeader, "");
+    }
+
+    public SyncStateDetailsPacket(String stateName, String governorName, int cityCount, int chunkCount,
+                                   int memberCount, boolean isGovernor, boolean canManage, List<String> cityNames,
+                                   boolean isNationLeader, String flagUrl) {
         this.stateName = stateName;
         this.governorName = governorName;
         this.cityCount = cityCount;
@@ -36,6 +43,7 @@ public class SyncStateDetailsPacket {
         this.canManage = canManage;
         this.cityNames = cityNames;
         this.isNationLeader = isNationLeader;
+        this.flagUrl = flagUrl != null ? flagUrl : "";
     }
 
     public SyncStateDetailsPacket(FriendlyByteBuf buf) {
@@ -52,6 +60,7 @@ public class SyncStateDetailsPacket {
             cityNames.add(buf.readUtf(64));
         }
         this.isNationLeader = buf.readBoolean();
+        this.flagUrl = buf.readUtf(512);
     }
 
     public void encode(FriendlyByteBuf buf) {
@@ -67,6 +76,7 @@ public class SyncStateDetailsPacket {
             buf.writeUtf(name, 64);
         }
         buf.writeBoolean(isNationLeader);
+        buf.writeUtf(flagUrl, 512);
     }
 
     public String getStateName() { return stateName; }
@@ -78,5 +88,6 @@ public class SyncStateDetailsPacket {
     public boolean canManage() { return canManage; }
     public List<String> getCityNames() { return cityNames; }
     public boolean isNationLeader() { return isNationLeader; }
+    public String getFlagUrl() { return flagUrl; }
 }
 

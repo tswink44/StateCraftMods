@@ -37,6 +37,9 @@ public class DiplomacyManager {
     /** Active truces. Key = truce UUID */
     private final Map<UUID, Truce> truces = new ConcurrentHashMap<>();
 
+    /** Pending treaty ratifications awaiting legislature approval. Key = ratification UUID */
+    private final Map<UUID, PendingTreatyRatification> pendingRatifications = new ConcurrentHashMap<>();
+
     /** Default max outbound proposals per nation */
     private int maxProposalsPerNation = 5;
 
@@ -429,108 +432,8 @@ public class DiplomacyManager {
                     return "§cYou are no longer at war with " + proposer.getName() + ".";
                 }
 
-                // Execute peace terms if any
-                StringBuilder termsLog = new StringBuilder();
-                if (proposal.hasTerms()) {
-                    // Currency transfer: target pays proposer
-                    if (proposal.currencyDemand > 0 && com.statecraft.integration.IntegrationRegistry.hasEconomyIntegration()) {
-                        boolean withdrew = com.statecraft.integration.IntegrationRegistry.forceWithdrawFromNation(
-                            target.getName(), proposal.currencyDemand,
-                            "Peace treaty reparations to " + proposer.getName());
-                        com.statecraft.integration.IntegrationRegistry.depositToNation(
-                            proposer.getName(), proposal.currencyDemand,
-                            "Peace treaty reparations from " + target.getName());
-                        termsLog.append("Currency: ").append(
-                            com.statecraft.integration.IntegrationRegistry.formatCurrency(proposal.currencyDemand));
-                        if (!withdrew) {
-                            termsLog.append(" (target treasury went into debt)");
-                        }
-                        termsLog.append("\n");
-                    }
-
-                    // Chunk transfers: move chunks from target nation to proposer's receiving city
-                    if (!proposal.chunkDemands.isEmpty() && proposal.receivingCityId != null) {
-                        City receivingCity = ChunkClaimManager.getInstance().getCity(proposal.receivingCityId);
-                        if (receivingCity != null) {
-                            int transferred = 0;
-                            for (ChunkDemand demand : proposal.chunkDemands) {
-                                try {
-                                    net.minecraft.world.level.ChunkPos chunkPos =
-                                        new net.minecraft.world.level.ChunkPos(demand.chunkX, demand.chunkZ);
-                                    net.minecraft.resources.ResourceKey<Level> dimKey =
-                                        net.minecraft.resources.ResourceKey.create(
-                                            net.minecraft.core.registries.Registries.DIMENSION,
-                                            new net.minecraft.resources.ResourceLocation(demand.dimension));
-                                    ClaimedChunk chunk = ChunkClaimManager.getInstance().getClaimedChunk(chunkPos, dimKey);
-                                    if (chunk != null) {
-                                        // Remove from old city
-                                        City oldCity = ChunkClaimManager.getInstance().getCity(chunk.getCityId());
-                                        if (oldCity != null) {
-                                            oldCity.unclaimChunk(chunkPos, dimKey);
-                                        }
-                                        // Clear private ownership — land reverts to government
-                                        UUID previousOwner = chunk.getPlayerOwner();
-                                        chunk.setPlayerOwner(null);
-                                        chunk.setOwnershipType(OwnershipType.HIERARCHY);
-                                        chunk.setForSale(false);
-                                        // Re-assign to receiving city
-                                        chunk.setCityId(proposal.receivingCityId);
-                                        // Add to receiving city using its internal claim method pattern
-                                        // We directly put the existing chunk into the new city
-                                        ChunkClaimManager.getInstance().transferChunkToCity(chunk, receivingCity, chunkPos, dimKey);
-                                        transferred++;
-
-                                        // Notify displaced private owner via mail
-                                        if (previousOwner != null) {
-                                            sendDiplomacyMail(previousOwner,
-                                                "Land Ceded in Peace Treaty",
-                                                "Your privately owned chunk at (" + demand.chunkX + ", " + demand.chunkZ +
-                                                ") has been ceded to " + proposer.getName() +
-                                                " as part of a peace treaty with " + target.getName() + ".\n" +
-                                                "The chunk is now government-owned territory of " + proposer.getName() + ".");
-                                        }
-                                    }
-                                } catch (Exception e) {
-                                    StateCraft.LOGGER.warn("Failed to transfer chunk ({}, {}) in peace treaty: {}",
-                                        demand.chunkX, demand.chunkZ, e.getMessage());
-                                }
-                            }
-                            termsLog.append("Chunks transferred: ").append(transferred).append("\n");
-                        } else {
-                            termsLog.append("Chunk transfer failed: receiving city no longer exists\n");
-                        }
-                    }
-                }
-
-                // Remove enemy status from both sides
-                proposer.removeEnemy(target.getId());
-                target.removeEnemy(proposer.getId());
-
-                // Create truce
-                Truce truce = new Truce(UUID.randomUUID(), proposer.getId(), target.getId(),
-                    System.currentTimeMillis() + TRUCE_DURATION_MS);
-                truces.put(truce.id, truce);
-
-                ChunkClaimManager.getInstance().markDirty();
-
-                String termsSection = termsLog.length() > 0 ?
-                    "\n\n=== Treaty Terms Executed ===\n" + termsLog : "";
-
-                String peaceMsg = "§a§l[PEACE TREATY] §f" + proposer.getName() + " and " + target.getName() +
-                    " have signed a peace treaty! §7(48-hour truce in effect)";
-                notifyNationMembers(proposer, server, peaceMsg);
-                notifyNationMembers(target, server, peaceMsg);
-
-                sendDiplomacyMail(proposer.getLeaderId(), "Peace Treaty Accepted by " + target.getName(),
-                    target.getName() + " has accepted your peace proposal.\n" +
-                    "A 48-hour truce is now in effect between your nations." + termsSection);
-                sendDiplomacyMail(target.getLeaderId(), "Peace Treaty Signed with " + proposer.getName(),
-                    "You have signed a peace treaty with " + proposer.getName() + ".\n" +
-                    "A 48-hour truce is now in effect between your nations." + termsSection);
-
-                result = "§aPeace treaty signed with " + proposer.getName() + "! 48-hour truce in effect.";
-                StateCraft.LOGGER.info("Peace treaty signed: {} <-> {}{}", proposer.getName(), target.getName(),
-                    termsLog.length() > 0 ? " [" + termsLog.toString().trim() + "]" : "");
+                // Create pending treaty ratification for both legislatures
+                result = createTreatyRatification(proposer, target, proposal, server);
                 break;
 
             case ALLIANCE:
@@ -683,6 +586,392 @@ public class DiplomacyManager {
         return DiplomaticStatus.NEUTRAL;
     }
 
+    // ==================== Treaty Ratification ====================
+
+    /**
+     * Create a pending treaty ratification when both leaders agree to peace terms.
+     * Creates ratification bills in both legislatures.
+     */
+    private String createTreatyRatification(Nation proposer, Nation target, DiplomacyProposal proposal,
+                                             MinecraftServer server) {
+        // Create the pending ratification record
+        PendingTreatyRatification ratification = new PendingTreatyRatification(
+            proposer.getId(), target.getId(),
+            proposal.currencyDemand, proposal.chunkDemands, proposal.receivingCityId
+        );
+        pendingRatifications.put(ratification.getRatificationId(), ratification);
+
+        // Get legislature manager
+        com.statecraft.legislature.LegislatureManager legManager =
+            com.statecraft.legislature.LegislatureManager.getInstance();
+
+        // Create ratification bill for proposer nation
+        com.statecraft.legislature.Legislature proposerLeg = legManager.getOrCreateLegislature(proposer.getId());
+        com.statecraft.legislature.Bill proposerBill = createTreatyRatificationBill(
+            proposer, target, ratification, proposerLeg, true);
+        ratification.setProposerBillId(proposerBill.getBillId());
+
+        // Create ratification bill for target nation
+        com.statecraft.legislature.Legislature targetLeg = legManager.getOrCreateLegislature(target.getId());
+        com.statecraft.legislature.Bill targetBill = createTreatyRatificationBill(
+            target, proposer, ratification, targetLeg, false);
+        ratification.setTargetBillId(targetBill.getBillId());
+
+        legManager.markDirty();
+        markDirty();
+
+        // Notify both nations
+        String termsInfo = ratification.getTermsSummary();
+        String pendingMsg = "§e§l[PEACE TREATY] §fLeaders of " + proposer.getName() + " and " + target.getName() +
+            " have agreed to peace terms. §6The treaty must be ratified by both legislatures before taking effect.";
+        notifyNationMembers(proposer, server, pendingMsg);
+        notifyNationMembers(target, server, pendingMsg);
+
+        // Send mail to leaders
+        sendDiplomacyMail(proposer.getLeaderId(), "Peace Treaty Pending Ratification - " + target.getName(),
+            "You and " + target.getName() + "'s leader have agreed to peace terms.\n\n" +
+            "Terms: " + termsInfo + "\n\n" +
+            "The treaty must now be ratified by BOTH nations' legislatures before it takes effect.\n" +
+            "If either legislature rejects the treaty, the war continues.");
+        sendDiplomacyMail(target.getLeaderId(), "Peace Treaty Pending Ratification - " + proposer.getName(),
+            "You have accepted " + proposer.getName() + "'s peace proposal.\n\n" +
+            "Terms: " + termsInfo + "\n\n" +
+            "The treaty must now be ratified by BOTH nations' legislatures before it takes effect.\n" +
+            "If either legislature rejects the treaty, the war continues.");
+
+        // Notify legislature members
+        notifyLegislaturesOfTreaty(proposer, target, ratification, server);
+
+        StateCraft.LOGGER.info("Peace treaty pending ratification: {} <-> {} (Terms: {})",
+            proposer.getName(), target.getName(), termsInfo);
+
+        return "§ePeace treaty with " + proposer.getName() + " is now pending legislature ratification in both nations.";
+    }
+
+    /**
+     * Create a treaty ratification bill for a nation's legislature.
+     */
+    private com.statecraft.legislature.Bill createTreatyRatificationBill(
+            Nation thisNation, Nation otherNation, PendingTreatyRatification ratification,
+            com.statecraft.legislature.Legislature legislature, boolean isProposer) {
+
+        String billNumber = legislature.generateBillNumber();
+        String title = "Ratify Peace Treaty with " + otherNation.getName();
+
+        StringBuilder description = new StringBuilder();
+        description.append("This bill ratifies the peace treaty negotiated between ")
+            .append(thisNation.getName()).append(" and ").append(otherNation.getName()).append(".\n\n");
+
+        description.append("=== Treaty Terms ===\n");
+        if (ratification.getCurrencyDemand() > 0) {
+            if (isProposer) {
+                description.append("• Receive $").append(String.format("%.0f", ratification.getCurrencyDemand()))
+                    .append(" in reparations from ").append(otherNation.getName()).append("\n");
+            } else {
+                description.append("• Pay $").append(String.format("%.0f", ratification.getCurrencyDemand()))
+                    .append(" in reparations to ").append(otherNation.getName()).append("\n");
+            }
+        }
+        if (!ratification.getChunkDemands().isEmpty()) {
+            if (isProposer) {
+                description.append("• Receive ").append(ratification.getChunkDemands().size())
+                    .append(" chunk(s) from ").append(otherNation.getName()).append("\n");
+            } else {
+                description.append("• Cede ").append(ratification.getChunkDemands().size())
+                    .append(" chunk(s) to ").append(otherNation.getName()).append("\n");
+            }
+        }
+        if (ratification.getCurrencyDemand() <= 0 && ratification.getChunkDemands().isEmpty()) {
+            description.append("• Unconditional peace (no reparations or territory changes)\n");
+        }
+
+        description.append("\n=== Ratification Requirements ===\n");
+        description.append("• BOTH nations' legislatures must vote YES for the treaty to take effect\n");
+        description.append("• If EITHER legislature votes NO, the treaty fails and war continues\n");
+        description.append("• This vote cannot be vetoed by the leader\n");
+        description.append("\nVote YES to ratify the peace treaty, or NO to reject it and continue the war.");
+
+        com.statecraft.legislature.Bill bill = new com.statecraft.legislature.Bill(
+            thisNation.getId(), billNumber, title, description.toString(),
+            thisNation.getLeaderId(), "Treaty Negotiation",
+            com.statecraft.legislature.Bill.BillType.TREATY_RATIFICATION
+        );
+
+        // Add policy change to track what treaty this is for
+        bill.addPolicyChange(com.statecraft.legislature.PolicyType.RATIFY_PEACE_TREATY,
+            ratification.getRatificationId().toString());
+
+        // Skip debate — go straight to voting with configurable duration
+        long votingDuration = com.statecraft.config.StateCraftConfig.LEGISLATURE_VOTING_HOURS.get() * 60 * 60 * 1000L;
+        bill.startVoting(System.currentTimeMillis() + votingDuration);
+        legislature.addActiveBill(bill);
+
+        return bill;
+    }
+
+    /**
+     * Notify legislature members of both nations about the pending treaty ratification.
+     */
+    private void notifyLegislaturesOfTreaty(Nation proposer, Nation target,
+                                             PendingTreatyRatification ratification, MinecraftServer server) {
+        com.statecraft.legislature.LegislatureManager legManager =
+            com.statecraft.legislature.LegislatureManager.getInstance();
+
+        String termsInfo = ratification.getTermsSummary();
+
+        // Notify proposer nation's legislature
+        com.statecraft.legislature.Legislature proposerLeg = legManager.getLegislature(proposer.getId());
+        if (proposerLeg != null) {
+            Set<UUID> proposerVoters = proposerLeg.getVotingMembers(proposer);
+            for (UUID voterId : proposerVoters) {
+                ServerPlayer voter = server.getPlayerList().getPlayer(voterId);
+                if (voter != null) {
+                    voter.sendSystemMessage(Component.literal(
+                        "§6[Legislature] §ePeace treaty ratification vote: §f" + target.getName() +
+                        "§e. Terms: §f" + termsInfo + "§e. Use §f/sc gui§e to vote."));
+                }
+            }
+        }
+
+        // Notify target nation's legislature
+        com.statecraft.legislature.Legislature targetLeg = legManager.getLegislature(target.getId());
+        if (targetLeg != null) {
+            Set<UUID> targetVoters = targetLeg.getVotingMembers(target);
+            for (UUID voterId : targetVoters) {
+                ServerPlayer voter = server.getPlayerList().getPlayer(voterId);
+                if (voter != null) {
+                    voter.sendSystemMessage(Component.literal(
+                        "§6[Legislature] §ePeace treaty ratification vote: §f" + proposer.getName() +
+                        "§e. Terms: §f" + termsInfo + "§e. Use §f/sc gui§e to vote."));
+                }
+            }
+        }
+    }
+
+    /**
+     * Called when a treaty ratification bill passes or fails in a legislature.
+     * Checks if both legislatures have voted and handles the result.
+     *
+     * @param billId The bill that was just resolved
+     * @param passed Whether the bill passed or failed
+     * @param server The server instance
+     */
+    public void onTreatyRatificationVoteComplete(UUID billId, boolean passed, MinecraftServer server) {
+        // Find the ratification this bill belongs to
+        PendingTreatyRatification ratification = null;
+        for (PendingTreatyRatification r : pendingRatifications.values()) {
+            if (r.hasBill(billId)) {
+                ratification = r;
+                break;
+            }
+        }
+
+        if (ratification == null) {
+            StateCraft.LOGGER.warn("Treaty ratification vote complete for unknown bill: {}", billId);
+            return;
+        }
+
+        Nation proposer = ChunkClaimManager.getInstance().getNation(ratification.getProposerNationId());
+        Nation target = ChunkClaimManager.getInstance().getNation(ratification.getTargetNationId());
+
+        if (proposer == null || target == null) {
+            StateCraft.LOGGER.warn("Treaty ratification involves non-existent nation, removing");
+            pendingRatifications.remove(ratification.getRatificationId());
+            markDirty();
+            return;
+        }
+
+        // Update ratification status
+        boolean isProposerBill = ratification.getProposerBillId() != null &&
+                                  ratification.getProposerBillId().equals(billId);
+
+        if (passed) {
+            if (isProposerBill) {
+                ratification.setProposerRatified(true);
+                StateCraft.LOGGER.info("Treaty ratified by proposer nation: {}", proposer.getName());
+            } else {
+                ratification.setTargetRatified(true);
+                StateCraft.LOGGER.info("Treaty ratified by target nation: {}", target.getName());
+            }
+        } else {
+            if (isProposerBill) {
+                ratification.setProposerRejected(true);
+                StateCraft.LOGGER.info("Treaty rejected by proposer nation: {}", proposer.getName());
+            } else {
+                ratification.setTargetRejected(true);
+                StateCraft.LOGGER.info("Treaty rejected by target nation: {}", target.getName());
+            }
+        }
+
+        markDirty();
+
+        // Check if the treaty is now resolved
+        if (ratification.isFullyRatified()) {
+            // Both legislatures passed — execute the peace treaty!
+            executePeaceTreaty(ratification, proposer, target, server);
+            pendingRatifications.remove(ratification.getRatificationId());
+            markDirty();
+        } else if (ratification.isRejected()) {
+            // One legislature rejected — treaty fails
+            handleTreatyRejection(ratification, proposer, target, server);
+            pendingRatifications.remove(ratification.getRatificationId());
+            markDirty();
+        } else {
+            // One legislature has voted, waiting for the other
+            String waitingFor = ratification.isProposerRatified() ? target.getName() : proposer.getName();
+            String votedNation = isProposerBill ? proposer.getName() : target.getName();
+
+            String waitMsg = "§e[Treaty Update] §f" + votedNation +
+                "'s legislature has ratified the peace treaty. Waiting for " + waitingFor + "'s legislature.";
+            notifyNationMembers(proposer, server, waitMsg);
+            notifyNationMembers(target, server, waitMsg);
+        }
+    }
+
+    /**
+     * Execute a fully ratified peace treaty.
+     */
+    private void executePeaceTreaty(PendingTreatyRatification ratification, Nation proposer, Nation target,
+                                     MinecraftServer server) {
+        StringBuilder termsLog = new StringBuilder();
+
+        // Execute currency transfer
+        if (ratification.getCurrencyDemand() > 0 &&
+            com.statecraft.integration.IntegrationRegistry.hasEconomyIntegration()) {
+            boolean withdrew = com.statecraft.integration.IntegrationRegistry.forceWithdrawFromNation(
+                target.getName(), ratification.getCurrencyDemand(),
+                "Peace treaty reparations to " + proposer.getName());
+            com.statecraft.integration.IntegrationRegistry.depositToNation(
+                proposer.getName(), ratification.getCurrencyDemand(),
+                "Peace treaty reparations from " + target.getName());
+            termsLog.append("Currency: ").append(
+                com.statecraft.integration.IntegrationRegistry.formatCurrency(ratification.getCurrencyDemand()));
+            if (!withdrew) {
+                termsLog.append(" (target treasury went into debt)");
+            }
+            termsLog.append("\n");
+        }
+
+        // Execute chunk transfers
+        if (!ratification.getChunkDemands().isEmpty() && ratification.getReceivingCityId() != null) {
+            City receivingCity = ChunkClaimManager.getInstance().getCity(ratification.getReceivingCityId());
+            if (receivingCity != null) {
+                int transferred = 0;
+                for (ChunkDemand demand : ratification.getChunkDemands()) {
+                    try {
+                        net.minecraft.world.level.ChunkPos chunkPos =
+                            new net.minecraft.world.level.ChunkPos(demand.chunkX, demand.chunkZ);
+                        net.minecraft.resources.ResourceKey<Level> dimKey =
+                            net.minecraft.resources.ResourceKey.create(
+                                net.minecraft.core.registries.Registries.DIMENSION,
+                                new net.minecraft.resources.ResourceLocation(demand.dimension));
+                        ClaimedChunk chunk = ChunkClaimManager.getInstance().getClaimedChunk(chunkPos, dimKey);
+                        if (chunk != null) {
+                            City oldCity = ChunkClaimManager.getInstance().getCity(chunk.getCityId());
+                            if (oldCity != null) {
+                                oldCity.unclaimChunk(chunkPos, dimKey);
+                            }
+                            UUID previousOwner = chunk.getPlayerOwner();
+                            chunk.setPlayerOwner(null);
+                            chunk.setOwnershipType(OwnershipType.HIERARCHY);
+                            chunk.setForSale(false);
+                            chunk.setCityId(ratification.getReceivingCityId());
+                            ChunkClaimManager.getInstance().transferChunkToCity(chunk, receivingCity, chunkPos, dimKey);
+                            transferred++;
+
+                            if (previousOwner != null) {
+                                sendDiplomacyMail(previousOwner,
+                                    "Land Ceded in Peace Treaty",
+                                    "Your privately owned chunk at (" + demand.chunkX + ", " + demand.chunkZ +
+                                    ") has been ceded to " + proposer.getName() +
+                                    " as part of a peace treaty with " + target.getName() + ".\n" +
+                                    "The chunk is now government-owned territory of " + proposer.getName() + ".");
+                            }
+                        }
+                    } catch (Exception e) {
+                        StateCraft.LOGGER.warn("Failed to transfer chunk ({}, {}) in peace treaty: {}",
+                            demand.chunkX, demand.chunkZ, e.getMessage());
+                    }
+                }
+                termsLog.append("Chunks transferred: ").append(transferred).append("\n");
+            } else {
+                termsLog.append("Chunk transfer failed: receiving city no longer exists\n");
+            }
+        }
+
+        // Remove enemy status from both sides
+        proposer.removeEnemy(target.getId());
+        target.removeEnemy(proposer.getId());
+
+        // Create truce
+        Truce truce = new Truce(UUID.randomUUID(), proposer.getId(), target.getId(),
+            System.currentTimeMillis() + TRUCE_DURATION_MS);
+        truces.put(truce.id, truce);
+
+        ChunkClaimManager.getInstance().markDirty();
+
+        String termsSection = termsLog.length() > 0 ?
+            "\n\n=== Treaty Terms Executed ===\n" + termsLog : "";
+
+        String peaceMsg = "§a§l[PEACE TREATY RATIFIED] §f" + proposer.getName() + " and " + target.getName() +
+            " are now at peace! §7(48-hour truce in effect)";
+        notifyNationMembers(proposer, server, peaceMsg);
+        notifyNationMembers(target, server, peaceMsg);
+
+        sendDiplomacyMail(proposer.getLeaderId(), "Peace Treaty Ratified - " + target.getName(),
+            "Both legislatures have ratified the peace treaty with " + target.getName() + "!\n" +
+            "A 48-hour truce is now in effect." + termsSection);
+        sendDiplomacyMail(target.getLeaderId(), "Peace Treaty Ratified - " + proposer.getName(),
+            "Both legislatures have ratified the peace treaty with " + proposer.getName() + "!\n" +
+            "A 48-hour truce is now in effect." + termsSection);
+
+        StateCraft.LOGGER.info("Peace treaty ratified and executed: {} <-> {}{}",
+            proposer.getName(), target.getName(),
+            termsLog.length() > 0 ? " [" + termsLog.toString().trim() + "]" : "");
+    }
+
+    /**
+     * Handle a rejected peace treaty.
+     */
+    private void handleTreatyRejection(PendingTreatyRatification ratification, Nation proposer, Nation target,
+                                        MinecraftServer server) {
+        String rejectingNation = ratification.isProposerRejected() ? proposer.getName() : target.getName();
+
+        String failMsg = "§c§l[PEACE TREATY REJECTED] §fThe peace treaty between " + proposer.getName() +
+            " and " + target.getName() + " has been rejected by " + rejectingNation + "'s legislature. " +
+            "§cThe war continues.";
+        notifyNationMembers(proposer, server, failMsg);
+        notifyNationMembers(target, server, failMsg);
+
+        sendDiplomacyMail(proposer.getLeaderId(), "Peace Treaty Rejected",
+            "The peace treaty with " + target.getName() + " has been rejected by " +
+            rejectingNation + "'s legislature.\n\nThe war continues.");
+        sendDiplomacyMail(target.getLeaderId(), "Peace Treaty Rejected",
+            "The peace treaty with " + proposer.getName() + " has been rejected by " +
+            rejectingNation + "'s legislature.\n\nThe war continues.");
+
+        StateCraft.LOGGER.info("Peace treaty rejected by {}: {} <-> {}",
+            rejectingNation, proposer.getName(), target.getName());
+    }
+
+    /**
+     * Get all pending treaty ratifications involving a nation.
+     */
+    public List<PendingTreatyRatification> getPendingRatifications(UUID nationId) {
+        return pendingRatifications.values().stream()
+            .filter(r -> r.involvesNation(nationId))
+            .filter(r -> !r.isExpired() && !r.isRejected() && !r.isFullyRatified())
+            .collect(Collectors.toList());
+    }
+
+    /**
+     * Get a specific pending ratification by ID.
+     */
+    @Nullable
+    public PendingTreatyRatification getPendingRatification(UUID ratificationId) {
+        return pendingRatifications.get(ratificationId);
+    }
+
     // ==================== Tick ====================
 
     /**
@@ -720,6 +1009,18 @@ public class DiplomacyManager {
                 StateCraft.LOGGER.debug("Truce expired between {} and {}",
                     entry.getValue().nationA, entry.getValue().nationB);
                 truceIter.remove();
+                changed = true;
+            }
+        }
+
+        // Expire pending treaty ratifications
+        Iterator<Map.Entry<UUID, PendingTreatyRatification>> ratIter = pendingRatifications.entrySet().iterator();
+        while (ratIter.hasNext()) {
+            Map.Entry<UUID, PendingTreatyRatification> entry = ratIter.next();
+            if (entry.getValue().isExpired()) {
+                StateCraft.LOGGER.debug("Treaty ratification expired: {} <-> {}",
+                    entry.getValue().getProposerNationId(), entry.getValue().getTargetNationId());
+                ratIter.remove();
                 changed = true;
             }
         }
@@ -834,6 +1135,13 @@ public class DiplomacyManager {
         }
         tag.put("truces", trucesList);
 
+        // Save pending treaty ratifications
+        ListTag ratificationsList = new ListTag();
+        for (PendingTreatyRatification ratification : pendingRatifications.values()) {
+            ratificationsList.add(ratification.save());
+        }
+        tag.put("pendingRatifications", ratificationsList);
+
         tag.putInt("maxProposalsPerNation", maxProposalsPerNation);
 
         return tag;
@@ -842,6 +1150,7 @@ public class DiplomacyManager {
     public void load(CompoundTag tag) {
         proposals.clear();
         truces.clear();
+        pendingRatifications.clear();
 
         // Load proposals
         if (tag.contains("proposals")) {
@@ -902,12 +1211,29 @@ public class DiplomacyManager {
             }
         }
 
+        // Load pending treaty ratifications
+        if (tag.contains("pendingRatifications")) {
+            ListTag ratificationsList = tag.getList("pendingRatifications", Tag.TAG_COMPOUND);
+            for (int i = 0; i < ratificationsList.size(); i++) {
+                CompoundTag rTag = ratificationsList.getCompound(i);
+                try {
+                    PendingTreatyRatification ratification = PendingTreatyRatification.load(rTag);
+                    // Only load non-expired, non-resolved ratifications
+                    if (!ratification.isExpired() && !ratification.isFullyRatified() && !ratification.isRejected()) {
+                        pendingRatifications.put(ratification.getRatificationId(), ratification);
+                    }
+                } catch (Exception e) {
+                    StateCraft.LOGGER.warn("Failed to load pending treaty ratification: {}", e.getMessage());
+                }
+            }
+        }
+
         if (tag.contains("maxProposalsPerNation")) {
             maxProposalsPerNation = tag.getInt("maxProposalsPerNation");
         }
 
-        StateCraft.LOGGER.info("Loaded DiplomacyManager: {} proposals, {} truces",
-            proposals.size(), truces.size());
+        StateCraft.LOGGER.info("Loaded DiplomacyManager: {} proposals, {} truces, {} pending ratifications",
+            proposals.size(), truces.size(), pendingRatifications.size());
     }
 
     // ==================== Inner Types ====================

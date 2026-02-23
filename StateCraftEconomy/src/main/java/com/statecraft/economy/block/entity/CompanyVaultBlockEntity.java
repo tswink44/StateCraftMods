@@ -3,6 +3,7 @@ package com.statecraft.economy.block.entity;
 import com.statecraft.company.Company;
 import com.statecraft.company.CompanyManager;
 import com.statecraft.economy.gui.CompanyVaultMenu;
+import com.statecraft.economy.util.NBTUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
@@ -125,7 +126,7 @@ public class CompanyVaultBlockEntity extends BlockEntity implements MenuProvider
         if (companyId != null) {
             tag.putUUID("CompanyId", companyId);
         }
-        tag.putString("CompanyName", companyName);
+        NBTUtils.putSanitizedString(tag, "CompanyName", companyName);
     }
 
     @Override

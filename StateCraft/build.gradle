@@ -123,10 +123,28 @@ repositories {
         name = 'Minecraft Forge'
         url = 'https://maven.minecraftforge.net/'
     }
+    // JourneyMap API
+    maven {
+        name = 'JourneyMap'
+        url = 'https://jm.gserv.me/repository/maven-public/'
+    }
+    // Modrinth maven (fallback for various mods)
+    maven {
+        name = 'Modrinth'
+        url = 'https://api.modrinth.com/maven'
+    }
+    // CurseForge maven
+    maven {
+        name = 'CurseForge'
+        url = 'https://cursemaven.com'
+    }
 }
 
 dependencies {
     minecraft 'net.minecraftforge:forge:1.20.1-47.2.0'
+
+    // JourneyMap API - compile only (optional runtime dependency)
+    compileOnly 'info.journeymap:journeymap-api:1.20.1-1.9-SNAPSHOT'
 }
 
 tasks.named('jar', Jar).configure {

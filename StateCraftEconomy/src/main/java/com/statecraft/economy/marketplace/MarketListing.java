@@ -1,5 +1,6 @@
 package com.statecraft.economy.marketplace;
 
+import com.statecraft.economy.util.NBTUtils;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.item.ItemStack;
 
@@ -108,7 +109,7 @@ public class MarketListing {
         CompoundTag tag = new CompoundTag();
         tag.putUUID("Id", id);
         tag.putUUID("SellerId", sellerId);
-        tag.putString("SellerName", sellerName);
+        NBTUtils.putSanitizedString(tag, "SellerName", sellerName);
         if (sellerNationId != null) tag.putUUID("SellerNationId", sellerNationId);
         if (sellerCityId != null) tag.putUUID("SellerCityId", sellerCityId);
         tag.put("Item", item.save(new CompoundTag()));

@@ -5,6 +5,7 @@ import com.statecraft.economy.client.screen.ATMScreen;
 import com.statecraft.economy.client.screen.ChunkMarketScreen;
 import com.statecraft.economy.client.screen.MarketplaceScreen;
 import com.statecraft.economy.client.screen.SimpleATMScreen;
+import com.statecraft.economy.client.screen.TaxReportScreen;
 import com.statecraft.economy.network.packets.*;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -297,6 +298,21 @@ public class ClientPacketHandler {
     public static void handleSyncItemValues(SyncItemValuesPacket packet, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
             com.statecraft.economy.config.ItemValueRegistry.getInstance().receiveSyncedValues(packet.getItemValues());
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncTaxReport(SyncTaxReportPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof TaxReportScreen taxScreen) {
+                taxScreen.setReportData(packet.getData());
+            } else {
+                // Open new tax report screen with the data
+                TaxReportScreen screen = new TaxReportScreen();
+                mc.setScreen(screen);
+                screen.setReportData(packet.getData());
+            }
         });
         ctx.get().setPacketHandled(true);
     }

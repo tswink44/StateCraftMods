@@ -1,5 +1,6 @@
 package com.statecraft.core;
 
+import com.statecraft.util.NBTUtils;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -263,7 +264,7 @@ public class Election {
         for (Map.Entry<UUID, String> entry : candidates.entrySet()) {
             CompoundTag candidateTag = new CompoundTag();
             candidateTag.putUUID("id", entry.getKey());
-            candidateTag.putString("name", entry.getValue());
+            NBTUtils.putSanitizedString(candidateTag, "name", entry.getValue());
             candidatesList.add(candidateTag);
         }
         tag.put("candidates", candidatesList);
@@ -283,7 +284,7 @@ public class Election {
             if (winnerId != null) {
                 tag.putUUID("winnerId", winnerId);
             }
-            tag.putString("winnerName", winnerName != null ? winnerName : "");
+            NBTUtils.putStringSafe(tag, "winnerName", winnerName);
             tag.putInt("winnerVoteCount", winnerVoteCount);
             tag.putInt("totalVoters", totalVoters);
         }

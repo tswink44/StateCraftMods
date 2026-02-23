@@ -30,6 +30,7 @@ public class SyncNationDataPacket {
     private final boolean open;
     private final String description;
     private final String leaderName;
+    private final String flagUrl;
     private final List<String> stateNames;
     private final List<String> allyNames;
     private final List<String> enemyNames;
@@ -54,6 +55,7 @@ public class SyncNationDataPacket {
         this.open = false;
         this.description = "";
         this.leaderName = "";
+        this.flagUrl = "";
         this.stateNames = new ArrayList<>();
         this.allyNames = new ArrayList<>();
         this.enemyNames = new ArrayList<>();
@@ -87,6 +89,7 @@ public class SyncNationDataPacket {
         this.open = false;
         this.description = "";
         this.leaderName = "";
+        this.flagUrl = "";
         this.stateNames = new ArrayList<>();
         this.allyNames = new ArrayList<>();
         this.enemyNames = new ArrayList<>();
@@ -97,7 +100,8 @@ public class SyncNationDataPacket {
     public SyncNationDataPacket(String nationName, int states, int maxStates, int cities, int chunks,
                                  int members, double balance, boolean open, String description,
                                  String leaderName, boolean isLeader, boolean isOfficer, boolean isMember,
-                                 List<String> stateNames, List<String> allyNames, List<String> enemyNames) {
+                                 List<String> stateNames, List<String> allyNames, List<String> enemyNames,
+                                 String flagUrl) {
         this.inNation = true;
         this.nationName = nationName;
         this.stateName = "";
@@ -115,10 +119,20 @@ public class SyncNationDataPacket {
         this.open = open;
         this.description = description;
         this.leaderName = leaderName;
+        this.flagUrl = flagUrl != null ? flagUrl : "";
         this.stateNames = stateNames;
         this.allyNames = allyNames;
         this.enemyNames = enemyNames;
         this.companyNames = new ArrayList<>();
+    }
+
+    // Backward compatible constructor without flagUrl
+    public SyncNationDataPacket(String nationName, int states, int maxStates, int cities, int chunks,
+                                 int members, double balance, boolean open, String description,
+                                 String leaderName, boolean isLeader, boolean isOfficer, boolean isMember,
+                                 List<String> stateNames, List<String> allyNames, List<String> enemyNames) {
+        this(nationName, states, maxStates, cities, chunks, members, balance, open, description,
+             leaderName, isLeader, isOfficer, isMember, stateNames, allyNames, enemyNames, "");
     }
 
     public SyncNationDataPacket(FriendlyByteBuf buf) {
@@ -139,6 +153,7 @@ public class SyncNationDataPacket {
         this.open = buf.readBoolean();
         this.description = buf.readUtf(100);
         this.leaderName = buf.readUtf(16);
+        this.flagUrl = buf.readUtf(512);
 
         int stateCount = buf.readInt();
         this.stateNames = new ArrayList<>();
@@ -183,6 +198,7 @@ public class SyncNationDataPacket {
         buf.writeBoolean(open);
         buf.writeUtf(description, 100);
         buf.writeUtf(leaderName, 16);
+        buf.writeUtf(flagUrl != null ? flagUrl : "", 512);
 
         buf.writeInt(stateNames.size());
         for (String name : stateNames) {
@@ -223,6 +239,7 @@ public class SyncNationDataPacket {
     public boolean isOpen() { return open; }
     public String getDescription() { return description; }
     public String getLeaderName() { return leaderName; }
+    public String getFlagUrl() { return flagUrl; }
     public List<String> getStateNames() { return stateNames; }
     public List<String> getAllyNames() { return allyNames; }
     public List<String> getEnemyNames() { return enemyNames; }

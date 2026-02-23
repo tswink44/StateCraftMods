@@ -6,6 +6,7 @@ import com.statecraft.economy.core.EconomyManager;
 import com.statecraft.economy.core.SpendingLimitManager;
 import com.statecraft.economy.core.TaxationManager;
 import com.statecraft.economy.core.Transaction;
+import com.statecraft.economy.util.NBTUtils;
 import com.statecraft.company.CompanyManager;
 import com.statecraft.economy.company.CompanyEconomyManager;
 import com.statecraft.economy.company.BankManager;
@@ -269,13 +270,13 @@ public class EconomySavedData extends SavedData {
                 if (tx.getOtherId() != null) {
                     txTag.putUUID("OtherId", tx.getOtherId());
                 }
-                txTag.putString("Description", tx.getDescription());
+                NBTUtils.putSanitizedString(txTag, "Description", tx.getDescription());
                 txTag.putLong("Timestamp", tx.getTimestamp());
                 if (tx.getInitiatorId() != null) {
                     txTag.putUUID("InitiatorId", tx.getInitiatorId());
                 }
                 if (tx.getInitiatorName() != null) {
-                    txTag.putString("InitiatorName", tx.getInitiatorName());
+                    NBTUtils.putSanitizedString(txTag, "InitiatorName", tx.getInitiatorName());
                 }
                 txList.add(txTag);
             }

@@ -3,6 +3,7 @@ package com.statecraft.economy.block.entity;
 import com.statecraft.economy.config.ItemValueConfig;
 import com.statecraft.economy.core.EconomyManager;
 import com.statecraft.economy.gui.TradingHubMenu;
+import com.statecraft.economy.util.NBTUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
@@ -99,7 +100,7 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
         public CompoundTag toNBT() {
             CompoundTag tag = new CompoundTag();
             tag.putUUID("uuid", playerUUID);
-            tag.putString("name", playerName);
+            NBTUtils.putSanitizedString(tag, "name", playerName);
             tag.putDouble("percentage", percentage);
             tag.putBoolean("isCompany", isCompany);
             return tag;
@@ -864,7 +865,7 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
         // Save owner
         if (ownerUUID != null) {
             tag.putUUID("owner", ownerUUID);
-            tag.putString("ownerName", ownerName);
+            NBTUtils.putSanitizedString(tag, "ownerName", ownerName);
         }
         if (cityId != null) {
             tag.putUUID("cityId", cityId);

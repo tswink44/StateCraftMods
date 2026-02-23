@@ -1,5 +1,6 @@
 package com.statecraft.economy.stockmarket;
 
+import com.statecraft.economy.util.NBTUtils;
 import net.minecraft.nbt.CompoundTag;
 
 import java.util.UUID;
@@ -103,9 +104,9 @@ public class ShareListing {
         CompoundTag tag = new CompoundTag();
         tag.putUUID("Id", id);
         tag.putUUID("SellerId", sellerId);
-        tag.putString("SellerName", sellerName);
+        NBTUtils.putSanitizedString(tag, "SellerName", sellerName);
         tag.putUUID("CompanyId", companyId);
-        tag.putString("CompanyName", companyName);
+        NBTUtils.putSanitizedString(tag, "CompanyName", companyName);
         tag.putInt("Quantity", quantity);
         tag.putInt("OriginalQuantity", originalQuantity);
         tag.putDouble("PricePerShare", pricePerShare);

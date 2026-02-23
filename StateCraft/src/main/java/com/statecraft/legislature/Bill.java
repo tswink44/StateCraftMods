@@ -35,7 +35,8 @@ public class Bill {
     public enum BillType {
         REGULAR,            // Standard bill: simple majority, can be vetoed
         CONSTITUTIONAL,     // Constitutional amendment: 2/3 majority required, cannot be vetoed
-        EMERGENCY_RATIFICATION  // Ratification of emergency power: simple majority, cannot be vetoed by leader
+        EMERGENCY_RATIFICATION,  // Ratification of emergency power: simple majority, cannot be vetoed by leader
+        TREATY_RATIFICATION     // Ratification of peace treaty: simple majority, cannot be vetoed, linked to other nation
     }
 
     private final UUID billId;
@@ -138,8 +139,15 @@ public class Bill {
     }
 
     /**
+     * Check if this bill is a peace treaty ratification vote
+     */
+    public boolean isTreatyRatification() {
+        return billType == BillType.TREATY_RATIFICATION;
+    }
+
+    /**
      * Check if this bill can be vetoed
-     * Constitutional amendments and emergency ratification votes cannot be vetoed
+     * Constitutional amendments, emergency ratification votes, and treaty ratifications cannot be vetoed
      */
     public boolean canBeVetoed() {
         return billType == BillType.REGULAR && !vetoProof;
@@ -274,6 +282,16 @@ public class Bill {
             }
         } else if (billType == BillType.EMERGENCY_RATIFICATION) {
             // Emergency ratification: simple majority, bypasses leader (goes directly to ENACTED/FAILED)
+            if (yesPercent > 50) {
+                status = Status.ENACTED;
+                enactedTime = System.currentTimeMillis();
+                vetoProof = true; // Cannot be vetoed
+            } else {
+                status = Status.FAILED;
+            }
+        } else if (billType == BillType.TREATY_RATIFICATION) {
+            // Treaty ratification: simple majority, bypasses leader (goes directly to ENACTED/FAILED)
+            // Both nations' legislatures must pass for the treaty to take effect
             if (yesPercent > 50) {
                 status = Status.ENACTED;
                 enactedTime = System.currentTimeMillis();

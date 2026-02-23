@@ -1,5 +1,6 @@
 package com.statecraft.economy.core;
 
+import com.statecraft.economy.util.NBTUtils;
 import net.minecraft.nbt.CompoundTag;
 
 import java.util.UUID;
@@ -94,8 +95,8 @@ public class Bank {
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putUUID("id", id);
-        tag.putString("name", name);
-        tag.putString("displayName", displayName);
+        NBTUtils.putSanitizedString(tag, "name", name);
+        NBTUtils.putSanitizedString(tag, "displayName", displayName);
         tag.putDouble("interestRate", interestRate);
         tag.putDouble("withdrawalFee", withdrawalFee);
         tag.putDouble("transferFee", transferFee);

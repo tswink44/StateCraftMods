@@ -138,6 +138,8 @@ public class ChunkBorderCache {
      * Information about a claimed chunk
      */
     public static class ChunkClaimInfo {
+        private final int chunkX;
+        private final int chunkZ;
         private final boolean claimed;
         private final boolean own;
         private final boolean ally;
@@ -146,8 +148,10 @@ public class ChunkBorderCache {
         private final String stateName;
         private final String cityName;
 
-        public ChunkClaimInfo(boolean claimed, boolean own, boolean ally, boolean enemy,
+        public ChunkClaimInfo(int chunkX, int chunkZ, boolean claimed, boolean own, boolean ally, boolean enemy,
                               String nationName, String stateName, String cityName) {
+            this.chunkX = chunkX;
+            this.chunkZ = chunkZ;
             this.claimed = claimed;
             this.own = own;
             this.ally = ally;
@@ -157,11 +161,23 @@ public class ChunkBorderCache {
             this.cityName = cityName;
         }
 
-        // Unclaimed chunk
-        public static ChunkClaimInfo unclaimed() {
-            return new ChunkClaimInfo(false, false, false, false, null, null, null);
+        // Legacy constructor without coordinates (for backward compatibility)
+        public ChunkClaimInfo(boolean claimed, boolean own, boolean ally, boolean enemy,
+                              String nationName, String stateName, String cityName) {
+            this(0, 0, claimed, own, ally, enemy, nationName, stateName, cityName);
         }
 
+        // Unclaimed chunk
+        public static ChunkClaimInfo unclaimed() {
+            return new ChunkClaimInfo(0, 0, false, false, false, false, null, null, null);
+        }
+
+        public static ChunkClaimInfo unclaimed(int chunkX, int chunkZ) {
+            return new ChunkClaimInfo(chunkX, chunkZ, false, false, false, false, null, null, null);
+        }
+
+        public int getChunkX() { return chunkX; }
+        public int getChunkZ() { return chunkZ; }
         public boolean isClaimed() { return claimed; }
         public boolean isOwn() { return own; }
         public boolean isAlly() { return ally; }

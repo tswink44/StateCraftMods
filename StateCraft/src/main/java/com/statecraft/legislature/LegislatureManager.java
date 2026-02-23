@@ -184,6 +184,15 @@ public class LegislatureManager {
                                 "§6[Legislature] §a§lEmergency Power Ratified: §f" + bill.getTitle() +
                                 " §7(Yes: " + bill.getYesVotes() + ", No: " + bill.getNoVotes() + ")");
                             toArchive.add(bill.getBillId());
+                        } else if (bill.getStatus() == Bill.Status.ENACTED && bill.isTreatyRatification()) {
+                            // Treaty ratification PASSED — notify DiplomacyManager
+                            notifyLegislatureMembers(legislature, nation, server,
+                                "§6[Legislature] §a§lTreaty Ratified: §f" + bill.getTitle() +
+                                " §7(Yes: " + bill.getYesVotes() + ", No: " + bill.getNoVotes() + ")");
+                            // Notify diplomacy manager that this nation ratified
+                            com.statecraft.core.DiplomacyManager.getInstance()
+                                .onTreatyRatificationVoteComplete(bill.getBillId(), true, server);
+                            toArchive.add(bill.getBillId());
                         } else if (bill.getStatus() == Bill.Status.PASSED) {
                             if (bill.isVetoProof()) {
                                 // Auto-enact veto-proof bills
@@ -216,6 +225,14 @@ public class LegislatureManager {
                                         StateCraft.LOGGER.warn("Invalid emergency power in failed ratification bill: {}", powerName);
                                     }
                                 }
+                            } else if (bill.isTreatyRatification()) {
+                                // Treaty ratification FAILED — notify DiplomacyManager
+                                notifyLegislatureMembers(legislature, nation, server,
+                                    "§6[Legislature] §c§lTreaty Rejected: §f" + bill.getTitle() +
+                                    " §7(Yes: " + bill.getYesVotes() + ", No: " + bill.getNoVotes() + ")");
+                                // Notify diplomacy manager that this nation rejected
+                                com.statecraft.core.DiplomacyManager.getInstance()
+                                    .onTreatyRatificationVoteComplete(bill.getBillId(), false, server);
                             } else {
                                 String failReason = bill.isConstitutionalAmendment() ?
                                     " §7(Did not achieve 2/3 majority)" : "";
@@ -636,8 +653,9 @@ public class LegislatureManager {
                     break;
                 case NATION_FLAG:
                     nation.setFlagUrl(value);
-                    StateCraft.LOGGER.info("Constitutional amendment: Nation flag updated for nation {}",
-                        nation.getName());
+                    ChunkClaimManager.getInstance().markDirty();
+                    StateCraft.LOGGER.info("Constitutional amendment: Nation flag updated for nation {} to '{}'",
+                        nation.getName(), value);
                     break;
                 case IMPEACH_LEADER:
                     handleImpeachment(nation, value);

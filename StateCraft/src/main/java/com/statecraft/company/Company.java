@@ -1,5 +1,6 @@
 package com.statecraft.company;
 
+import com.statecraft.util.NBTUtils;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -168,10 +169,10 @@ public class Company {
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putUUID("Id", id);
-        tag.putString("Name", name);
+        NBTUtils.putSanitizedString(tag, "Name", name);
         tag.putUUID("FounderId", founderId);
         tag.putInt("TotalShares", totalShares);
-        tag.putString("Description", description);
+        NBTUtils.putSanitizedString(tag, "Description", description);
         tag.putLong("CreatedTime", createdTime);
         tag.putString("CompanyType", companyType.name());
 

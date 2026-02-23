@@ -1,6 +1,7 @@
 package com.statecraft.core;
 
 import com.statecraft.config.StateCraftConfig;
+import com.statecraft.util.NBTUtils;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -241,14 +242,14 @@ public class City {
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putUUID("id", id);
-        tag.putString("name", name);
+        NBTUtils.putSanitizedString(tag, "name", name);
         tag.putUUID("stateId", stateId);
         if (mayorId != null) {
             tag.putUUID("mayorId", mayorId);
         }
         tag.putBoolean("publicJoin", publicJoin);
-        tag.putString("description", description);
-        tag.putString("flagUrl", flagUrl);
+        NBTUtils.putSanitizedString(tag, "description", description);
+        NBTUtils.putStringSafe(tag, "flagUrl", flagUrl);
         tag.putDouble("taxMultiplier", taxMultiplier);
         tag.putDouble("taxRate", taxRate);
         tag.putDouble("salesTaxRate", salesTaxRate);

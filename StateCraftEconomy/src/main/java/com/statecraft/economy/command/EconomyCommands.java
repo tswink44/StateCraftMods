@@ -74,6 +74,8 @@ public class EconomyCommands {
             .then(Commands.literal("tax")
                 .then(Commands.literal("history")
                     .executes(EconomyCommands::showTaxHistory))
+                .then(Commands.literal("report")
+                    .executes(EconomyCommands::showTaxReport))
                 .then(Commands.literal("collect")
                     .requires(src -> src.hasPermission(2))
                     .executes(EconomyCommands::forceCollectTax))
@@ -615,6 +617,262 @@ public class EconomyCommands {
 
     /** Helper record for per-chunk tax breakdown display */
     private record ChunkTaxEntry(int chunkX, int chunkZ, double value, double taxRate, double estimatedTax) {}
+
+    /**
+     * Generate a comprehensive tax report summarizing all property taxes for a player.
+     * Shows detailed breakdown by city, state, nation with valuation factors.
+     */
+    private static int showTaxReport(CommandContext<CommandSourceStack> context) {
+        try {
+            ServerPlayer player = context.getSource().getPlayerOrException();
+            UUID playerId = player.getUUID();
+            EconomyManager ecoManager = EconomyManager.getInstance();
+            TaxationManager taxManager = TaxationManager.getInstance();
+
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§6§l╔════════════════════════════════════╗"), false);
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§6§l║      PROPERTY TAX REPORT           ║"), false);
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§6§l╚════════════════════════════════════╝"), false);
+
+            if (!StateCraftEconomy.isStateCraftLoaded() || !StateCraftIntegration.isInitialized()) {
+                context.getSource().sendFailure(Component.literal("§cStateCraft integration not available."));
+                return 0;
+            }
+
+            // Collect all chunk data for this player
+            List<TaxationManager.ChunkTaxInfo> allTaxable =
+                StateCraftIntegration.getAllTaxableChunks(context.getSource().getServer());
+            ChunkValuationManager valuationManager = ChunkValuationManager.getInstance();
+
+            // Group chunks by nation -> state -> city
+            Map<String, NationTaxData> nationData = new LinkedHashMap<>();
+            int totalChunks = 0;
+            double grandTotalValue = 0;
+            double grandTotalTax = 0;
+
+            for (TaxationManager.ChunkTaxInfo chunk : allTaxable) {
+                if (!playerId.equals(chunk.getOwnerId())) continue;
+
+                totalChunks++;
+
+                // Get valuation details
+                ChunkValuation valuation = valuationManager.getValuation(
+                    chunk.getChunkX(), chunk.getChunkZ(), chunk.getDimension());
+                double chunkValue = valuation.getTotalValue();
+                double taxRate = taxManager.getTaxRateForCity(chunk.getCityId());
+                double estimatedTax = chunkValue * taxRate;
+
+                grandTotalValue += chunkValue;
+                grandTotalTax += estimatedTax;
+
+                // Get hierarchy names
+                String cityName = StateCraftIntegration.getCityName(chunk.getCityId());
+                String stateName = StateCraftIntegration.getStateName(StateCraftIntegration.getStateIdForCity(chunk.getCityId()));
+                String nationName = StateCraftIntegration.getNationName(StateCraftIntegration.getNationIdForCity(chunk.getCityId()));
+
+                if (cityName == null || cityName.isEmpty()) cityName = "Unknown City";
+                if (stateName == null || stateName.isEmpty()) stateName = "Unknown State";
+                if (nationName == null || nationName.isEmpty()) nationName = "Unknown Nation";
+
+                // Build hierarchy
+                NationTaxData nation = nationData.computeIfAbsent(nationName, k -> new NationTaxData());
+                StateTaxData state = nation.states.computeIfAbsent(stateName, k -> new StateTaxData());
+                CityTaxData city = state.cities.computeIfAbsent(cityName, k -> new CityTaxData(taxRate));
+
+                city.chunks.add(new DetailedChunkEntry(
+                    chunk.getChunkX(), chunk.getChunkZ(), chunk.getDimension(),
+                    valuation.getBaseValue(),
+                    valuation.getLocationMultiplier(),
+                    valuation.getBiomeMultiplier(),
+                    valuation.getDemandMultiplier(),
+                    valuation.getGovernmentMultiplier(),
+                    valuation.getImprovementMultiplier(),
+                    valuation.getImprovementScore(),
+                    chunkValue, estimatedTax
+                ));
+                city.totalValue += chunkValue;
+                city.totalTax += estimatedTax;
+                state.totalValue += chunkValue;
+                state.totalTax += estimatedTax;
+                nation.totalValue += chunkValue;
+                nation.totalTax += estimatedTax;
+            }
+
+            if (totalChunks == 0) {
+                context.getSource().sendSuccess(() -> Component.literal(
+                    "§7You don't own any taxable property."), false);
+                return 1;
+            }
+
+            // Display summary header
+            final int finalTotalChunks = totalChunks;
+            final double finalGrandTotalValue = grandTotalValue;
+            final double finalGrandTotalTax = grandTotalTax;
+            double balance = ecoManager.getBalance(playerId);
+
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§7Owner: §f" + player.getName().getString()), false);
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§7Total Properties: §f" + finalTotalChunks + " chunks"), false);
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§7Total Assessed Value: §e" + ecoManager.formatCurrency(finalGrandTotalValue)), false);
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§7Est. Tax per Period: §c" + ecoManager.formatCurrency(finalGrandTotalTax)), false);
+
+            // Tax period info
+            long periodTicks = taxManager.getTaxPeriodTicks();
+            long periodMinutes = (periodTicks / 20) / 60;
+            long periodHours = periodMinutes / 60;
+            String periodStr = periodHours > 0
+                ? periodHours + "h " + (periodMinutes % 60) + "m"
+                : periodMinutes + " minutes";
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§7Tax Period: §f" + periodStr), false);
+
+            long ticksUntilNext = taxManager.getTicksUntilNextCollection(context.getSource().getServer());
+            long nextMinutes = (ticksUntilNext / 20) / 60;
+            long nextSeconds = (ticksUntilNext / 20) % 60;
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§7Next Collection: §f" + nextMinutes + "m " + nextSeconds + "s"), false);
+
+            // Affordability analysis
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§6§l--- Financial Analysis ---"), false);
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§7Current Balance: §f" + ecoManager.formatCurrency(balance)), false);
+
+            int periodsAffordable = grandTotalTax > 0 ? (int) Math.floor(balance / grandTotalTax) : Integer.MAX_VALUE;
+            if (periodsAffordable <= 0) {
+                context.getSource().sendSuccess(() -> Component.literal(
+                    "§c§l⚠ CRITICAL: Cannot afford next tax payment!"), false);
+                double deficit = grandTotalTax - balance;
+                context.getSource().sendSuccess(() -> Component.literal(
+                    "§c  Deficit: " + ecoManager.formatCurrency(deficit)), false);
+            } else if (periodsAffordable <= 3) {
+                final int fp = periodsAffordable;
+                context.getSource().sendSuccess(() -> Component.literal(
+                    "§e⚠ Warning: Funds cover only ~" + fp + " tax period(s)"), false);
+            } else {
+                final int fp = periodsAffordable;
+                context.getSource().sendSuccess(() -> Component.literal(
+                    "§a✓ Funds cover ~" + fp + " tax periods"), false);
+            }
+
+            // Detailed breakdown by nation/state/city
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§6§l--- Breakdown by Jurisdiction ---"), false);
+
+            for (Map.Entry<String, NationTaxData> nationEntry : nationData.entrySet()) {
+                String nationName = nationEntry.getKey();
+                NationTaxData nation = nationEntry.getValue();
+
+                context.getSource().sendSuccess(() -> Component.literal(
+                    "§d§l" + nationName + " §7(" +
+                    ecoManager.formatCurrency(nation.totalValue) + " value, " +
+                    ecoManager.formatCurrency(nation.totalTax) + " tax)"), false);
+
+                for (Map.Entry<String, StateTaxData> stateEntry : nation.states.entrySet()) {
+                    String stateName = stateEntry.getKey();
+                    StateTaxData state = stateEntry.getValue();
+
+                    context.getSource().sendSuccess(() -> Component.literal(
+                        "  §b" + stateName + " §7(" +
+                        ecoManager.formatCurrency(state.totalValue) + ", " +
+                        ecoManager.formatCurrency(state.totalTax) + " tax)"), false);
+
+                    for (Map.Entry<String, CityTaxData> cityEntry : state.cities.entrySet()) {
+                        String cityName = cityEntry.getKey();
+                        CityTaxData city = cityEntry.getValue();
+
+                        context.getSource().sendSuccess(() -> Component.literal(
+                            "    §a" + cityName + " §7[" + city.chunks.size() + " chunks, " +
+                            String.format("%.1f%%", city.taxRate * 100) + " rate]"), false);
+                        context.getSource().sendSuccess(() -> Component.literal(
+                            "    §7  Value: §f" + ecoManager.formatCurrency(city.totalValue) +
+                            " §7| Tax: §c" + ecoManager.formatCurrency(city.totalTax)), false);
+
+                        // Show individual chunks with valuation breakdown (up to 5)
+                        int shown = 0;
+                        for (DetailedChunkEntry chunk : city.chunks) {
+                            if (shown >= 5) {
+                                final int remaining = city.chunks.size() - 5;
+                                context.getSource().sendSuccess(() -> Component.literal(
+                                    "    §8    +" + remaining + " more chunks..."), false);
+                                break;
+                            }
+                            context.getSource().sendSuccess(() -> Component.literal(
+                                "    §8    (" + chunk.chunkX + ", " + chunk.chunkZ + ") §7" +
+                                abbreviateDimension(chunk.dimension)), false);
+                            context.getSource().sendSuccess(() -> Component.literal(
+                                "    §8      Base: §f" + ecoManager.formatCurrency(chunk.baseValue) +
+                                " §8× Loc:" + String.format("%.2f", chunk.locationMult) +
+                                " × Bio:" + String.format("%.2f", chunk.biomeMult) +
+                                " × Dem:" + String.format("%.2f", chunk.demandMult) +
+                                " × Gov:" + String.format("%.2f", chunk.govMult) +
+                                " × Imp:" + String.format("%.2f", chunk.improvementMult)), false);
+                            context.getSource().sendSuccess(() -> Component.literal(
+                                "    §8      = §e" + ecoManager.formatCurrency(chunk.totalValue) +
+                                " §8→ Tax: §c" + ecoManager.formatCurrency(chunk.estimatedTax)), false);
+                            shown++;
+                        }
+                    }
+                }
+            }
+
+            // Footer with tip
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§6§l═══════════════════════════════════"), false);
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§7Tip: Improve chunks to increase value. Keep funds available!"), false);
+
+            return 1;
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.error("Error generating tax report", e);
+            context.getSource().sendFailure(Component.literal("§cError generating tax report: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    /** Helper to abbreviate dimension names for display */
+    private static String abbreviateDimension(String dimension) {
+        if (dimension.contains("overworld")) return "OW";
+        if (dimension.contains("the_nether")) return "Nether";
+        if (dimension.contains("the_end")) return "End";
+        return dimension.substring(dimension.lastIndexOf(':') + 1);
+    }
+
+    /** Helper classes for tax report data aggregation */
+    private static class NationTaxData {
+        Map<String, StateTaxData> states = new LinkedHashMap<>();
+        double totalValue = 0;
+        double totalTax = 0;
+    }
+
+    private static class StateTaxData {
+        Map<String, CityTaxData> cities = new LinkedHashMap<>();
+        double totalValue = 0;
+        double totalTax = 0;
+    }
+
+    private static class CityTaxData {
+        double taxRate;
+        List<DetailedChunkEntry> chunks = new ArrayList<>();
+        double totalValue = 0;
+        double totalTax = 0;
+
+        CityTaxData(double taxRate) {
+            this.taxRate = taxRate;
+        }
+    }
+
+    private record DetailedChunkEntry(
+        int chunkX, int chunkZ, String dimension,
+        double baseValue, double locationMult, double biomeMult,
+        double demandMult, double govMult, double improvementMult,
+        int improvementScore, double totalValue, double estimatedTax
+    ) {}
 
     private static int forceCollectTax(CommandContext<CommandSourceStack> context) {
         TaxationManager taxManager = TaxationManager.getInstance();

@@ -75,7 +75,8 @@ public class ClientPacketHandler {
                         packet.isMember(),
                         packet.getStateNames(),
                         packet.getAllyNames(),
-                        packet.getEnemyNames()
+                        packet.getEnemyNames(),
+                        packet.getFlagUrl()
                     );
                 }
             }
@@ -232,7 +233,17 @@ public class ClientPacketHandler {
 
             for (Map.Entry<Long, SyncChunkBordersPacket.ChunkBorderInfo> entry : packet.getChunks().entrySet()) {
                 SyncChunkBordersPacket.ChunkBorderInfo info = entry.getValue();
-                cacheData.put(entry.getKey(), new ChunkBorderCache.ChunkClaimInfo(
+                long key = entry.getKey();
+
+                // Extract chunk coordinates from the key
+                int chunkX = (int) (key & 0xFFFFFFFFL);
+                int chunkZ = (int) ((key >> 32) & 0xFFFFFFFFL);
+                // Handle sign extension for negative coords
+                if (chunkX > Integer.MAX_VALUE / 2) chunkX -= Integer.MAX_VALUE;
+                if (chunkZ > Integer.MAX_VALUE / 2) chunkZ -= Integer.MAX_VALUE;
+
+                cacheData.put(key, new ChunkBorderCache.ChunkClaimInfo(
+                    chunkX, chunkZ,
                     true, // claimed
                     info.own,
                     info.ally,
@@ -317,6 +328,7 @@ public class ClientPacketHandler {
                     packet.isGovernor(),
                     packet.canManage(),
                     packet.getCityNames(),
+                    packet.getFlagUrl(),
                     packet.isNationLeader()
                 );
             }
@@ -352,6 +364,7 @@ public class ClientPacketHandler {
                     packet.isMayor(),
                     packet.canManage(),
                     packet.getResidentNames(),
+                    packet.getFlagUrl(),
                     packet.canAppoint()
                 );
             }

@@ -224,6 +224,19 @@ public class NetworkHandler {
             .consumerMainThread(NetworkHandler::handleSyncItemValuesClient)
             .add();
 
+        // Tax report packets
+        CHANNEL.messageBuilder(RequestTaxReportPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestTaxReportPacket::toBytes)
+            .decoder(RequestTaxReportPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestTaxReport)
+            .add();
+
+        CHANNEL.messageBuilder(SyncTaxReportPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncTaxReportPacket::toBytes)
+            .decoder(SyncTaxReportPacket::new)
+            .consumerMainThread(NetworkHandler::handleSyncTaxReportClient)
+            .add();
+
         StateCraftEconomy.LOGGER.info("StateCraft Economy network packets registered");
     }
 
@@ -290,6 +303,11 @@ public class NetworkHandler {
 
     private static void handleSyncItemValuesClient(SyncItemValuesPacket packet, Supplier<NetworkEvent.Context> ctx) {
         DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientPacketHandler.handleSyncItemValues(packet, ctx));
+        ctx.get().setPacketHandled(true);
+    }
+
+    private static void handleSyncTaxReportClient(SyncTaxReportPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientPacketHandler.handleSyncTaxReport(packet, ctx));
         ctx.get().setPacketHandled(true);
     }
 

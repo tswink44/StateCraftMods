@@ -1,6 +1,7 @@
 package com.statecraft.core;
 
 import com.statecraft.config.StateCraftConfig;
+import com.statecraft.util.NBTUtils;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -514,17 +515,17 @@ public class Nation {
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putUUID("id", id);
-        tag.putString("name", name);
+        NBTUtils.putSanitizedString(tag, "name", name);
         tag.putUUID("leaderId", leaderId);
         tag.putInt("maxStates", maxStates);
         tag.putInt("maxChunksPerCity", maxChunksPerCity);
         tag.putInt("maxChunksPerPlayer", maxChunksPerPlayer);
         tag.putInt("defaultMaxCitiesPerState", defaultMaxCitiesPerState);
-        tag.putString("description", description);
-        tag.putString("tag", this.tag);
+        NBTUtils.putSanitizedString(tag, "description", description);
+        NBTUtils.putStringSafe(tag, "tag", this.tag);
         tag.putBoolean("open", open);
         tag.putBoolean("openBorders", openBorders);
-        tag.putString("flagUrl", flagUrl);
+        NBTUtils.putStringSafe(tag, "flagUrl", flagUrl);
         tag.putDouble("statePassThroughRate", statePassThroughRate);
         tag.putDouble("baseChunkValue", baseChunkValue);
         tag.putDouble("chunkClaimFee", chunkClaimFee);
