@@ -217,7 +217,7 @@ public class ProfileScreen extends StateCraftScreen {
     }
 
     private void openCompanyScreen() {
-        this.minecraft.setScreen(new CompanyScreen());
+        this.minecraft.setScreen(new CompanyListScreen());
     }
 
     private void openStateScreen() {

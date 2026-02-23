@@ -585,6 +585,12 @@ public class NetworkHandler {
             .add();
 
         // Company packets (Client -> Server)
+        CHANNEL.messageBuilder(RequestCompanyListPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestCompanyListPacket::encode)
+            .decoder(RequestCompanyListPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestCompanyList)
+            .add();
+
         CHANNEL.messageBuilder(RequestCompanyDataPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
             .encoder(RequestCompanyDataPacket::encode)
             .decoder(RequestCompanyDataPacket::new)
@@ -608,6 +614,12 @@ public class NetworkHandler {
             .encoder(SyncCompanyDataPacket::encode)
             .decoder(SyncCompanyDataPacket::new)
             .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncCompanyData(pkt, ctx), ctx))
+            .add();
+
+        CHANNEL.messageBuilder(SyncCompanyListPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncCompanyListPacket::encode)
+            .decoder(SyncCompanyListPacket::new)
+            .consumerMainThread((pkt, ctx) -> handleClientSide(() -> ClientPacketHandler.handleSyncCompanyList(pkt, ctx), ctx))
             .add();
 
         // Shareholder voting packets

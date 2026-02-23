@@ -674,6 +674,16 @@ public class ClientPacketHandler {
         ctx.get().setPacketHandled(true);
     }
 
+    public static void handleSyncCompanyList(SyncCompanyListPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof com.statecraft.client.gui.CompanyListScreen screen) {
+                screen.updateCompanyList(packet.getCompanies());
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
     public static void handleSyncShareholderVotes(SyncShareholderVotesPacket packet, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
             Minecraft mc = Minecraft.getInstance();

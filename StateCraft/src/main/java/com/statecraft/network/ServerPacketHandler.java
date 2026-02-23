@@ -5330,11 +5330,42 @@ public class ServerPacketHandler {
 
     // ==================== Company Handlers ====================
 
+    public static void handleRequestCompanyList(RequestCompanyListPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            CompanyManager companyManager = CompanyManager.getInstance();
+            List<Company> playerCompanies = companyManager.getPlayerCompanies(player.getUUID());
+
+            List<SyncCompanyListPacket.CompanyEntry> entries = new ArrayList<>();
+            for (Company company : playerCompanies) {
+                String founderName = resolvePlayerName(player.server, company.getFounderId());
+                int playerShares = company.getShareCount(player.getUUID());
+                double pct = company.getSharePercentage(player.getUUID());
+                entries.add(new SyncCompanyListPacket.CompanyEntry(
+                    company.getId().toString(),
+                    company.getName(),
+                    company.getCompanyType().name(),
+                    founderName,
+                    playerShares,
+                    company.getTotalShares(),
+                    pct,
+                    company.isFounder(player.getUUID()),
+                    company.isOfficer(player.getUUID())
+                ));
+            }
+
+            NetworkHandler.sendToPlayer(new SyncCompanyListPacket(entries), player);
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
     public static void handleRequestCompanyData(RequestCompanyDataPacket packet, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
             ServerPlayer player = ctx.get().getSender();
             if (player == null) return;
-            sendCompanyData(player, "");
+            sendCompanyData(player, "", packet.getCompanyId());
         });
         ctx.get().setPacketHandled(true);
     }
@@ -5581,6 +5612,10 @@ public class ServerPacketHandler {
     }
 
     private static void sendCompanyData(ServerPlayer player, String resultMessage) {
+        sendCompanyData(player, resultMessage, "");
+    }
+
+    private static void sendCompanyData(ServerPlayer player, String resultMessage, String requestedCompanyId) {
         CompanyManager companyManager = CompanyManager.getInstance();
         List<Company> playerCompanies = companyManager.getPlayerCompanies(player.getUUID());
 
@@ -5592,8 +5627,21 @@ public class ServerPacketHandler {
             return;
         }
 
-        // Send data for the first company the player is associated with
-        Company company = playerCompanies.get(0);
+        // If a specific company was requested, find it; otherwise use the first one
+        Company company = null;
+        if (requestedCompanyId != null && !requestedCompanyId.isEmpty()) {
+            try {
+                UUID targetId = UUID.fromString(requestedCompanyId);
+                company = companyManager.getCompany(targetId);
+                // Ensure the player actually has access (shareholder or officer)
+                if (company != null && !company.isShareholder(player.getUUID()) && !company.isOfficer(player.getUUID())) {
+                    company = null;
+                }
+            } catch (IllegalArgumentException ignored) {}
+        }
+        if (company == null) {
+            company = playerCompanies.get(0);
+        }
 
         // Resolve founder name
         String founderName = resolvePlayerName(player.server, company.getFounderId());

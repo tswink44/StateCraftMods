@@ -880,10 +880,16 @@ public class ServerPacketHandler {
                 if (stateName == null || stateName.isEmpty()) stateName = "Unknown State";
                 if (nationName == null || nationName.isEmpty()) nationName = "Unknown Nation";
 
+                // Capture as effectively final for lambda use
+                final String finalNationName = nationName;
+                final String finalStateName = stateName;
+                final String finalCityName = cityName;
+                final double finalTaxRate = taxRate;
+
                 // Build hierarchy
-                NationTaxBuilder nation = nationBuilders.computeIfAbsent(nationName, k -> new NationTaxBuilder(nationName));
-                StateTaxBuilder state = nation.states.computeIfAbsent(stateName, k -> new StateTaxBuilder(stateName));
-                CityTaxBuilder city = state.cities.computeIfAbsent(cityName, k -> new CityTaxBuilder(cityName, taxRate));
+                NationTaxBuilder nation = nationBuilders.computeIfAbsent(finalNationName, k -> new NationTaxBuilder(finalNationName));
+                StateTaxBuilder state = nation.states.computeIfAbsent(finalStateName, k -> new StateTaxBuilder(finalStateName));
+                CityTaxBuilder city = state.cities.computeIfAbsent(finalCityName, k -> new CityTaxBuilder(finalCityName, finalTaxRate));
 
                 city.chunks.add(new SyncTaxReportPacket.ChunkData(
                     chunk.getChunkX(), chunk.getChunkZ(), chunk.getDimension(),

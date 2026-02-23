@@ -78,10 +78,21 @@ public class CompanyScreen extends StateCraftScreen {
     // Scroll
     private int scrollOffset = 0;
 
+    // Target company ID — if set, requests data for this specific company
+    private final String targetCompanyId;
+
     public CompanyScreen() {
+        this(null);
+    }
+
+    /**
+     * Open the company screen for a specific company by ID.
+     */
+    public CompanyScreen(String companyId) {
         super(Component.literal("My Company"));
         this.guiWidth = 300;
         this.guiHeight = 230;
+        this.targetCompanyId = companyId;
     }
 
     @Override
@@ -92,7 +103,11 @@ public class CompanyScreen extends StateCraftScreen {
     @Override
     protected void init() {
         super.init();
-        NetworkHandler.sendToServer(new RequestCompanyDataPacket());
+        if (targetCompanyId != null && !targetCompanyId.isEmpty()) {
+            NetworkHandler.sendToServer(new RequestCompanyDataPacket(targetCompanyId));
+        } else {
+            NetworkHandler.sendToServer(new RequestCompanyDataPacket());
+        }
         buildUI();
     }
 
@@ -861,7 +876,7 @@ public class CompanyScreen extends StateCraftScreen {
     }
 
     private void goBack() {
-        this.minecraft.setScreen(new MainMenuScreen());
+        this.minecraft.setScreen(new CompanyListScreen());
     }
 
     private void openCompanyMail() {

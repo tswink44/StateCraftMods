@@ -249,7 +249,7 @@ public class GovMailboxScreen extends StateCraftScreen {
                     this.minecraft.setScreen(new MainMenuScreen());
                 }
             }
-            case COMPANY -> this.minecraft.setScreen(new CompanyScreen());
+            case COMPANY -> this.minecraft.setScreen(new CompanyListScreen());
         }
     }
 

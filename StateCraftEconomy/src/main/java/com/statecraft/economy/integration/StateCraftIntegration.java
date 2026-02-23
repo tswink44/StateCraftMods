@@ -1773,9 +1773,11 @@ public class StateCraftIntegration {
                                 Object dimension = getDimension.invoke(chunk);
                                 double salePrice = (Double) getSalePrice.invoke(chunk);
 
-                                var chunkPosClass = Class.forName("net.minecraft.world.level.ChunkPos");
-                                int x = (int) chunkPosClass.getField("x").get(chunkPos);
-                                int z = (int) chunkPosClass.getField("z").get(chunkPos);
+                                // Cast directly to ChunkPos — avoids reflection field name
+                                // obfuscation issues in production
+                                net.minecraft.world.level.ChunkPos cp = (net.minecraft.world.level.ChunkPos) chunkPos;
+                                int x = cp.x;
+                                int z = cp.z;
 
                                 net.minecraft.resources.ResourceKey<?> dimKey = (net.minecraft.resources.ResourceKey<?>) dimension;
                                 String dimStr = dimKey.location().toString();
@@ -1794,9 +1796,9 @@ public class StateCraftIntegration {
                                     Object dimension = getDimension.invoke(chunk);
                                     double salePrice = (Double) getSalePrice.invoke(chunk);
 
-                                    var chunkPosClass = Class.forName("net.minecraft.world.level.ChunkPos");
-                                    int x = (int) chunkPosClass.getField("x").get(chunkPos);
-                                    int z = (int) chunkPosClass.getField("z").get(chunkPos);
+                                    net.minecraft.world.level.ChunkPos cp2 = (net.minecraft.world.level.ChunkPos) chunkPos;
+                                    int x = cp2.x;
+                                    int z = cp2.z;
 
                                     net.minecraft.resources.ResourceKey<?> dimKey = (net.minecraft.resources.ResourceKey<?>) dimension;
                                     String dimStr = dimKey.location().toString();
@@ -2673,9 +2675,9 @@ public class StateCraftIntegration {
             Object chunkPos = getChunkPos.invoke(firstChunk);
             Object dimension = getDimension.invoke(firstChunk);
 
-            var chunkPosClass = Class.forName("net.minecraft.world.level.ChunkPos");
-            int chunkX = (int) chunkPosClass.getField("x").get(chunkPos);
-            int chunkZ = (int) chunkPosClass.getField("z").get(chunkPos);
+            net.minecraft.world.level.ChunkPos cp = (net.minecraft.world.level.ChunkPos) chunkPos;
+            int chunkX = cp.x;
+            int chunkZ = cp.z;
 
             net.minecraft.resources.ResourceKey<?> dimKey = (net.minecraft.resources.ResourceKey<?>) dimension;
 
