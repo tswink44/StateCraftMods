@@ -151,7 +151,7 @@ public class ContractDetailScreen extends StateCraftScreen {
                 break;
 
             case "ACTIVE":
-                // For legislature/creator: cancel contract, approve pending milestones
+                // For legislature/creator: cancel contract, approve pending milestones, complete if final approval requested
                 if (canManageContract) {
                     this.addRenderableWidget(createButton(
                         btnX, buttonY, 70, 20,
@@ -169,7 +169,28 @@ public class ContractDetailScreen extends StateCraftScreen {
                             Component.literal("§aApprove " + nextPendingMilestone + "%"),
                             btn -> approveMilestone(nextPendingMilestone)
                         ));
+                        btnX += 95;
                     }
+
+                    // Show Complete button if contractor has submitted for final approval
+                    if (contract.isFinalApprovalRequested()) {
+                        this.addRenderableWidget(createButton(
+                            btnX, buttonY, 80, 20,
+                            Component.literal("§aComplete"),
+                            btn -> completeContract()
+                        ));
+                    }
+                }
+
+                // For contractor: submit for final approval
+                if (isContractor && !contract.isFinalApprovalRequested()) {
+                    // Position after any government buttons
+                    int contractorBtnX = canManageContract ? guiLeft + guiWidth - 145 : btnX;
+                    this.addRenderableWidget(createButton(
+                        contractorBtnX, buttonY, 70, 20,
+                        Component.literal("§eSubmit"),
+                        btn -> requestFinalApproval()
+                    ));
                 }
                 break;
 
@@ -436,6 +457,13 @@ public class ContractDetailScreen extends StateCraftScreen {
             graphics.drawString(this.font, "§7Deadline: " + timeColor + formatTimeRemaining(contract.getTimeRemaining()) + " remaining", x, y, COLOR_TEXT);
         } else if (contract.getTimeRemaining() <= 0 && contract.getStatus().equals("ACTIVE")) {
             graphics.drawString(this.font, "§c⚠ OVERDUE", x, y, 0xFFFF0000);
+        }
+
+        // Final approval status
+        if (contract.isFinalApprovalRequested()) {
+            y += 14;
+            graphics.drawString(this.font, "§e⏳ Submitted for Final Approval", x, y, 0xFFFFAA00);
+            graphics.drawString(this.font, "§7Awaiting legislature review", x + 10, y + 12, 0xFFAAAAAA);
         }
     }
 
@@ -740,6 +768,24 @@ public class ContractDetailScreen extends StateCraftScreen {
             nationName, contract.getContractId(),
             ContractActionPacket.ActionType.COMPLETE_MILESTONE,
             "", milestonePercent, 0
+        ));
+        // Refresh the screen
+        this.minecraft.setScreen(new ContractsMainScreen(nationName));
+    }
+
+    private void requestFinalApproval() {
+        NetworkHandler.sendToServer(new ContractActionPacket(
+            nationName, contract.getContractId(),
+            ContractActionPacket.ActionType.REQUEST_FINAL_APPROVAL
+        ));
+        // Refresh the screen
+        this.minecraft.setScreen(new ContractsMainScreen(nationName));
+    }
+
+    private void completeContract() {
+        NetworkHandler.sendToServer(new ContractActionPacket(
+            nationName, contract.getContractId(),
+            ContractActionPacket.ActionType.COMPLETE_CONTRACT
         ));
         // Refresh the screen
         this.minecraft.setScreen(new ContractsMainScreen(nationName));

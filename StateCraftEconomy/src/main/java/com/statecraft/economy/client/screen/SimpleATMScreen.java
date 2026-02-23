@@ -247,18 +247,43 @@ public class SimpleATMScreen extends Screen {
         int y = guiTop + 40;
         int buttonWidth = 200;
 
+        // Collect bank IDs where the player already has a deposit account
+        java.util.Set<String> playerBankIds = new java.util.HashSet<>();
+        for (var account : availableAccounts) {
+            if ("BANK_DEPOSIT".equals(account.type())) {
+                playerBankIds.add(account.id());
+            }
+        }
+
         for (Bank bank : EconomyManager.getInstance().getBankRegistry().getAllBanks()) {
             boolean isSelected = bank.getId().equals(selectedBankId);
+            boolean hasAccount = playerBankIds.contains(bank.getId().toString());
             String prefix = isSelected ? "§a✓ " : "  ";
 
-            addMenuButton(Button.builder(Component.literal(prefix + bank.getDisplayName()),
-                btn -> {
-                    selectedBankId = bank.getId();
-                    requestBalance();
-                    switchMode(ScreenMode.MAIN_MENU);
-                })
-                .bounds(centerX - buttonWidth/2, y, buttonWidth, 20)
-                .build());
+            if (hasAccount || bank.getId().equals(java.util.UUID.fromString("00000000-0000-0000-0000-000000000001"))) {
+                // Player has an account at this bank (or it's the Central Bank) — just select it
+                addMenuButton(Button.builder(Component.literal(prefix + bank.getDisplayName()),
+                    btn -> {
+                        selectedBankId = bank.getId();
+                        requestBalance();
+                        switchMode(ScreenMode.MAIN_MENU);
+                    })
+                    .bounds(centerX - buttonWidth/2, y, buttonWidth, 20)
+                    .build());
+            } else {
+                // Player doesn't have an account — show "Open Account" button
+                addMenuButton(Button.builder(Component.literal("  §7" + bank.getDisplayName() + " §e[Open Account]"),
+                    btn -> {
+                        // Send OPEN_BANK_ACCOUNT action to server
+                        NetworkHandler.sendToServer(new ATMTransactionPacket(
+                            ATMTransactionPacket.Action.OPEN_BANK_ACCOUNT,
+                            0, bank.getId().toString(), "", ""));
+                        // Refresh accounts after a short delay
+                        requestAccounts();
+                    })
+                    .bounds(centerX - buttonWidth/2, y, buttonWidth, 20)
+                    .build());
+            }
             y += 25;
         }
 
@@ -510,6 +535,8 @@ public class SimpleATMScreen extends Screen {
                 case "NATION" -> "§6♛";
                 case "STATE" -> "§e★";
                 case "CITY" -> "§a●";
+                case "BANK_DEPOSIT" -> "§9■";
+                case "COMPANY" -> "§d◆";
                 default -> "§7○";
             };
 
@@ -1225,8 +1252,8 @@ public class SimpleATMScreen extends Screen {
         if (!availableAccounts.isEmpty() && selectedAccountIndex < availableAccounts.size()) {
             currentBalance = availableAccounts.get(selectedAccountIndex).balance();
         }
-        // Rebuild UI if in main menu to update button text
-        if (currentMode == ScreenMode.MAIN_MENU) {
+        // Rebuild UI if in main menu or bank select to update button text
+        if (currentMode == ScreenMode.MAIN_MENU || currentMode == ScreenMode.BANK_SELECT) {
             buildUI();
         }
     }

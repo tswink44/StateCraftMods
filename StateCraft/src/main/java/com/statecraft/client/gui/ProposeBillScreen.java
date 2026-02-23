@@ -32,6 +32,7 @@ public class ProposeBillScreen extends StateCraftScreen {
     private boolean showCategoryDropdown = false;
     private boolean showPolicyDropdown = false;
     private int dropdownScrollOffset = 0;
+    private int categoryScrollOffset = 0;
     private static final int DROPDOWN_MAX_VISIBLE = 6;
 
     // Boolean toggle state (for BOOLEAN policies)
@@ -287,16 +288,17 @@ public class ProposeBillScreen extends StateCraftScreen {
     }
 
     private void renderCategoryDropdown(GuiGraphics graphics, int x, int y, int width, int mouseX, int mouseY) {
-        PolicyType.Category[] categories = PolicyType.Category.values();
-        int height = Math.min(categories.length, DROPDOWN_MAX_VISIBLE) * 12 + 4;
+        List<PolicyType.Category> categories = getProposableCategories();
+        int visibleCount = Math.min(categories.size() - categoryScrollOffset, DROPDOWN_MAX_VISIBLE);
+        int height = visibleCount * 12 + 4;
 
         // Background
         graphics.fill(x - 1, y - 1, x + width + 1, y + height + 1, 0xFF1A1A2A);
         graphics.fill(x, y, x + width, y + height, 0xFF2A2A4A);
 
         int itemY = y + 2;
-        for (int i = 0; i < Math.min(categories.length, DROPDOWN_MAX_VISIBLE); i++) {
-            PolicyType.Category cat = categories[i];
+        for (int i = categoryScrollOffset; i < categoryScrollOffset + visibleCount; i++) {
+            PolicyType.Category cat = categories.get(i);
             boolean hovered = mouseX >= x && mouseX < x + width && mouseY >= itemY && mouseY < itemY + 12;
 
             if (hovered) {
@@ -306,6 +308,14 @@ public class ProposeBillScreen extends StateCraftScreen {
             String color = cat == selectedCategory ? "§e" : "§f";
             graphics.drawString(this.font, color + cat.getDisplayName(), x + 3, itemY + 2, COLOR_TEXT);
             itemY += 12;
+        }
+
+        // Scroll indicators
+        if (categoryScrollOffset > 0) {
+            graphics.drawString(this.font, "§7▲", x + width - 10, y + 2, 0xFF888888);
+        }
+        if (categoryScrollOffset + DROPDOWN_MAX_VISIBLE < categories.size()) {
+            graphics.drawString(this.font, "§7▼", x + width - 10, y + height - 12, 0xFF888888);
         }
     }
 
@@ -404,6 +414,20 @@ public class ProposeBillScreen extends StateCraftScreen {
         return result;
     }
 
+    /**
+     * Get categories that players can propose bills for.
+     * Filters out EMERGENCY (those are auto-created, not player-proposable).
+     */
+    private List<PolicyType.Category> getProposableCategories() {
+        List<PolicyType.Category> result = new ArrayList<>();
+        for (PolicyType.Category cat : PolicyType.Category.values()) {
+            if (cat != PolicyType.Category.EMERGENCY) {
+                result.add(cat);
+            }
+        }
+        return result;
+    }
+
     private String getValueHint(PolicyType policy) {
         return switch (policy.getValueType()) {
             case BOOLEAN -> "true/false";
@@ -492,6 +516,7 @@ public class ProposeBillScreen extends StateCraftScreen {
                 showCategoryDropdown = !showCategoryDropdown;
                 showPolicyDropdown = false;
                 dropdownScrollOffset = 0;
+                categoryScrollOffset = 0;
                 return true;
             }
 
@@ -507,11 +532,12 @@ public class ProposeBillScreen extends StateCraftScreen {
             // Category dropdown item click
             if (showCategoryDropdown) {
                 int dropY = y + 14 + 2;
-                PolicyType.Category[] categories = PolicyType.Category.values();
-                for (int i = 0; i < Math.min(categories.length, DROPDOWN_MAX_VISIBLE); i++) {
+                List<PolicyType.Category> categories = getProposableCategories();
+                int visibleCount = Math.min(categories.size() - categoryScrollOffset, DROPDOWN_MAX_VISIBLE);
+                for (int i = categoryScrollOffset; i < categoryScrollOffset + visibleCount; i++) {
                     if (mouseX >= guiLeft + 12 && mouseX < guiLeft + 12 + dropdownWidth &&
                         mouseY >= dropY && mouseY < dropY + 12) {
-                        selectedCategory = categories[i];
+                        selectedCategory = categories.get(i);
                         selectedPolicy = null;
                         showCategoryDropdown = false;
                         dropdownScrollOffset = 0;
@@ -574,6 +600,18 @@ public class ProposeBillScreen extends StateCraftScreen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        // Scroll category dropdown
+        if (showCategoryDropdown) {
+            List<PolicyType.Category> categories = getProposableCategories();
+            int maxScroll = Math.max(0, categories.size() - DROPDOWN_MAX_VISIBLE);
+            if (delta > 0) {
+                categoryScrollOffset = Math.max(0, categoryScrollOffset - 1);
+            } else {
+                categoryScrollOffset = Math.min(maxScroll, categoryScrollOffset + 1);
+            }
+            return true;
+        }
+
         // Scroll policy dropdown
         if (showPolicyDropdown && selectedCategory != null) {
             List<PolicyType> policies = getPoliciesForCategory(selectedCategory);

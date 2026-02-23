@@ -48,13 +48,7 @@ public class TradingHubMenu extends AbstractContainerMenu {
         for (int row = 0; row < 3; ++row) {
             for (int col = 0; col < 9; ++col) {
                 int slotIndex = col + row * 9;
-                this.addSlot(new SlotItemHandler(itemHandler, slotIndex, 8 + col * 18, 18 + row * 18) {
-                    @Override
-                    public boolean mayPlace(ItemStack stack) {
-                        // Only accept items that can be sold
-                        return ItemValueConfig.canSell(stack);
-                    }
-                });
+                this.addSlot(new SlotItemHandler(itemHandler, slotIndex, 8 + col * 18, 18 + row * 18));
             }
         }
 
@@ -73,18 +67,18 @@ public class TradingHubMenu extends AbstractContainerMenu {
     }
 
     private void addPlayerInventory(Inventory playerInventory) {
-        // Player inventory slots - adjusted to align with texture
+        // Player inventory slots - aligned with player inv texture at topPos+85
         for (int row = 0; row < 3; ++row) {
             for (int col = 0; col < 9; ++col) {
-                this.addSlot(new Slot(playerInventory, col + row * 9 + 9, 8 + col * 18, 103 + row * 18));
+                this.addSlot(new Slot(playerInventory, col + row * 9 + 9, 8 + col * 18, 100 + row * 18));
             }
         }
     }
 
     private void addPlayerHotbar(Inventory playerInventory) {
-        // Hotbar slots
+        // Hotbar slots - aligned with player inv texture
         for (int col = 0; col < 9; ++col) {
-            this.addSlot(new Slot(playerInventory, col, 8 + col * 18, 161));
+            this.addSlot(new Slot(playerInventory, col, 8 + col * 18, 158));
         }
     }
 
@@ -103,33 +97,15 @@ public class TradingHubMenu extends AbstractContainerMenu {
                     return ItemStack.EMPTY;
                 }
             } else if (index >= PLAYER_INV_START && index < PLAYER_INV_END) {
-                // From player inventory
-                // Try trading hub first if item can be sold
-                if (ItemValueConfig.canSell(slotStack)) {
-                    if (!this.moveItemStackTo(slotStack, TRADING_HUB_START, TRADING_HUB_END, false)) {
-                        // Then try hotbar
-                        if (!this.moveItemStackTo(slotStack, PLAYER_HOTBAR_START, PLAYER_HOTBAR_END, false)) {
-                            return ItemStack.EMPTY;
-                        }
-                    }
-                } else {
-                    // Item can't be sold, move to hotbar
+                // From player inventory - try trading hub first, then hotbar
+                if (!this.moveItemStackTo(slotStack, TRADING_HUB_START, TRADING_HUB_END, false)) {
                     if (!this.moveItemStackTo(slotStack, PLAYER_HOTBAR_START, PLAYER_HOTBAR_END, false)) {
                         return ItemStack.EMPTY;
                     }
                 }
             } else if (index >= PLAYER_HOTBAR_START && index < PLAYER_HOTBAR_END) {
-                // From hotbar
-                // Try trading hub first if item can be sold
-                if (ItemValueConfig.canSell(slotStack)) {
-                    if (!this.moveItemStackTo(slotStack, TRADING_HUB_START, TRADING_HUB_END, false)) {
-                        // Then try inventory
-                        if (!this.moveItemStackTo(slotStack, PLAYER_INV_START, PLAYER_INV_END, false)) {
-                            return ItemStack.EMPTY;
-                        }
-                    }
-                } else {
-                    // Item can't be sold, move to inventory
+                // From hotbar - try trading hub first, then inventory
+                if (!this.moveItemStackTo(slotStack, TRADING_HUB_START, TRADING_HUB_END, false)) {
                     if (!this.moveItemStackTo(slotStack, PLAYER_INV_START, PLAYER_INV_END, false)) {
                         return ItemStack.EMPTY;
                     }

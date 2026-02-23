@@ -33,6 +33,13 @@ public class CompanyScreen extends StateCraftScreen {
     private boolean dividendsEnabled = false;
     private double dividendRate = 0.0;
     private String companyType = "GENERAL";
+    private double depositInterestRate = 0;
+    private double loanInterestRate = 0;
+    private double withdrawalFee = 0;
+    private double transferFee = 0;
+    private double reserveRatio = 0;
+    private int activeLoanCount = 0;
+    private double totalDeposits = 0;
     private List<SyncCompanyDataPacket.ShareholderEntry> shareholders = new ArrayList<>();
     private List<String> officerNames = new ArrayList<>();
     private String resultMessage = "";
@@ -256,6 +263,34 @@ public class CompanyScreen extends StateCraftScreen {
             Component.literal("§bTransfer"),
             btn -> { pendingAction = "TRANSFER"; actionInput.setHint(Component.literal("Player:Amount")); }));
 
+        // Bank-specific settings (for officers/founders of bank companies)
+        if (companyType.equals("BANK") && (isFounder || isOfficer)) {
+            int bankBtnY = guiTop + 42 + 18 * 3; // Below existing buttons
+            int bankBtnW = 80;
+
+            this.addRenderableWidget(createButton(startX, bankBtnY, bankBtnW, 14,
+                Component.literal("§9Dep. Rate"),
+                btn -> { pendingAction = "SET_DEPOSIT_INTEREST"; actionInput.setHint(Component.literal("Rate (e.g. 0.02 = 2%)")); }));
+
+            this.addRenderableWidget(createButton(startX + bankBtnW + 4, bankBtnY, bankBtnW, 14,
+                Component.literal("§9Loan Rate"),
+                btn -> { pendingAction = "SET_LOAN_INTEREST"; actionInput.setHint(Component.literal("Rate (e.g. 0.05 = 5%)")); }));
+
+            this.addRenderableWidget(createButton(startX + (bankBtnW + 4) * 2, bankBtnY, bankBtnW, 14,
+                Component.literal("§aIssue Loan"),
+                btn -> { pendingAction = "ISSUE_LOAN"; actionInput.setHint(Component.literal("Player:Amount")); }));
+
+            bankBtnY += 18;
+
+            this.addRenderableWidget(createButton(startX, bankBtnY, bankBtnW, 14,
+                Component.literal("§9Wdraw Fee"),
+                btn -> { pendingAction = "SET_WITHDRAWAL_FEE"; actionInput.setHint(Component.literal("Fee (e.g. 0.01 = 1%)")); }));
+
+            this.addRenderableWidget(createButton(startX + bankBtnW + 4, bankBtnY, bankBtnW, 14,
+                Component.literal("§9Xfer Fee"),
+                btn -> { pendingAction = "SET_TRANSFER_FEE"; actionInput.setHint(Component.literal("Fee (e.g. 0.01 = 1%)")); }));
+        }
+
         // Submit button for pending actions
         this.addRenderableWidget(createButton(
             guiLeft + guiWidth - 65, y, 55, 14,
@@ -321,6 +356,40 @@ public class CompanyScreen extends StateCraftScreen {
                     } catch (NumberFormatException ignored) {}
                 }
             }
+            case "SET_DEPOSIT_INTEREST" -> {
+                try {
+                    double rate = Double.parseDouble(value);
+                    sendAction(CompanyActionPacket.Action.SET_DEPOSIT_INTEREST, "", 0, rate, "");
+                } catch (NumberFormatException ignored) {}
+            }
+            case "SET_LOAN_INTEREST" -> {
+                try {
+                    double rate = Double.parseDouble(value);
+                    sendAction(CompanyActionPacket.Action.SET_LOAN_INTEREST, "", 0, rate, "");
+                } catch (NumberFormatException ignored) {}
+            }
+            case "SET_WITHDRAWAL_FEE" -> {
+                try {
+                    double fee = Double.parseDouble(value);
+                    sendAction(CompanyActionPacket.Action.SET_WITHDRAWAL_FEE, "", 0, fee, "");
+                } catch (NumberFormatException ignored) {}
+            }
+            case "SET_TRANSFER_FEE" -> {
+                try {
+                    double fee = Double.parseDouble(value);
+                    sendAction(CompanyActionPacket.Action.SET_TRANSFER_FEE, "", 0, fee, "");
+                } catch (NumberFormatException ignored) {}
+            }
+            case "ISSUE_LOAN" -> {
+                // Format: "PlayerName:Amount"
+                String[] parts = value.split(":");
+                if (parts.length == 2) {
+                    try {
+                        double amount = Double.parseDouble(parts[1].trim());
+                        sendAction(CompanyActionPacket.Action.ISSUE_LOAN, parts[0].trim(), 0, amount, "");
+                    } catch (NumberFormatException ignored) {}
+                }
+            }
         }
         pendingAction = null;
         if (actionInput != null) actionInput.setValue("");
@@ -349,6 +418,13 @@ public class CompanyScreen extends StateCraftScreen {
         this.dividendsEnabled = packet.isDividendsEnabled();
         this.dividendRate = packet.getDividendRate();
         this.companyType = packet.getCompanyType();
+        this.depositInterestRate = packet.getDepositInterestRate();
+        this.loanInterestRate = packet.getLoanInterestRate();
+        this.withdrawalFee = packet.getWithdrawalFee();
+        this.transferFee = packet.getTransferFee();
+        this.reserveRatio = packet.getReserveRatio();
+        this.activeLoanCount = packet.getActiveLoanCount();
+        this.totalDeposits = packet.getTotalDeposits();
         this.shareholders = packet.getShareholders();
         this.officerNames = packet.getOfficerNames();
         this.dataLoaded = true;
@@ -451,6 +527,26 @@ public class CompanyScreen extends StateCraftScreen {
             ? "§aEnabled §7(" + String.format("%.1f%%", dividendRate * 100) + " per cycle)"
             : "§8Disabled";
         graphics.drawString(this.font, "§7Dividends: " + divStatus, startX + 4, y, 0xFFFFFFFF);
+        y += 14;
+
+        // Bank-specific info
+        if (companyType.equals("BANK")) {
+            renderDivider(graphics, startX, y, endX - startX);
+            y += 6;
+            graphics.drawString(this.font, "§9■ §6Bank Settings", startX + 4, y, 0xFFFFAA00);
+            y += 12;
+            graphics.drawString(this.font, "§7Deposit Interest: §f" + String.format("%.2f%%", depositInterestRate * 100), startX + 4, y, 0xFFFFFFFF);
+            y += 11;
+            graphics.drawString(this.font, "§7Loan Interest: §f" + String.format("%.2f%%", loanInterestRate * 100), startX + 4, y, 0xFFFFFFFF);
+            y += 11;
+            graphics.drawString(this.font, "§7Withdrawal Fee: §f" + String.format("%.2f%%", withdrawalFee * 100)
+                + "  §7Transfer Fee: §f" + String.format("%.2f%%", transferFee * 100), startX + 4, y, 0xFFFFFFFF);
+            y += 11;
+            graphics.drawString(this.font, "§7Min Reserve: §f" + String.format("%.0f%%", reserveRatio * 100)
+                + "  §7Active Loans: §f" + activeLoanCount, startX + 4, y, 0xFFFFFFFF);
+            y += 11;
+            graphics.drawString(this.font, "§7Total Deposits: §f$" + String.format("%,.0f", totalDeposits), startX + 4, y, 0xFFFFFFFF);
+        }
     }
 
     private void renderShareholdersTab(GuiGraphics graphics, int startX, int endX) {
@@ -512,6 +608,11 @@ public class CompanyScreen extends StateCraftScreen {
                 case "RENAME" -> "§eRenaming — enter new name:";
                 case "SET_RATE" -> "§eSetting dividend rate — enter value (e.g. 0.05):";
                 case "TRANSFER" -> "§eTransfer shares — enter Player:Amount:";
+                case "SET_DEPOSIT_INTEREST" -> "§9Set deposit interest rate (e.g. 0.02):";
+                case "SET_LOAN_INTEREST" -> "§9Set loan interest rate (e.g. 0.05):";
+                case "SET_WITHDRAWAL_FEE" -> "§9Set withdrawal fee (e.g. 0.01):";
+                case "SET_TRANSFER_FEE" -> "§9Set transfer fee (e.g. 0.01):";
+                case "ISSUE_LOAN" -> "§aIssue loan — enter Player:Amount:";
                 default -> "";
             };
             graphics.drawString(this.font, actionLabel, startX + 4, y, 0xFFFFAA00);

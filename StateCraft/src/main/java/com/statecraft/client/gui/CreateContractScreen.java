@@ -470,7 +470,7 @@ public class CreateContractScreen extends StateCraftScreen {
 
         // Error message
         if (!errorMessage.isEmpty()) {
-            graphics.drawCenteredString(this.font, "§c" + errorMessage, this.width / 2, guiTop + guiHeight - 50, COLOR_WARNING);
+            graphics.drawCenteredString(this.font, "§c" + errorMessage, this.width / 2, guiTop + guiHeight - 42, COLOR_WARNING);
         }
     }
 
@@ -508,14 +508,15 @@ public class CreateContractScreen extends StateCraftScreen {
         y += 30;
         graphics.drawString(this.font, "§7Payment:", x, y, 0xFFAAAAAA);
 
-        // Compensation type description on next line if not VALUATION_BASED
-        if (!compensationType.equals("VALUATION_BASED")) {
-            String compDesc = switch (compensationType) {
-                case "FIXED" -> "§8Full payment on completion";
-                case "MILESTONE" -> "§8Payments at 25%, 50%, 75%, 100%";
-                default -> "";
-            };
-            graphics.drawString(this.font, compDesc, x + 160, y, 0xFF888888);
+        // Compensation type description below the button
+        String compDesc = switch (compensationType) {
+            case "FIXED" -> "§8Full payment on completion";
+            case "MILESTONE" -> "§8Payments at 25%, 50%, 75%, 100%";
+            case "VALUATION_BASED" -> "§8Pay per improvement point";
+            default -> "";
+        };
+        if (!compDesc.isEmpty()) {
+            graphics.drawString(this.font, compDesc, x, y + 20, 0xFF888888);
         }
     }
 

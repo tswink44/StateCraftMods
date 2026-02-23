@@ -53,6 +53,9 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
 
         @Override
         public boolean isItemValid(int slot, @Nonnull ItemStack stack) {
+            // On client side, always accept - the server will validate.
+            // Client may not have the item values JSON in multiplayer.
+            if (level != null && level.isClientSide) return true;
             // Only accept items that have a sell value
             return ItemValueConfig.canSell(stack);
         }
@@ -218,10 +221,16 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
      */
     public double calculateTotalSellValue() {
         double total = 0;
+        boolean isClient = level != null && level.isClientSide;
         for (int i = 0; i < itemHandler.getSlots(); i++) {
             ItemStack stack = itemHandler.getStackInSlot(i);
-            if (!stack.isEmpty() && ItemValueConfig.canSell(stack)) {
-                total += ItemValueConfig.getStackValue(stack);
+            if (!stack.isEmpty()) {
+                // On client side, the item value registry may not be loaded (dedicated server).
+                // Still try to get the value — it will work for the host but may return 0 for remote clients.
+                if (isClient || ItemValueConfig.canSell(stack)) {
+                    double value = ItemValueConfig.getStackValue(stack);
+                    total += value;
+                }
             }
         }
 
@@ -236,10 +245,13 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
      */
     public double calculateTotalTaxAmount() {
         double grossValue = 0;
+        boolean isClient = level != null && level.isClientSide;
         for (int i = 0; i < itemHandler.getSlots(); i++) {
             ItemStack stack = itemHandler.getStackInSlot(i);
-            if (!stack.isEmpty() && ItemValueConfig.canSell(stack)) {
-                grossValue += ItemValueConfig.getStackValue(stack);
+            if (!stack.isEmpty()) {
+                if (isClient || ItemValueConfig.canSell(stack)) {
+                    grossValue += ItemValueConfig.getStackValue(stack);
+                }
             }
         }
 
@@ -255,10 +267,13 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
      */
     public int countSellableItems() {
         int count = 0;
+        boolean isClient = level != null && level.isClientSide;
         for (int i = 0; i < itemHandler.getSlots(); i++) {
             ItemStack stack = itemHandler.getStackInSlot(i);
-            if (!stack.isEmpty() && ItemValueConfig.canSell(stack)) {
-                count += stack.getCount();
+            if (!stack.isEmpty()) {
+                if (isClient || ItemValueConfig.canSell(stack)) {
+                    count += stack.getCount();
+                }
             }
         }
         return count;

@@ -22,7 +22,8 @@ public class ATMTransactionPacket {
         CHECK_BALANCE,
         DEPOSIT,
         WITHDRAW,
-        TRANSFER
+        TRANSFER,
+        OPEN_BANK_ACCOUNT
     }
 
     private final Action action;
@@ -251,7 +252,7 @@ public class ATMTransactionPacket {
                                 StateCraftIntegration.getPlayerGovernmentRole(player, targetType, targetUUID);
                             UUID nationIdForLimit = StateCraftIntegration.getNationIdForAccount(targetType, targetUUID);
                             String limitError = spendingMgr.checkSpendingLimit(
-                                player.getUUID(), targetType, targetUUID, packet.amount, role, nationIdForLimit);
+                                player.getUUID(), targetType, targetUUID, packet.amount, role, nationIdForLimit, player);
                             if (limitError != null) {
                                 NetworkHandler.sendToPlayer(new TransactionResultPacket(false,
                                     limitError, treasuryBalance), player);
@@ -567,6 +568,41 @@ public class ATMTransactionPacket {
                             "Invalid recipient ID", manager.getBalance(player.getUUID())), player);
                     }
                 }
+                case OPEN_BANK_ACCOUNT -> {
+                    // recipient field contains the bank company UUID
+                    try {
+                        UUID bankCompanyId = UUID.fromString(packet.recipient);
+                        var bankMgr = com.statecraft.economy.company.BankManager.getInstance();
+                        var bank = bankMgr.getBank(bankCompanyId);
+                        if (bank == null) {
+                            NetworkHandler.sendToPlayer(new TransactionResultPacket(false,
+                                "Bank not found", manager.getBalance(player.getUUID())), player);
+                            return;
+                        }
+                        if (bank.isMember(player.getUUID())) {
+                            NetworkHandler.sendToPlayer(new TransactionResultPacket(false,
+                                "You already have an account at this bank", manager.getBalance(player.getUUID())), player);
+                            return;
+                        }
+                        bank.openAccount(player.getUUID());
+                        bankMgr.markDirty();
+
+                        var company = com.statecraft.company.CompanyManager.getInstance().getCompany(bankCompanyId);
+                        String bankName = company != null ? company.getName() : "Bank";
+
+                        // Refresh the player's account list
+                        NetworkHandler.sendToPlayer(new TransactionResultPacket(true,
+                            "§aAccount opened at " + bankName + "! You can now deposit and withdraw.",
+                            manager.getBalance(player.getUUID())), player);
+
+                        // Send updated accounts list so the new bank deposit account appears
+                        com.statecraft.economy.network.ServerPacketHandler.handleRequestAccounts(
+                            new RequestAccountsPacket(), () -> ctx.get());
+                    } catch (IllegalArgumentException e) {
+                        NetworkHandler.sendToPlayer(new TransactionResultPacket(false,
+                            "Invalid bank ID", manager.getBalance(player.getUUID())), player);
+                    }
+                }
             }
         });
         ctx.get().setPacketHandled(true);
@@ -673,7 +709,7 @@ public class ATMTransactionPacket {
             StateCraftIntegration.getPlayerGovernmentRole(player, sourceType, sourceUUID);
         UUID nationIdForLimit = StateCraftIntegration.getNationIdForAccount(sourceType, sourceUUID);
         String limitError = spendingMgr.checkSpendingLimit(
-            player.getUUID(), sourceType, sourceUUID, amount, role, nationIdForLimit);
+            player.getUUID(), sourceType, sourceUUID, amount, role, nationIdForLimit, player);
         if (limitError != null) {
             return new TransactionResult(false, limitError, sourceBalance);
         }

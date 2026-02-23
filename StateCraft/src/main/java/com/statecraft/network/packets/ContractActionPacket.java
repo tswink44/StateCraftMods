@@ -16,7 +16,8 @@ public class ContractActionPacket {
         COMPLETE_MILESTONE, // Mark a milestone as complete (legislature approval)
         COMPLETE_CONTRACT,  // Mark contract as complete
         CANCEL_CONTRACT,    // Cancel the contract
-        FAIL_CONTRACT       // Mark contract as failed
+        FAIL_CONTRACT,      // Mark contract as failed
+        REQUEST_FINAL_APPROVAL // Contractor submits contract for early final approval
     }
 
     private final String nationName;

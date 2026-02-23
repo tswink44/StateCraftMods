@@ -19,6 +19,7 @@ import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
@@ -29,6 +30,7 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import net.minecraft.server.level.ServerPlayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -120,10 +122,28 @@ public class StateCraftEconomy {
 
     @SubscribeEvent
     public void onServerStarted(ServerStartedEvent event) {
+        // Initialize item value registry (JSON-based)
+        com.statecraft.economy.config.ItemValueRegistry.getInstance().init();
+        LOGGER.info("Item value registry initialized");
+
         // Initialize valuation and improvement tracking
         ChunkValuationManager.getInstance().init(event.getServer());
         ImprovementTracker.getInstance().init(event.getServer());
         LOGGER.info("Chunk valuation system initialized");
+    }
+
+    @SubscribeEvent
+    public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+
+        // Sync item value registry to the client so Trading Hub UI shows correct prices
+        var registry = com.statecraft.economy.config.ItemValueRegistry.getInstance();
+        var values = registry.getAllValues();
+        if (!values.isEmpty()) {
+            NetworkHandler.sendToPlayer(
+                new com.statecraft.economy.network.packets.SyncItemValuesPacket(values), player);
+            LOGGER.debug("Synced {} item values to player {}", values.size(), player.getName().getString());
+        }
     }
 
     @SubscribeEvent

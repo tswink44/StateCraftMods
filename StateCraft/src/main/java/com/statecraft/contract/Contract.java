@@ -86,6 +86,10 @@ public class Contract {
     private final Map<Long, Integer> baselineImprovementScores;  // chunkKey -> baseline score when contract started
     private double paymentPerImprovementPoint;  // How much to pay per improvement point gained
 
+    // Early completion - contractor can submit for final approval before deadline
+    private boolean finalApprovalRequested;
+    private long finalApprovalRequestTime;
+
     public Contract(UUID nationId, String contractNumber, String title, UUID creatorId, String creatorName) {
         this.contractId = UUID.randomUUID();
         this.nationId = nationId;
@@ -114,6 +118,8 @@ public class Contract {
         this.deadlineWarning1HourSent = false;
         this.biddingEnding1DaySent = false;
         this.biddingEnding1HourSent = false;
+        this.finalApprovalRequested = false;
+        this.finalApprovalRequestTime = 0;
 
         // Default milestones
         milestoneDescriptions.put(25, "Foundation/Base structure complete");
@@ -176,12 +182,16 @@ public class Contract {
     public boolean isDeadlineWarning1HourSent() { return deadlineWarning1HourSent; }
     public boolean isBiddingEnding1DaySent() { return biddingEnding1DaySent; }
     public boolean isBiddingEnding1HourSent() { return biddingEnding1HourSent; }
+    public boolean isFinalApprovalRequested() { return finalApprovalRequested; }
+    public long getFinalApprovalRequestTime() { return finalApprovalRequestTime; }
 
     public void setOverdueNotificationSent(boolean sent) { this.overdueNotificationSent = sent; }
     public void setDeadlineWarning1DaySent(boolean sent) { this.deadlineWarning1DaySent = sent; }
     public void setDeadlineWarning1HourSent(boolean sent) { this.deadlineWarning1HourSent = sent; }
     public void setBiddingEnding1DaySent(boolean sent) { this.biddingEnding1DaySent = sent; }
     public void setBiddingEnding1HourSent(boolean sent) { this.biddingEnding1HourSent = sent; }
+    public void setFinalApprovalRequested(boolean requested) { this.finalApprovalRequested = requested; }
+    public void setFinalApprovalRequestTime(long time) { this.finalApprovalRequestTime = time; }
 
     // ==================== Admin Setters (bypass status checks) ====================
 
@@ -490,6 +500,28 @@ public class Contract {
     }
 
     /**
+     * Contractor requests final approval to complete the contract early.
+     * The legislature/leader can then review and approve completion.
+     * @return true if request was submitted, false if invalid
+     */
+    public boolean requestFinalApproval() {
+        if (status != Status.ACTIVE) return false;
+        if (finalApprovalRequested) return false; // Already requested
+
+        this.finalApprovalRequested = true;
+        this.finalApprovalRequestTime = System.currentTimeMillis();
+        return true;
+    }
+
+    /**
+     * Cancel a pending final approval request
+     */
+    public void cancelFinalApprovalRequest() {
+        this.finalApprovalRequested = false;
+        this.finalApprovalRequestTime = 0;
+    }
+
+    /**
      * Record a payment made to contractor
      */
     public void recordPayment(double amount) {
@@ -552,10 +584,22 @@ public class Contract {
     }
 
     /**
-     * Complete the contract
+     * Complete the contract.
+     * Can be completed if progress is 100% and milestones are done,
+     * OR if the contractor has requested final approval (early completion).
      */
     public boolean complete() {
         if (status != Status.ACTIVE) return false;
+
+        if (finalApprovalRequested) {
+            // Legislature is approving early completion
+            this.status = Status.COMPLETED;
+            this.completedTime = System.currentTimeMillis();
+            this.finalApprovalRequested = false;
+            return true;
+        }
+
+        // Normal completion: requires 100% progress
         if (progressPercent < 100) return false;
 
         // All milestones must be completed for milestone type
@@ -649,6 +693,8 @@ public class Contract {
         tag.putBoolean("deadlineWarning1HourSent", deadlineWarning1HourSent);
         tag.putBoolean("biddingEnding1DaySent", biddingEnding1DaySent);
         tag.putBoolean("biddingEnding1HourSent", biddingEnding1HourSent);
+        tag.putBoolean("finalApprovalRequested", finalApprovalRequested);
+        tag.putLong("finalApprovalRequestTime", finalApprovalRequestTime);
 
         // Designated chunks
         ListTag chunksTag = new ListTag();
@@ -738,6 +784,8 @@ public class Contract {
         contract.deadlineWarning1HourSent = tag.contains("deadlineWarning1HourSent") && tag.getBoolean("deadlineWarning1HourSent");
         contract.biddingEnding1DaySent = tag.contains("biddingEnding1DaySent") && tag.getBoolean("biddingEnding1DaySent");
         contract.biddingEnding1HourSent = tag.contains("biddingEnding1HourSent") && tag.getBoolean("biddingEnding1HourSent");
+        contract.finalApprovalRequested = tag.contains("finalApprovalRequested") && tag.getBoolean("finalApprovalRequested");
+        contract.finalApprovalRequestTime = tag.contains("finalApprovalRequestTime") ? tag.getLong("finalApprovalRequestTime") : 0;
 
         // Designated chunks
         ListTag chunksTag = tag.getList("designatedChunks", Tag.TAG_COMPOUND);

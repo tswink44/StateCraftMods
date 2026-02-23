@@ -565,6 +565,23 @@ public class BankManager {
             }
         }
 
+        // Ensure all loaded bank companies are registered in the BankRegistry
+        // This handles cases where the BankRegistry load didn't include them
+        for (BankCompany bank : bankCompanies.values()) {
+            if (!EconomyManager.getInstance().getBankRegistry().bankExists(bank.getCompanyId())) {
+                Company company = CompanyManager.getInstance().getCompany(bank.getCompanyId());
+                if (company != null) {
+                    Bank registryBank = new Bank(bank.getCompanyId(),
+                        company.getName().toLowerCase().replace(" ", "_"),
+                        company.getName());
+                    registryBank.setInterestRate(bank.getDepositInterestRate());
+                    registryBank.setAllowsLoans(true);
+                    EconomyManager.getInstance().getBankRegistry().registerBank(registryBank);
+                    StateCraftEconomy.LOGGER.info("Re-registered bank company '{}' in BankRegistry", company.getName());
+                }
+            }
+        }
+
         dirty = false;
         StateCraftEconomy.LOGGER.info("Loaded {} bank companies", bankCompanies.size());
     }

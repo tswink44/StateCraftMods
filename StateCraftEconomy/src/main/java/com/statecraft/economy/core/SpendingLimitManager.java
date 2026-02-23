@@ -143,10 +143,28 @@ public class SpendingLimitManager {
 
     /**
      * Check if a withdrawal/transfer of the given amount would exceed the player's daily limit.
+     * Server operators (permission level 2+) bypass spending limits entirely.
      * @return null if allowed, or an error message string if denied
      */
     public String checkSpendingLimit(UUID playerId, String accountType, UUID accountId,
                                       double amount, GovernmentRole role, UUID nationId) {
+        return checkSpendingLimit(playerId, accountType, accountId, amount, role, nationId, null);
+    }
+
+    /**
+     * Check if a withdrawal/transfer of the given amount would exceed the player's daily limit.
+     * Server operators (permission level 2+) bypass spending limits entirely.
+     * @param player Optional ServerPlayer - if provided and is op, limit is bypassed
+     * @return null if allowed, or an error message string if denied
+     */
+    public String checkSpendingLimit(UUID playerId, String accountType, UUID accountId,
+                                      double amount, GovernmentRole role, UUID nationId,
+                                      net.minecraft.server.level.ServerPlayer player) {
+        // Server ops bypass spending limits
+        if (player != null && player.hasPermissions(2)) {
+            return null;
+        }
+
         double limit = getLimitForRole(role, nationId);
         if (limit <= 0) return null; // Unlimited
 

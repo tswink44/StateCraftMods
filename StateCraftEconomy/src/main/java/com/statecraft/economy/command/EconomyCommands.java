@@ -60,6 +60,17 @@ public class EconomyCommands {
             .then(Commands.literal("reload")
                 .requires(src -> src.hasPermission(2))
                 .executes(EconomyCommands::reload))
+            .then(Commands.literal("reloaditems")
+                .requires(src -> src.hasPermission(2))
+                .executes(EconomyCommands::reloadItemValues))
+            .then(Commands.literal("setprice")
+                .requires(src -> src.hasPermission(2))
+                .then(Commands.argument("item", StringArgumentType.string())
+                    .then(Commands.argument("price", DoubleArgumentType.doubleArg(0))
+                        .executes(EconomyCommands::setItemPrice))))
+            .then(Commands.literal("itemprice")
+                .then(Commands.argument("item", StringArgumentType.string())
+                    .executes(EconomyCommands::showItemPrice)))
             .then(Commands.literal("tax")
                 .then(Commands.literal("history")
                     .executes(EconomyCommands::showTaxHistory))
@@ -273,6 +284,68 @@ public class EconomyCommands {
         return 1;
     }
 
+    private static int reloadItemValues(CommandContext<CommandSourceStack> context) {
+        com.statecraft.economy.config.ItemValueRegistry.getInstance().reload();
+        var values = com.statecraft.economy.config.ItemValueRegistry.getInstance().getAllValues();
+        int count = values.size();
+
+        // Sync updated values to all connected players
+        com.statecraft.economy.network.NetworkHandler.sendToAll(
+            new com.statecraft.economy.network.packets.SyncItemValuesPacket(values));
+
+        context.getSource().sendSuccess(() ->
+            Component.literal("§aItem values reloaded and synced to all players! §7(" + count + " items registered)"), true);
+        return 1;
+    }
+
+    private static int setItemPrice(CommandContext<CommandSourceStack> context) {
+        String itemId = StringArgumentType.getString(context, "item");
+        double price = DoubleArgumentType.getDouble(context, "price");
+
+        // Normalize item ID
+        if (!itemId.contains(":")) {
+            itemId = "minecraft:" + itemId;
+        }
+
+        var registry = com.statecraft.economy.config.ItemValueRegistry.getInstance();
+        registry.setItemValue(itemId, price);
+        registry.save();
+
+        // Sync updated values to all connected players
+        com.statecraft.economy.network.NetworkHandler.sendToAll(
+            new com.statecraft.economy.network.packets.SyncItemValuesPacket(registry.getAllValues()));
+
+        String finalItemId = itemId;
+        if (price <= 0) {
+            context.getSource().sendSuccess(() ->
+                Component.literal("§eRemoved sell value for §f" + finalItemId), true);
+        } else {
+            context.getSource().sendSuccess(() ->
+                Component.literal("§aSet §f" + finalItemId + " §asell value to §6$" + String.format("%.2f", price)), true);
+        }
+        return 1;
+    }
+
+    private static int showItemPrice(CommandContext<CommandSourceStack> context) {
+        String itemId = StringArgumentType.getString(context, "item");
+        if (!itemId.contains(":")) {
+            itemId = "minecraft:" + itemId;
+        }
+
+        var registry = com.statecraft.economy.config.ItemValueRegistry.getInstance();
+        double value = registry.getAllValues().getOrDefault(itemId, 0.0);
+
+        String finalItemId = itemId;
+        if (value > 0) {
+            context.getSource().sendSuccess(() ->
+                Component.literal("§7" + finalItemId + " §f= §6$" + String.format("%.2f", value) + " §7per unit"), false);
+        } else {
+            context.getSource().sendSuccess(() ->
+                Component.literal("§7" + finalItemId + " §chas no sell value"), false);
+        }
+        return 1;
+    }
+
     private static int showNationBalance(CommandContext<CommandSourceStack> context) {
         try {
             ServerPlayer player = context.getSource().getPlayerOrException();
@@ -340,7 +413,7 @@ public class EconomyCommands {
             SpendingLimitManager.GovernmentRole role =
                 StateCraftIntegration.getPlayerGovernmentRole(player, "NATION", nationId);
             String limitError = spendingMgr.checkSpendingLimit(
-                player.getUUID(), "NATION", nationId, amount, role, nationId);
+                player.getUUID(), "NATION", nationId, amount, role, nationId, player);
             if (limitError != null) {
                 context.getSource().sendFailure(Component.literal("§c" + limitError));
                 return 0;

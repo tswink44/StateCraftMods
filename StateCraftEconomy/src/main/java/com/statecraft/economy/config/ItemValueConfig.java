@@ -1,7 +1,6 @@
 package com.statecraft.economy.config;
 
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.common.ForgeConfigSpec;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -12,14 +11,20 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Configuration for item sell values at Trading Hubs.
- * Allows servers to define how much each item is worth when sold.
+ * Configuration for Trading Hub settings.
+ *
+ * Item sell values are now loaded from a separate JSON file:
+ *   config/statecraft-item-values.json
+ * See {@link ItemValueRegistry} for the JSON-based item value system.
+ *
+ * This TOML config retains trading hub operational settings (tax rate, enabled, max items).
+ * The legacy ITEM_VALUES list in the TOML is kept as a fallback but the JSON file takes priority.
  */
 public class ItemValueConfig {
     public static final ForgeConfigSpec.Builder BUILDER = new ForgeConfigSpec.Builder();
     public static final ForgeConfigSpec SPEC;
 
-    // Item values configuration
+    // Item values configuration (legacy TOML fallback)
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> ITEM_VALUES;
 
     // Trading Hub settings
@@ -27,11 +32,11 @@ public class ItemValueConfig {
     public static final ForgeConfigSpec.DoubleValue SELL_TAX_RATE;
     public static final ForgeConfigSpec.IntValue MAX_ITEMS_PER_TRANSACTION;
 
-    // Cached parsed values
+    // Cached parsed values (legacy TOML fallback)
     private static Map<String, Double> itemValueCache = null;
 
     static {
-        BUILDER.comment("Trading Hub Item Values Configuration").push("trading_hub");
+        BUILDER.comment("Trading Hub Configuration").push("trading_hub");
 
         BUILDER.comment("Enable Trading Hub functionality");
         TRADING_HUB_ENABLED = BUILDER.define("enabled", true);
@@ -43,10 +48,10 @@ public class ItemValueConfig {
         BUILDER.comment("Maximum items that can be sold in a single transaction");
         MAX_ITEMS_PER_TRANSACTION = BUILDER.defineInRange("maxItemsPerTransaction", 64, 1, 576);
 
-        BUILDER.comment("Item Values",
-                       "Format: 'modid:itemname=value'",
-                       "Example: 'minecraft:diamond=100' means 1 diamond sells for $100",
-                       "Items not listed have no sell value");
+        BUILDER.comment("Legacy item values (TOML fallback).",
+                       "Item values are now primarily loaded from: config/statecraft-item-values.json",
+                       "Edit the JSON file for easier configuration.",
+                       "This list is only used if the JSON file is missing or an item is not in it.");
         ITEM_VALUES = BUILDER.defineList("itemValues",
             Arrays.asList(
                 // Ores and Raw Materials
@@ -161,13 +166,19 @@ public class ItemValueConfig {
     }
 
     /**
-     * Get the sell value of an item
+     * Get the sell value of an item.
+     * Checks the JSON registry first, then falls back to the TOML config.
      * @param itemStack The item to get the value of
      * @return The sell value, or 0 if the item has no value
      */
     public static double getItemValue(ItemStack itemStack) {
         if (itemStack.isEmpty()) return 0;
 
+        // Primary: JSON registry
+        double jsonValue = ItemValueRegistry.getInstance().getItemValue(itemStack);
+        if (jsonValue > 0) return jsonValue;
+
+        // Fallback: legacy TOML config
         ResourceLocation itemId = ForgeRegistries.ITEMS.getKey(itemStack.getItem());
         if (itemId == null) return 0;
 
@@ -194,7 +205,7 @@ public class ItemValueConfig {
     }
 
     /**
-     * Get the cached item values, rebuilding if necessary
+     * Get the cached item values from TOML (legacy fallback), rebuilding if necessary
      */
     private static Map<String, Double> getItemValueCache() {
         if (itemValueCache == null) {
@@ -204,7 +215,7 @@ public class ItemValueConfig {
     }
 
     /**
-     * Rebuild the item value cache from config
+     * Rebuild the item value cache from TOML config
      */
     public static void rebuildCache() {
         itemValueCache = new HashMap<>();

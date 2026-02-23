@@ -232,5 +232,49 @@ public interface EconomyIntegration {
      * Set the dividend period for a company
      */
     default void setDividendPeriodTicks(UUID companyId, long ticks) {}
+
+    // ==================== Bank Company Integration ====================
+
+    /** Get the bank's deposit interest rate */
+    default double getBankDepositInterestRate(UUID companyId) { return 0; }
+
+    /** Get the bank's loan interest rate */
+    default double getBankLoanInterestRate(UUID companyId) { return 0; }
+
+    /** Get the bank's withdrawal fee rate */
+    default double getBankWithdrawalFee(UUID companyId) { return 0; }
+
+    /** Get the bank's transfer fee rate */
+    default double getBankTransferFee(UUID companyId) { return 0; }
+
+    /** Get the bank's reserve ratio */
+    default double getBankReserveRatio(UUID companyId) { return 0; }
+
+    /** Get the number of active loans at this bank */
+    default int getBankActiveLoanCount(UUID companyId) { return 0; }
+
+    /** Get the total deposits at this bank */
+    default double getBankTotalDeposits(UUID companyId) { return 0; }
+
+    /** Set the bank's deposit interest rate */
+    default void setBankDepositInterestRate(UUID companyId, double rate) {}
+
+    /** Set the bank's loan interest rate */
+    default void setBankLoanInterestRate(UUID companyId, double rate) {}
+
+    /** Set the bank's withdrawal fee rate */
+    default void setBankWithdrawalFee(UUID companyId, double fee) {}
+
+    /** Set the bank's transfer fee rate */
+    default void setBankTransferFee(UUID companyId, double fee) {}
+
+
+    /**
+     * Issue a loan from a bank company to a player.
+     * @return A description of the result (success message or error)
+     */
+    default String issueBankLoan(UUID companyId, UUID borrowerId, double amount) {
+        return "Economy module not loaded";
+    }
 }
 

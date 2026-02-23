@@ -225,8 +225,11 @@ public class RecipeGuideScreen extends Screen {
 
         for (IngredientInfo info : recipe.ingredients) {
             graphics.renderItem(info.displayStack, guiLeft + 20, legendY - 2);
+            graphics.pose().pushPose();
+            graphics.pose().translate(0, 0, 200);
             graphics.drawString(this.font, "§f" + info.key + " §7= " + info.name,
                 guiLeft + 40, legendY, 0xFFCCCCCC);
+            graphics.pose().popPose();
             legendY += 14;
         }
     }

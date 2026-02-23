@@ -59,7 +59,7 @@ public class MarketplaceScreen extends Screen {
     // Browse tab
     private EditBox searchBox;
     private int browseScrollOffset = 0;
-    private static final int ROW_HEIGHT = 22;
+    private static final int ROW_HEIGHT = 24;
     private int contentTop, contentBottom, visibleRows;
     private RequestMarketListingsPacket.SortMode sortMode = RequestMarketListingsPacket.SortMode.NEWEST;
 
@@ -274,10 +274,10 @@ public class MarketplaceScreen extends Screen {
         // Column headers
         int headerY = contentTop - 2;
         int x = guiLeft + 8;
-        graphics.drawString(this.font, "§nItem", x + 20, headerY, COLOR_TEXT_DIM);
-        graphics.drawString(this.font, "§nPrice", x + 140, headerY, COLOR_TEXT_DIM);
-        graphics.drawString(this.font, "§nQty", x + 200, headerY, COLOR_TEXT_DIM);
-        graphics.drawString(this.font, "§nSeller", x + 240, headerY, COLOR_TEXT_DIM);
+        graphics.drawString(this.font, "§nItem", x + 22, headerY, COLOR_TEXT_DIM);
+        graphics.drawString(this.font, "§nPrice", x + 145, headerY, COLOR_TEXT_DIM);
+        graphics.drawString(this.font, "§nQty", x + 210, headerY, COLOR_TEXT_DIM);
+        graphics.drawString(this.font, "§nSeller", x + 250, headerY, COLOR_TEXT_DIM);
         graphics.drawString(this.font, "§nBuy", x + 340, headerY, COLOR_TEXT_DIM);
 
         int listTop = contentTop + 10;
@@ -296,37 +296,43 @@ public class MarketplaceScreen extends Screen {
             int rowBg = hovered ? COLOR_ROW_HOVER : (idx % 2 == 0 ? COLOR_ROW_EVEN : COLOR_ROW_ODD);
             graphics.fill(guiLeft + 6, rowY, guiLeft + guiWidth - 6, rowY + ROW_HEIGHT, rowBg);
 
-            // Item icon
-            graphics.renderItem(entry.item(), x + 2, rowY + 2);
+            // Item icon (renders at high z-level internally)
+            graphics.renderItem(entry.item(), x + 2, rowY + 4);
+
+            // Render text above item icons by pushing z-level
+            graphics.pose().pushPose();
+            graphics.pose().translate(0, 0, 200);
 
             // Item name (truncated)
             String name = entry.itemName();
-            if (this.font.width(name) > 110) {
-                while (this.font.width(name + "..") > 110 && name.length() > 1) {
+            if (this.font.width(name) > 105) {
+                while (this.font.width(name + "..") > 105 && name.length() > 1) {
                     name = name.substring(0, name.length() - 1);
                 }
                 name += "..";
             }
-            graphics.drawString(this.font, name, x + 20, rowY + 7, COLOR_TEXT);
+            graphics.drawString(this.font, name, x + 22, rowY + 8, COLOR_TEXT);
 
             // Price
-            graphics.drawString(this.font, "§a$" + formatNumber(entry.pricePerUnit()), x + 140, rowY + 7, COLOR_INCOMING);
+            graphics.drawString(this.font, "§a$" + formatNumber(entry.pricePerUnit()), x + 145, rowY + 8, COLOR_INCOMING);
 
             // Quantity
-            graphics.drawString(this.font, String.valueOf(entry.quantity()), x + 200, rowY + 7, COLOR_TEXT);
+            graphics.drawString(this.font, String.valueOf(entry.quantity()), x + 210, rowY + 8, COLOR_TEXT);
 
             // Seller
             String seller = entry.sellerName();
-            if (this.font.width(seller) > 90) {
+            if (this.font.width(seller) > 80) {
                 seller = seller.substring(0, Math.min(seller.length(), 10)) + "..";
             }
-            graphics.drawString(this.font, "§7" + seller, x + 240, rowY + 7, COLOR_TEXT_DIM);
+            graphics.drawString(this.font, "§7" + seller, x + 250, rowY + 8, COLOR_TEXT_DIM);
 
             // Buy button area
             boolean buyHovered = mouseX >= x + 335 && mouseX < x + 375 && mouseY >= rowY + 2 && mouseY < rowY + ROW_HEIGHT - 2;
             int buyBg = buyHovered ? 0xFF3DDB83 : COLOR_BUTTON;
-            graphics.fill(x + 335, rowY + 3, x + 375, rowY + ROW_HEIGHT - 3, buyBg);
-            graphics.drawCenteredString(this.font, "Buy", x + 355, rowY + 6, COLOR_TEXT);
+            graphics.fill(x + 335, rowY + 4, x + 375, rowY + ROW_HEIGHT - 4, buyBg);
+            graphics.drawCenteredString(this.font, "Buy", x + 355, rowY + 8, COLOR_TEXT);
+
+            graphics.pose().popPose();
         }
 
         // Scrollbar
@@ -349,7 +355,7 @@ public class MarketplaceScreen extends Screen {
 
         int x = guiLeft + 8;
         int headerY = contentTop - 2;
-        graphics.drawString(this.font, "§nItem", x + 20, headerY, COLOR_TEXT_DIM);
+        graphics.drawString(this.font, "§nItem", x + 22, headerY, COLOR_TEXT_DIM);
         graphics.drawString(this.font, "§nPrice", x + 150, headerY, COLOR_TEXT_DIM);
         graphics.drawString(this.font, "§nQty", x + 220, headerY, COLOR_TEXT_DIM);
         graphics.drawString(this.font, "§nListed", x + 260, headerY, COLOR_TEXT_DIM);
@@ -363,24 +369,30 @@ public class MarketplaceScreen extends Screen {
             int rowBg = i % 2 == 0 ? COLOR_ROW_EVEN : COLOR_ROW_ODD;
             graphics.fill(guiLeft + 6, rowY, guiLeft + guiWidth - 6, rowY + ROW_HEIGHT, rowBg);
 
-            graphics.renderItem(entry.item(), x + 2, rowY + 2);
+            graphics.renderItem(entry.item(), x + 2, rowY + 4);
+
+            // Render text above item icons by pushing z-level
+            graphics.pose().pushPose();
+            graphics.pose().translate(0, 0, 200);
 
             String name = entry.itemName();
-            if (this.font.width(name) > 120) {
-                while (this.font.width(name + "..") > 120 && name.length() > 1)
+            if (this.font.width(name) > 115) {
+                while (this.font.width(name + "..") > 115 && name.length() > 1)
                     name = name.substring(0, name.length() - 1);
                 name += "..";
             }
-            graphics.drawString(this.font, name, x + 20, rowY + 7, COLOR_TEXT);
-            graphics.drawString(this.font, "§a$" + formatNumber(entry.pricePerUnit()), x + 150, rowY + 7, COLOR_INCOMING);
-            graphics.drawString(this.font, String.valueOf(entry.quantity()), x + 220, rowY + 7, COLOR_TEXT);
-            graphics.drawString(this.font, DATE_FORMAT.format(new Date(entry.listedTime())), x + 260, rowY + 7, COLOR_TEXT_DIM);
+            graphics.drawString(this.font, name, x + 22, rowY + 8, COLOR_TEXT);
+            graphics.drawString(this.font, "§a$" + formatNumber(entry.pricePerUnit()), x + 150, rowY + 8, COLOR_INCOMING);
+            graphics.drawString(this.font, String.valueOf(entry.quantity()), x + 220, rowY + 8, COLOR_TEXT);
+            graphics.drawString(this.font, DATE_FORMAT.format(new Date(entry.listedTime())), x + 260, rowY + 8, COLOR_TEXT_DIM);
 
             // Cancel button
             boolean cancelHovered = mouseX >= x + 335 && mouseX < x + 385 && mouseY >= rowY + 2 && mouseY < rowY + ROW_HEIGHT - 2;
             int cancelBg = cancelHovered ? 0xFFFF5555 : COLOR_BUTTON_CANCEL;
-            graphics.fill(x + 335, rowY + 3, x + 385, rowY + ROW_HEIGHT - 3, cancelBg);
-            graphics.drawCenteredString(this.font, "Cancel", x + 360, rowY + 6, COLOR_TEXT);
+            graphics.fill(x + 335, rowY + 4, x + 385, rowY + ROW_HEIGHT - 4, cancelBg);
+            graphics.drawCenteredString(this.font, "Cancel", x + 360, rowY + 8, COLOR_TEXT);
+
+            graphics.pose().popPose();
         }
 
         graphics.drawString(this.font, "§7" + entries.size() + " active listing" + (entries.size() != 1 ? "s" : ""),
@@ -421,8 +433,11 @@ public class MarketplaceScreen extends Screen {
                     if (!stack.isEmpty()) {
                         graphics.renderItem(stack, sx + 1, sy + 1);
                         if (stack.getCount() > 1) {
+                            graphics.pose().pushPose();
+                            graphics.pose().translate(0, 0, 200);
                             graphics.drawString(this.font, String.valueOf(stack.getCount()),
                                 sx + 17 - this.font.width(String.valueOf(stack.getCount())), sy + 9, COLOR_TEXT);
+                            graphics.pose().popPose();
                         }
                     }
                 }
@@ -447,8 +462,11 @@ public class MarketplaceScreen extends Screen {
                 if (!stack.isEmpty()) {
                     graphics.renderItem(stack, sx + 1, sy + 1);
                     if (stack.getCount() > 1) {
+                        graphics.pose().pushPose();
+                        graphics.pose().translate(0, 0, 200);
                         graphics.drawString(this.font, String.valueOf(stack.getCount()),
                             sx + 17 - this.font.width(String.valueOf(stack.getCount())), sy + 9, COLOR_TEXT);
+                        graphics.pose().popPose();
                     }
                 }
             }
@@ -481,7 +499,10 @@ public class MarketplaceScreen extends Screen {
 
         int y = dy + 24;
         graphics.renderItem(buyTarget.item(), dx + 10, y);
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, 0, 200);
         graphics.drawString(this.font, buyTarget.itemName(), dx + 30, y + 4, COLOR_TEXT);
+        graphics.pose().popPose();
 
         y += 20;
         graphics.drawString(this.font, "§7Price: §a$" + formatNumber(buyTarget.pricePerUnit()) + "/ea", dx + 10, y, COLOR_TEXT);

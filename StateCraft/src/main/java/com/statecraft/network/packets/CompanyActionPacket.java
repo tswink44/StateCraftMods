@@ -15,7 +15,13 @@ public class CompanyActionPacket {
         TOGGLE_DIVIDENDS,
         RENAME,
         SET_DESCRIPTION,
-        DISSOLVE
+        DISSOLVE,
+        // Bank-specific actions
+        SET_DEPOSIT_INTEREST,
+        SET_LOAN_INTEREST,
+        SET_WITHDRAWAL_FEE,
+        SET_TRANSFER_FEE,
+        ISSUE_LOAN
     }
 
     private final String companyId; // UUID as string

@@ -85,6 +85,7 @@ public class CitySettingsScreen extends StateCraftScreen {
         this.taxRateField = new EditBox(this.font, fieldX, startY + rowSpacing * 4, 60, 16, Component.literal("Property Tax"));
         this.taxRateField.setMaxLength(5);
         this.taxRateField.setValue(String.format("%.1f", currentTaxRate));
+        this.taxRateField.setHint(Component.literal("Current: " + String.format("%.1f", currentTaxRate) + "%"));
         this.taxRateField.setResponder(s -> hasChanges = true);
         this.addRenderableWidget(this.taxRateField);
 
@@ -92,6 +93,7 @@ public class CitySettingsScreen extends StateCraftScreen {
         this.salesTaxRateField = new EditBox(this.font, fieldX, startY + rowSpacing * 5, 60, 16, Component.literal("Sales Tax"));
         this.salesTaxRateField.setMaxLength(5);
         this.salesTaxRateField.setValue(String.format("%.1f", currentSalesTaxRate));
+        this.salesTaxRateField.setHint(Component.literal("Current: " + String.format("%.1f", currentSalesTaxRate) + "%"));
         this.salesTaxRateField.setResponder(s -> hasChanges = true);
         this.addRenderableWidget(this.salesTaxRateField);
 
@@ -215,9 +217,11 @@ public class CitySettingsScreen extends StateCraftScreen {
         }
         if (this.taxRateField != null) {
             this.taxRateField.setValue(String.format("%.1f", taxRate));
+            this.taxRateField.setHint(Component.literal("Current: " + String.format("%.1f", taxRate) + "%"));
         }
         if (this.salesTaxRateField != null) {
             this.salesTaxRateField.setValue(String.format("%.1f", salesTaxRate));
+            this.salesTaxRateField.setHint(Component.literal("Current: " + String.format("%.1f", salesTaxRate) + "%"));
         }
         this.hasChanges = false;
     }

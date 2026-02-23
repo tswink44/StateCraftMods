@@ -42,7 +42,7 @@ public class TradingHubScreen extends AbstractContainerScreen<TradingHubMenu> {
         // 71 (title + 3 rows) + 14 (info bar) + 97 (player inv section) = 182
         this.imageHeight = 182;
         // Inventory label Y position
-        this.inventoryLabelY = 92;
+        this.inventoryLabelY = 87;
     }
 
     @Override

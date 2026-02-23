@@ -16,6 +16,7 @@ import com.statecraft.mail.Mail;
 import com.statecraft.mail.Mailbox;
 import com.statecraft.mail.MailManager;
 import com.statecraft.network.packets.*;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.ChunkPos;
@@ -1853,12 +1854,12 @@ public class ServerPacketHandler {
                     if (validInvite != null) {
                         // Accept via InvitationManager to use existing logic
                         nation.addMember(player.getUUID());
-                        InvitationManager.getInstance().removeInvitation(validInvite);
+                        InvitationManager.getInstance().removeInvitation(validInvite.getId());
                         player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
                             "§aYou have joined §e" + nation.getName() + "§a!"));
 
                         // Notify the nation leader if online
-                        MinecraftServer server = player.getServer();
+                        net.minecraft.server.MinecraftServer server = player.getServer();
                         if (server != null) {
                             ServerPlayer leader = server.getPlayerList().getPlayer(nation.getLeaderId());
                             if (leader != null) {
@@ -1880,14 +1881,14 @@ public class ServerPacketHandler {
                 } else {
                     // Deny
                     if (validInvite != null) {
-                        InvitationManager.getInstance().removeInvitation(validInvite);
+                        InvitationManager.getInstance().removeInvitation(validInvite.getId());
                     }
                     player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
                         "§7You have declined the invitation to join §e" + nation.getName() + "§7."));
 
                     // Notify the sender if online
                     if (mail.getSenderId() != null) {
-                        MinecraftServer server = player.getServer();
+                        net.minecraft.server.MinecraftServer server = player.getServer();
                         if (server != null) {
                             ServerPlayer sender = server.getPlayerList().getPlayer(mail.getSenderId());
                             if (sender != null) {
@@ -3466,6 +3467,35 @@ public class ServerPacketHandler {
                     }
                     break;
 
+                case REQUEST_FINAL_APPROVAL:
+                    // Only contractor can request final approval
+                    if (!isContractor) {
+                        NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                            "Only the contractor can submit for final approval!"), player);
+                        return;
+                    }
+                    if (contract.getStatus() != Contract.Status.ACTIVE) {
+                        NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                            "Contract must be active to request final approval!"), player);
+                        return;
+                    }
+                    success = contract.requestFinalApproval();
+                    if (success) {
+                        contractManager.markDirty();
+                        resultMessage = "Contract " + contract.getContractNumber() + " submitted for final approval! Awaiting legislature review.";
+
+                        // Notify nation leader
+                        ServerPlayer leader = player.getServer().getPlayerList().getPlayer(nation.getLeaderId());
+                        if (leader != null && !leader.getUUID().equals(player.getUUID())) {
+                            leader.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                "§e[Contracts] §f" + contract.getContractorName() + " has submitted contract " +
+                                contract.getContractNumber() + " for final approval at " + contract.getProgressPercent() + "% progress."));
+                        }
+                    } else {
+                        resultMessage = "Failed to request final approval! It may already be pending.";
+                    }
+                    break;
+
                 default:
                     NetworkHandler.sendToPlayer(new ActionResultPacket(false, "Unknown action!"), player);
                     return;
@@ -3572,7 +3602,8 @@ public class ServerPacketHandler {
                 milestonesCompleted,
                 pendingMilestoneApprovals,
                 chunkCoordinates,
-                contract.getDimension()
+                contract.getDimension(),
+                contract.isFinalApprovalRequested()
             );
 
             // Categorize by status
@@ -5483,6 +5514,61 @@ public class ServerPacketHandler {
                         result = "§cFailed to dissolve company.";
                     }
                 }
+                case SET_DEPOSIT_INTEREST -> {
+                    if (!company.canManage(player.getUUID())) {
+                        result = "§cOnly officers/founder can change bank settings.";
+                    } else if (!company.isBank()) {
+                        result = "§cThis company is not a bank.";
+                    } else {
+                        IntegrationRegistry.setBankDepositInterestRate(companyId, packet.getDoubleValue());
+                        result = "§aDeposit interest rate set to " + String.format("%.2f%%", packet.getDoubleValue() * 100);
+                    }
+                }
+                case SET_LOAN_INTEREST -> {
+                    if (!company.canManage(player.getUUID())) {
+                        result = "§cOnly officers/founder can change bank settings.";
+                    } else if (!company.isBank()) {
+                        result = "§cThis company is not a bank.";
+                    } else {
+                        IntegrationRegistry.setBankLoanInterestRate(companyId, packet.getDoubleValue());
+                        result = "§aLoan interest rate set to " + String.format("%.2f%%", packet.getDoubleValue() * 100);
+                    }
+                }
+                case SET_WITHDRAWAL_FEE -> {
+                    if (!company.canManage(player.getUUID())) {
+                        result = "§cOnly officers/founder can change bank settings.";
+                    } else if (!company.isBank()) {
+                        result = "§cThis company is not a bank.";
+                    } else {
+                        IntegrationRegistry.setBankWithdrawalFee(companyId, packet.getDoubleValue());
+                        result = "§aWithdrawal fee set to " + String.format("%.2f%%", packet.getDoubleValue() * 100);
+                    }
+                }
+                case SET_TRANSFER_FEE -> {
+                    if (!company.canManage(player.getUUID())) {
+                        result = "§cOnly officers/founder can change bank settings.";
+                    } else if (!company.isBank()) {
+                        result = "§cThis company is not a bank.";
+                    } else {
+                        IntegrationRegistry.setBankTransferFee(companyId, packet.getDoubleValue());
+                        result = "§aTransfer fee set to " + String.format("%.2f%%", packet.getDoubleValue() * 100);
+                    }
+                }
+                case ISSUE_LOAN -> {
+                    if (!company.canManage(player.getUUID())) {
+                        result = "§cOnly officers/founder can issue loans.";
+                    } else if (!company.isBank()) {
+                        result = "§cThis company is not a bank.";
+                    } else {
+                        // targetPlayer = borrower name, doubleValue = loan amount
+                        ServerPlayer borrower = player.server.getPlayerList().getPlayerByName(packet.getTargetPlayer());
+                        if (borrower == null) {
+                            result = "§cPlayer not found: " + packet.getTargetPlayer();
+                        } else {
+                            result = IntegrationRegistry.issueBankLoan(companyId, borrower.getUUID(), packet.getDoubleValue());
+                        }
+                    }
+                }
                 default -> result = "§cUnknown action.";
             }
 
@@ -5548,7 +5634,14 @@ public class ServerPacketHandler {
             company.getCompanyType().name(),
             shareholders,
             officerNames,
-            resultMessage
+            resultMessage,
+            IntegrationRegistry.getBankDepositInterestRate(company.getId()),
+            IntegrationRegistry.getBankLoanInterestRate(company.getId()),
+            IntegrationRegistry.getBankWithdrawalFee(company.getId()),
+            IntegrationRegistry.getBankTransferFee(company.getId()),
+            IntegrationRegistry.getBankReserveRatio(company.getId()),
+            IntegrationRegistry.getBankActiveLoanCount(company.getId()),
+            IntegrationRegistry.getBankTotalDeposits(company.getId())
         ), player);
     }
 

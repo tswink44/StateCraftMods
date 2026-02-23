@@ -166,39 +166,70 @@ public class ServerPacketHandler {
             ));
 
             // Check StateCraft integration for government accounts
-            if (StateCraftEconomy.isStateCraftLoaded()) {
-                // Get government accounts player has admin access to
-                var govAccounts = StateCraftIntegration.getPlayerAdminAccounts(player);
-                accounts.addAll(govAccounts);
+            try {
+                if (StateCraftEconomy.isStateCraftLoaded()) {
+                    var govAccounts = StateCraftIntegration.getPlayerAdminAccounts(player);
+                    accounts.addAll(govAccounts);
+                }
+            } catch (Exception e) {
+                StateCraftEconomy.LOGGER.warn("Error getting government accounts for {}: {}", player.getName().getString(), e.getMessage());
             }
 
             // Add company accounts the player can manage (founder or officer)
-            var companyManager = com.statecraft.company.CompanyManager.getInstance();
-            for (var company : companyManager.getPlayerManagedCompanies(player.getUUID())) {
-                double companyBalance = manager.getCompanyBalance(company.getId());
-                accounts.add(new SyncAccountsPacket.AccountInfo(
-                    "COMPANY",
-                    company.getName(),
-                    company.getId().toString(),
-                    companyBalance
-                ));
+            try {
+                var companyManager = com.statecraft.company.CompanyManager.getInstance();
+                for (var company : companyManager.getPlayerManagedCompanies(player.getUUID())) {
+                    double companyBalance = manager.getCompanyBalance(company.getId());
+                    accounts.add(new SyncAccountsPacket.AccountInfo(
+                        "COMPANY",
+                        company.getName(),
+                        company.getId().toString(),
+                        companyBalance
+                    ));
+                }
+            } catch (Exception e) {
+                StateCraftEconomy.LOGGER.warn("Error getting company accounts for {}: {}", player.getName().getString(), e.getMessage());
             }
 
             // Add bank deposit accounts (banks where the player is a member)
-            var bankManager = com.statecraft.economy.company.BankManager.getInstance();
-            for (var bank : bankManager.getPlayerBanks(player.getUUID())) {
-                var company = companyManager.getCompany(bank.getCompanyId());
-                String bankName = company != null ? company.getName() : "Bank";
-                double depositorBalance = bank.getDepositorBalance(player.getUUID());
-                accounts.add(new SyncAccountsPacket.AccountInfo(
-                    "BANK_DEPOSIT",
-                    bankName,
-                    bank.getCompanyId().toString(),
-                    depositorBalance
-                ));
+            try {
+                var companyManager = com.statecraft.company.CompanyManager.getInstance();
+                var bankManager = com.statecraft.economy.company.BankManager.getInstance();
+                for (var bank : bankManager.getPlayerBanks(player.getUUID())) {
+                    var company = companyManager.getCompany(bank.getCompanyId());
+                    String bankName = company != null ? company.getName() : "Bank";
+                    double depositorBalance = bank.getDepositorBalance(player.getUUID());
+                    accounts.add(new SyncAccountsPacket.AccountInfo(
+                        "BANK_DEPOSIT",
+                        bankName,
+                        bank.getCompanyId().toString(),
+                        depositorBalance
+                    ));
+                }
+            } catch (Exception e) {
+                StateCraftEconomy.LOGGER.warn("Error getting bank deposit accounts for {}: {}", player.getName().getString(), e.getMessage());
             }
 
-            NetworkHandler.sendToPlayer(new SyncAccountsPacket(accounts), player);
+            // Build bank list for ATM bank selection dropdown
+            java.util.List<SyncAccountsPacket.BankInfo> bankList = new java.util.ArrayList<>();
+            try {
+                for (var bank : manager.getBankRegistry().getAllBanks()) {
+                    bankList.add(new SyncAccountsPacket.BankInfo(
+                        bank.getId().toString(),
+                        bank.getName(),
+                        bank.getDisplayName(),
+                        bank.getInterestRate(),
+                        bank.getWithdrawalFee(),
+                        bank.getTransferFee(),
+                        bank.allowsLoans(),
+                        bank.getColor()
+                    ));
+                }
+            } catch (Exception e) {
+                StateCraftEconomy.LOGGER.warn("Error building bank list: {}", e.getMessage());
+            }
+
+            NetworkHandler.sendToPlayer(new SyncAccountsPacket(accounts, bankList), player);
         });
         ctx.get().setPacketHandled(true);
     }
@@ -522,6 +553,31 @@ public class ServerPacketHandler {
                         .findFirst()
                         .orElse(StateCraftIntegration.getEntityName(accountType, accountUUID));
                 }
+                case "COMPANY" -> {
+                    // Verify player is founder or officer of the company
+                    try {
+                        var companyManager = com.statecraft.company.CompanyManager.getInstance();
+                        var company = companyManager.getCompany(accountUUID);
+                        if (company == null) return;
+                        if (!company.canManage(player.getUUID())) return; // Only officers/founder can view
+                        accountName = company.getName();
+                    } catch (Exception e) {
+                        return;
+                    }
+                }
+                case "BANK_DEPOSIT" -> {
+                    // Verify player is a member of this bank
+                    try {
+                        var bankMgr = com.statecraft.economy.company.BankManager.getInstance();
+                        var bank = bankMgr.getBank(accountUUID);
+                        if (bank == null || !bank.isMember(player.getUUID())) return;
+                        var companyManager = com.statecraft.company.CompanyManager.getInstance();
+                        var company = companyManager.getCompany(accountUUID);
+                        accountName = company != null ? company.getName() : "Bank";
+                    } catch (Exception e) {
+                        return;
+                    }
+                }
                 default -> {
                     return; // Unknown account type
                 }
@@ -540,6 +596,11 @@ public class ServerPacketHandler {
                 case "NATION" -> currentBalance = manager.getNationTreasuryBalance(accountUUID);
                 case "STATE" -> currentBalance = manager.getGovernmentBalance("state", accountUUID);
                 case "CITY" -> currentBalance = manager.getGovernmentBalance("city", accountUUID);
+                case "COMPANY" -> currentBalance = manager.getCompanyBalance(accountUUID);
+                case "BANK_DEPOSIT" -> {
+                    var bank = com.statecraft.economy.company.BankManager.getInstance().getBank(accountUUID);
+                    currentBalance = bank != null ? bank.getDepositorBalance(player.getUUID()) : 0;
+                }
                 default -> currentBalance = 0;
             }
 

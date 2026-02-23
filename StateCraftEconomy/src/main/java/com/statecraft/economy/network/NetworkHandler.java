@@ -217,6 +217,13 @@ public class NetworkHandler {
             .consumerMainThread(ServerPacketHandler::handleStockMarketAction)
             .add();
 
+        // Item value sync packet (server -> client, sent on login)
+        CHANNEL.messageBuilder(SyncItemValuesPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncItemValuesPacket::encode)
+            .decoder(SyncItemValuesPacket::new)
+            .consumerMainThread(NetworkHandler::handleSyncItemValuesClient)
+            .add();
+
         StateCraftEconomy.LOGGER.info("StateCraft Economy network packets registered");
     }
 
@@ -278,6 +285,11 @@ public class NetworkHandler {
 
     private static void handleSyncStockListingsClient(SyncStockListingsPacket packet, Supplier<NetworkEvent.Context> ctx) {
         DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientPacketHandler.handleSyncStockListings(packet, ctx));
+        ctx.get().setPacketHandled(true);
+    }
+
+    private static void handleSyncItemValuesClient(SyncItemValuesPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientPacketHandler.handleSyncItemValues(packet, ctx));
         ctx.get().setPacketHandled(true);
     }
 

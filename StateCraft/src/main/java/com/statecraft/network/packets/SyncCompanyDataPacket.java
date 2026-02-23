@@ -29,6 +29,15 @@ public class SyncCompanyDataPacket {
     private final List<String> officerNames;
     private final String resultMessage;
 
+    // Bank-specific fields (only populated when companyType is BANK)
+    private final double depositInterestRate;
+    private final double loanInterestRate;
+    private final double withdrawalFee;
+    private final double transferFee;
+    private final double reserveRatio;
+    private final int activeLoanCount;
+    private final double totalDeposits;
+
     public SyncCompanyDataPacket(boolean hasCompany, String companyName, String companyId,
                                   String founderName, String description,
                                   int totalShares, int playerShares,
@@ -40,6 +49,28 @@ public class SyncCompanyDataPacket {
                                   List<ShareholderEntry> shareholders,
                                   List<String> officerNames,
                                   String resultMessage) {
+        this(hasCompany, companyName, companyId, founderName, description,
+             totalShares, playerShares, shareholderCount, officerCount,
+             headquartersCity, isFounder, isOfficer, dividendsEnabled, dividendRate,
+             companyType, shareholders, officerNames, resultMessage,
+             0, 0, 0, 0, 0, 0, 0);
+    }
+
+    public SyncCompanyDataPacket(boolean hasCompany, String companyName, String companyId,
+                                  String founderName, String description,
+                                  int totalShares, int playerShares,
+                                  int shareholderCount, int officerCount,
+                                  String headquartersCity,
+                                  boolean isFounder, boolean isOfficer,
+                                  boolean dividendsEnabled, double dividendRate,
+                                  String companyType,
+                                  List<ShareholderEntry> shareholders,
+                                  List<String> officerNames,
+                                  String resultMessage,
+                                  double depositInterestRate, double loanInterestRate,
+                                  double withdrawalFee, double transferFee,
+                                  double reserveRatio, int activeLoanCount,
+                                  double totalDeposits) {
         this.hasCompany = hasCompany;
         this.companyName = companyName;
         this.companyId = companyId;
@@ -58,6 +89,13 @@ public class SyncCompanyDataPacket {
         this.shareholders = shareholders;
         this.officerNames = officerNames;
         this.resultMessage = resultMessage != null ? resultMessage : "";
+        this.depositInterestRate = depositInterestRate;
+        this.loanInterestRate = loanInterestRate;
+        this.withdrawalFee = withdrawalFee;
+        this.transferFee = transferFee;
+        this.reserveRatio = reserveRatio;
+        this.activeLoanCount = activeLoanCount;
+        this.totalDeposits = totalDeposits;
     }
 
     public SyncCompanyDataPacket(FriendlyByteBuf buf) {
@@ -90,6 +128,15 @@ public class SyncCompanyDataPacket {
         }
 
         this.resultMessage = buf.readUtf();
+
+        // Bank-specific fields
+        this.depositInterestRate = buf.readDouble();
+        this.loanInterestRate = buf.readDouble();
+        this.withdrawalFee = buf.readDouble();
+        this.transferFee = buf.readDouble();
+        this.reserveRatio = buf.readDouble();
+        this.activeLoanCount = buf.readVarInt();
+        this.totalDeposits = buf.readDouble();
     }
 
     public void encode(FriendlyByteBuf buf) {
@@ -122,6 +169,15 @@ public class SyncCompanyDataPacket {
         }
 
         buf.writeUtf(resultMessage);
+
+        // Bank-specific fields
+        buf.writeDouble(depositInterestRate);
+        buf.writeDouble(loanInterestRate);
+        buf.writeDouble(withdrawalFee);
+        buf.writeDouble(transferFee);
+        buf.writeDouble(reserveRatio);
+        buf.writeVarInt(activeLoanCount);
+        buf.writeDouble(totalDeposits);
     }
 
     // Getters
@@ -143,6 +199,13 @@ public class SyncCompanyDataPacket {
     public List<ShareholderEntry> getShareholders() { return shareholders; }
     public List<String> getOfficerNames() { return officerNames; }
     public String getResultMessage() { return resultMessage; }
+    public double getDepositInterestRate() { return depositInterestRate; }
+    public double getLoanInterestRate() { return loanInterestRate; }
+    public double getWithdrawalFee() { return withdrawalFee; }
+    public double getTransferFee() { return transferFee; }
+    public double getReserveRatio() { return reserveRatio; }
+    public int getActiveLoanCount() { return activeLoanCount; }
+    public double getTotalDeposits() { return totalDeposits; }
 
     public static class ShareholderEntry {
         public final String name;

@@ -87,6 +87,19 @@ public class StateCraftIntegration {
                         case "setDividendsEnabled" -> economyIntegrationImpl.setDividendsEnabled((UUID) args[0], (Boolean) args[1]);
                         case "setDividendRate" -> economyIntegrationImpl.setDividendRate((UUID) args[0], (Double) args[1]);
                         case "setDividendPeriodTicks" -> economyIntegrationImpl.setDividendPeriodTicks((UUID) args[0], (Long) args[1]);
+                        // Bank-specific methods
+                        case "getBankDepositInterestRate" -> { return economyIntegrationImpl.getBankDepositInterestRate((UUID) args[0]); }
+                        case "getBankLoanInterestRate" -> { return economyIntegrationImpl.getBankLoanInterestRate((UUID) args[0]); }
+                        case "getBankWithdrawalFee" -> { return economyIntegrationImpl.getBankWithdrawalFee((UUID) args[0]); }
+                        case "getBankTransferFee" -> { return economyIntegrationImpl.getBankTransferFee((UUID) args[0]); }
+                        case "getBankReserveRatio" -> { return economyIntegrationImpl.getBankReserveRatio((UUID) args[0]); }
+                        case "getBankActiveLoanCount" -> { return economyIntegrationImpl.getBankActiveLoanCount((UUID) args[0]); }
+                        case "getBankTotalDeposits" -> { return economyIntegrationImpl.getBankTotalDeposits((UUID) args[0]); }
+                        case "setBankDepositInterestRate" -> economyIntegrationImpl.setBankDepositInterestRate((UUID) args[0], (Double) args[1]);
+                        case "setBankLoanInterestRate" -> economyIntegrationImpl.setBankLoanInterestRate((UUID) args[0], (Double) args[1]);
+                        case "setBankWithdrawalFee" -> economyIntegrationImpl.setBankWithdrawalFee((UUID) args[0], (Double) args[1]);
+                        case "setBankTransferFee" -> economyIntegrationImpl.setBankTransferFee((UUID) args[0], (Double) args[1]);
+                        case "issueBankLoan" -> { return economyIntegrationImpl.issueBankLoan((UUID) args[0], (UUID) args[1], (Double) args[2]); }
                     }
                     return null;
                 }
@@ -360,6 +373,87 @@ public class StateCraftIntegration {
             var mgr = com.statecraft.economy.company.CompanyEconomyManager.getInstance();
             mgr.getOrCreateDividendConfig(companyId).setPeriodTicks(ticks);
             mgr.markDirty();
+        }
+
+        // ==================== Bank Company Methods ====================
+
+        public double getBankDepositInterestRate(UUID companyId) {
+            var bank = com.statecraft.economy.company.BankManager.getInstance().getBank(companyId);
+            return bank != null ? bank.getDepositInterestRate() : 0;
+        }
+
+        public double getBankLoanInterestRate(UUID companyId) {
+            var bank = com.statecraft.economy.company.BankManager.getInstance().getBank(companyId);
+            return bank != null ? bank.getLoanInterestRate() : 0;
+        }
+
+        public double getBankWithdrawalFee(UUID companyId) {
+            var registryBank = EconomyManager.getInstance().getBankRegistry().getBank(companyId);
+            return registryBank != null ? registryBank.getWithdrawalFee() : 0;
+        }
+
+        public double getBankTransferFee(UUID companyId) {
+            var registryBank = EconomyManager.getInstance().getBankRegistry().getBank(companyId);
+            return registryBank != null ? registryBank.getTransferFee() : 0;
+        }
+
+        public double getBankReserveRatio(UUID companyId) {
+            var bank = com.statecraft.economy.company.BankManager.getInstance().getBank(companyId);
+            return bank != null ? bank.getReserveRatio() : 0;
+        }
+
+        public int getBankActiveLoanCount(UUID companyId) {
+            var bank = com.statecraft.economy.company.BankManager.getInstance().getBank(companyId);
+            return bank != null ? bank.getActiveLoans().size() : 0;
+        }
+
+        public double getBankTotalDeposits(UUID companyId) {
+            var bank = com.statecraft.economy.company.BankManager.getInstance().getBank(companyId);
+            return bank != null ? bank.getTotalDeposits() : 0;
+        }
+
+        public void setBankDepositInterestRate(UUID companyId, double rate) {
+            var bank = com.statecraft.economy.company.BankManager.getInstance().getBank(companyId);
+            if (bank != null) {
+                bank.setDepositInterestRate(rate);
+                com.statecraft.economy.company.BankManager.getInstance().markDirty();
+                var registryBank = EconomyManager.getInstance().getBankRegistry().getBank(companyId);
+                if (registryBank != null) registryBank.setInterestRate(rate);
+            }
+        }
+
+        public void setBankLoanInterestRate(UUID companyId, double rate) {
+            var bank = com.statecraft.economy.company.BankManager.getInstance().getBank(companyId);
+            if (bank != null) {
+                bank.setLoanInterestRate(rate);
+                com.statecraft.economy.company.BankManager.getInstance().markDirty();
+            }
+        }
+
+        public void setBankWithdrawalFee(UUID companyId, double fee) {
+            var registryBank = EconomyManager.getInstance().getBankRegistry().getBank(companyId);
+            if (registryBank != null) {
+                registryBank.setWithdrawalFee(fee);
+                EconomyManager.getInstance().markDirty();
+            }
+        }
+
+        public void setBankTransferFee(UUID companyId, double fee) {
+            var registryBank = EconomyManager.getInstance().getBankRegistry().getBank(companyId);
+            if (registryBank != null) {
+                registryBank.setTransferFee(fee);
+                EconomyManager.getInstance().markDirty();
+            }
+        }
+
+
+        public String issueBankLoan(UUID companyId, UUID borrowerId, double amount) {
+            var bankManager = com.statecraft.economy.company.BankManager.getInstance();
+            var loan = bankManager.applyForLoan(borrowerId, companyId, amount);
+            if (loan != null) {
+                return "§aLoan of " + EconomyManager.getInstance().formatCurrency(amount) + " issued successfully. Loan ID: " + loan.getId().toString().substring(0, 8);
+            }
+            return "§cLoan rejected. Check: member status, reserve compliance, loan limits, and available lending capacity.";
         }
     }
 
@@ -1155,7 +1249,7 @@ public class StateCraftIntegration {
                 SpendingLimitManager.GovernmentRole role =
                     getPlayerGovernmentRole(player, "NATION", nationId);
                 String limitError = spendingMgr.checkSpendingLimit(
-                    player.getUUID(), "NATION", nationId, amount, role, nationId);
+                    player.getUUID(), "NATION", nationId, amount, role, nationId, player);
                 if (limitError != null) {
                     NetworkHandler.sendToPlayer(new TransactionResultPacket(false,
                         limitError, manager.getBalance(player.getUUID())), player);

@@ -385,6 +385,67 @@ public class IntegrationRegistry {
 
     // ==================== Minimap Integration ====================
 
+    // ==================== Bank Company Integration ====================
+
+    public static double getBankDepositInterestRate(UUID companyId) {
+        if (economyIntegration != null) { try { return economyIntegration.getBankDepositInterestRate(companyId); } catch (Exception e) {} }
+        return 0;
+    }
+
+    public static double getBankLoanInterestRate(UUID companyId) {
+        if (economyIntegration != null) { try { return economyIntegration.getBankLoanInterestRate(companyId); } catch (Exception e) {} }
+        return 0;
+    }
+
+    public static double getBankWithdrawalFee(UUID companyId) {
+        if (economyIntegration != null) { try { return economyIntegration.getBankWithdrawalFee(companyId); } catch (Exception e) {} }
+        return 0;
+    }
+
+    public static double getBankTransferFee(UUID companyId) {
+        if (economyIntegration != null) { try { return economyIntegration.getBankTransferFee(companyId); } catch (Exception e) {} }
+        return 0;
+    }
+
+    public static double getBankReserveRatio(UUID companyId) {
+        if (economyIntegration != null) { try { return economyIntegration.getBankReserveRatio(companyId); } catch (Exception e) {} }
+        return 0;
+    }
+
+    public static int getBankActiveLoanCount(UUID companyId) {
+        if (economyIntegration != null) { try { return economyIntegration.getBankActiveLoanCount(companyId); } catch (Exception e) {} }
+        return 0;
+    }
+
+    public static double getBankTotalDeposits(UUID companyId) {
+        if (economyIntegration != null) { try { return economyIntegration.getBankTotalDeposits(companyId); } catch (Exception e) {} }
+        return 0;
+    }
+
+    public static void setBankDepositInterestRate(UUID companyId, double rate) {
+        if (economyIntegration != null) { try { economyIntegration.setBankDepositInterestRate(companyId, rate); } catch (Exception e) {} }
+    }
+
+    public static void setBankLoanInterestRate(UUID companyId, double rate) {
+        if (economyIntegration != null) { try { economyIntegration.setBankLoanInterestRate(companyId, rate); } catch (Exception e) {} }
+    }
+
+    public static void setBankWithdrawalFee(UUID companyId, double fee) {
+        if (economyIntegration != null) { try { economyIntegration.setBankWithdrawalFee(companyId, fee); } catch (Exception e) {} }
+    }
+
+    public static void setBankTransferFee(UUID companyId, double fee) {
+        if (economyIntegration != null) { try { economyIntegration.setBankTransferFee(companyId, fee); } catch (Exception e) {} }
+    }
+
+
+    public static String issueBankLoan(UUID companyId, UUID borrowerId, double amount) {
+        if (economyIntegration != null) { try { return economyIntegration.issueBankLoan(companyId, borrowerId, amount); } catch (Exception e) { return "Error: " + e.getMessage(); } }
+        return "Economy module not loaded";
+    }
+
+    // ==================== Minimap Integration (original) ====================
+
     /**
      * Register a minimap integration handler
      */

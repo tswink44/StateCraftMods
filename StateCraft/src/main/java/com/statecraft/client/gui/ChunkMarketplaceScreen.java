@@ -65,6 +65,14 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
     private boolean showBuyConfirmation = false;
     private ChunkListing confirmationListing = null;
 
+    // Sell listing popup
+    private boolean showSellPopup = false;
+    private int sellChunkX = 0;
+    private int sellChunkZ = 0;
+    private net.minecraft.client.gui.components.EditBox sellPriceInput;
+    private String sellStatusMessage = "";
+    private int sellStatusTicks = 0;
+
     // Map data - chunks for sale in visible area
     private java.util.Map<Long, ChunkListing> mapListings = new java.util.HashMap<>();
 
@@ -75,6 +83,8 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
     private Button scrollDownButton;
     private Button confirmBuyButton;
     private Button cancelBuyButton;
+    private Button confirmSellButton;
+    private Button cancelSellButton;
 
     // Sidebar width
     private static final int SIDEBAR_WIDTH = 80;
@@ -326,7 +336,7 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
 
         int centerX = this.width / 2;
 
-        if (!showBuyConfirmation) {
+        if (!showBuyConfirmation && !showSellPopup) {
             // Toggle view button (List/Map)
             String toggleText = mapMode ? "List View" : "Map View";
             toggleViewButton = this.addRenderableWidget(Button.builder(
@@ -362,7 +372,7 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
                 Component.literal("Back"),
                 btn -> goBack()
             ).pos(guiLeft + guiWidth / 2 - 40, guiTop + guiHeight - 24).size(80, 20).build());
-        } else {
+        } else if (showBuyConfirmation) {
             // Buy confirmation popup buttons
             int popupCenterX = this.width / 2;
             int popupY = this.height / 2;
@@ -376,6 +386,29 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
                 Component.literal("Cancel"),
                 btn -> cancelPurchase()
             ).pos(popupCenterX - 40, popupY + 55).size(80, 20).build());
+        } else if (showSellPopup) {
+            // Sell listing popup buttons
+            int popupCenterX = this.width / 2;
+            int popupY = (this.height - 140) / 2;
+
+            // Price input field
+            sellPriceInput = new net.minecraft.client.gui.components.EditBox(
+                this.font, popupCenterX - 50, popupY + 58, 100, 18, Component.literal("Price"));
+            sellPriceInput.setHint(Component.literal("Enter price..."));
+            sellPriceInput.setFilter(s -> s.isEmpty() || s.matches("[0-9.]*"));
+            sellPriceInput.setMaxLength(15);
+            this.addRenderableWidget(sellPriceInput);
+            this.setFocused(sellPriceInput);
+
+            confirmSellButton = this.addRenderableWidget(Button.builder(
+                Component.literal("§aList for Sale"),
+                btn -> confirmSellListing()
+            ).pos(popupCenterX - 70, popupY + 84).size(140, 20).build());
+
+            cancelSellButton = this.addRenderableWidget(Button.builder(
+                Component.literal("Cancel"),
+                btn -> cancelSellPopup()
+            ).pos(popupCenterX - 40, popupY + 110).size(80, 20).build());
         }
     }
 
@@ -400,6 +433,12 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
         // Buy confirmation popup
         if (showBuyConfirmation && confirmationListing != null) {
             renderBuyConfirmationPopup(graphics);
+            return;
+        }
+
+        // Sell listing popup
+        if (showSellPopup) {
+            renderSellPopup(graphics);
             return;
         }
 
@@ -607,7 +646,7 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
 
             // Instruction
             graphics.drawString(this.font, "§8Dbl-click", sidebarX + 4, infoY, 0xFF666666);
-            graphics.drawString(this.font, "§8to buy", sidebarX + 4, infoY + 10, 0xFF666666);
+            graphics.drawString(this.font, "§8to buy/sell", sidebarX + 4, infoY + 10, 0xFF666666);
         } else if (hoveredChunkX != Integer.MIN_VALUE) {
             // Show hovered chunk info
             long hoveredKey = chunkKey(hoveredChunkX, hoveredChunkZ);
@@ -623,7 +662,8 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
                 infoY += 14;
                 graphics.drawString(this.font, "§a" + formatPrice(hoveredListing.price), sidebarX + 4, infoY, 0xFFFFFFFF);
             } else {
-                graphics.drawString(this.font, "§8Not for sale", sidebarX + 4, infoY, 0xFF888888);
+                graphics.drawString(this.font, "§8Dbl-click to", sidebarX + 4, infoY, 0xFF888888);
+                graphics.drawString(this.font, "§8manage", sidebarX + 4, infoY + 10, 0xFF888888);
             }
         } else {
             graphics.drawString(this.font, "§8Click a chunk", sidebarX + 4, sidebarY + 20, 0xFF888888);
@@ -675,7 +715,7 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (showBuyConfirmation) {
+        if (showBuyConfirmation || showSellPopup) {
             return super.mouseClicked(mouseX, mouseY, button);
         }
 
@@ -717,6 +757,14 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
                 if (clickedListing != null) {
                     showBuyConfirmation = true;
                     confirmationListing = clickedListing;
+                    buildUI();
+                } else {
+                    // Double-click on a non-listed chunk - show sell popup
+                    sellChunkX = clickedChunkX;
+                    sellChunkZ = clickedChunkZ;
+                    showSellPopup = true;
+                    sellStatusMessage = "";
+                    sellStatusTicks = 0;
                     buildUI();
                 }
                 lastClickTime = 0;
@@ -816,12 +864,143 @@ public class ChunkMarketplaceScreen extends StateCraftScreen {
     }
 
     @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (showSellPopup) {
+            if (keyCode == 257 || keyCode == 335) { // Enter or numpad Enter
+                confirmSellListing();
+                return true;
+            }
+            if (keyCode == 256) { // Escape
+                cancelSellPopup();
+                return true;
+            }
+        }
+        if (showBuyConfirmation && keyCode == 256) {
+            cancelPurchase();
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
         if (!mapMode) {
             scroll(delta > 0 ? -1 : 1);
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+
+    private void renderSellPopup(GuiGraphics graphics) {
+        int popupWidth = 220;
+        int popupHeight = 140;
+        int popupX = (this.width - popupWidth) / 2;
+        int popupY = (this.height - popupHeight) / 2;
+
+        // Background
+        graphics.fill(popupX - 2, popupY - 2, popupX + popupWidth + 2, popupY + popupHeight + 2, 0xFF222244);
+        graphics.fill(popupX, popupY, popupX + popupWidth, popupY + popupHeight, 0xDD1A1A2E);
+
+        // Title
+        graphics.drawCenteredString(this.font, "§6List Chunk for Sale", this.width / 2, popupY + 8, 0xFFFFFFFF);
+
+        // Chunk info
+        String chunkText = "Chunk: (" + sellChunkX + ", " + sellChunkZ + ")";
+        graphics.drawCenteredString(this.font, chunkText, this.width / 2, popupY + 28, 0xFFCCCCCC);
+
+        // Price label
+        graphics.drawCenteredString(this.font, "§7Sale Price:", this.width / 2, popupY + 46, 0xFFAAAAAA);
+
+        // Status message
+        if (sellStatusTicks > 0 && !sellStatusMessage.isEmpty()) {
+            int color = sellStatusMessage.startsWith("§a") ? 0xFF55FF55 : 0xFFFF5555;
+            graphics.drawCenteredString(this.font, sellStatusMessage, this.width / 2, popupY + popupHeight - 8, color);
+        }
+    }
+
+    private void confirmSellListing() {
+        if (sellPriceInput == null) return;
+
+        String priceText = sellPriceInput.getValue().trim();
+        if (priceText.isEmpty()) {
+            sellStatusMessage = "§cEnter a price";
+            sellStatusTicks = 60;
+            return;
+        }
+
+        try {
+            double price = Double.parseDouble(priceText);
+            if (price <= 0) {
+                sellStatusMessage = "§cPrice must be positive";
+                sellStatusTicks = 60;
+                return;
+            }
+
+            // Send LIST_FOR_SALE packet via reflection (Economy mod)
+            Class<?> packetClass = Class.forName("com.statecraft.economy.network.packets.ChunkMarketPacket");
+            Class<?> actionClass = Class.forName("com.statecraft.economy.network.packets.ChunkMarketPacket$Action");
+            Object listAction = java.lang.Enum.valueOf((Class<Enum>) actionClass, "LIST_FOR_SALE");
+
+            var constructor = packetClass.getConstructor(actionClass, int.class, int.class, double.class);
+            var packet = constructor.newInstance(listAction, sellChunkX, sellChunkZ, price);
+
+            Class<?> networkClass = Class.forName("com.statecraft.economy.network.NetworkHandler");
+            var sendMethod = networkClass.getMethod("sendToServer", Object.class);
+            sendMethod.invoke(null, packet);
+
+            if (this.minecraft.player != null) {
+                this.minecraft.player.sendSystemMessage(
+                    Component.literal("§aChunk (" + sellChunkX + ", " + sellChunkZ + ") listed for $" + String.format("%.0f", price)));
+            }
+
+            // Close popup and refresh
+            showSellPopup = false;
+            sellPriceInput = null;
+            buildUI();
+
+            // Refresh marketplace data
+            NetworkHandler.sendToServer(new RequestMarketplaceDataPacket(playerChunkX, playerChunkZ));
+
+        } catch (ClassNotFoundException e) {
+            sellStatusMessage = "§cEconomy mod required";
+            sellStatusTicks = 60;
+        } catch (NumberFormatException e) {
+            sellStatusMessage = "§cInvalid price";
+            sellStatusTicks = 60;
+        } catch (Exception e) {
+            sellStatusMessage = "§cError: " + e.getMessage();
+            sellStatusTicks = 60;
+        }
+    }
+
+    private void cancelSellPopup() {
+        showSellPopup = false;
+        sellPriceInput = null;
+        buildUI();
+    }
+
+    /**
+     * Open the ChunkMarketScreen from the Economy mod for a specific chunk.
+     * This allows nation leaders, governors, and mayors to list chunks for sale.
+     * Permission checks are handled server-side.
+     */
+    private void openChunkMarketScreen(int chunkX, int chunkZ) {
+        try {
+            Class<?> screenClass = Class.forName("com.statecraft.economy.client.screen.ChunkMarketScreen");
+            var constructor = screenClass.getConstructor(int.class, int.class);
+            var screen = constructor.newInstance(chunkX, chunkZ);
+            this.minecraft.setScreen((net.minecraft.client.gui.screens.Screen) screen);
+        } catch (ClassNotFoundException e) {
+            if (this.minecraft.player != null) {
+                this.minecraft.player.sendSystemMessage(
+                    Component.literal("§cStateCraft Economy mod required"));
+            }
+        } catch (Exception e) {
+            if (this.minecraft.player != null) {
+                this.minecraft.player.sendSystemMessage(
+                    Component.literal("§cError opening chunk market screen"));
+            }
+        }
     }
 
     private void goBack() {

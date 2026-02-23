@@ -79,6 +79,35 @@ public class ClientPacketHandler {
         ctx.get().enqueueWork(() -> {
             cachedAccounts = new ArrayList<>(packet.getAccounts());
 
+            // Update client-side BankRegistry with server's bank list
+            if (!packet.getBanks().isEmpty()) {
+                var registry = com.statecraft.economy.core.EconomyManager.getInstance().getBankRegistry();
+                for (var bankInfo : packet.getBanks()) {
+                    try {
+                        java.util.UUID bankId = java.util.UUID.fromString(bankInfo.id());
+                        if (!registry.bankExists(bankId)) {
+                            var bank = new com.statecraft.economy.core.Bank(bankId, bankInfo.name(), bankInfo.displayName());
+                            bank.setInterestRate(bankInfo.interestRate());
+                            bank.setWithdrawalFee(bankInfo.withdrawalFee());
+                            bank.setTransferFee(bankInfo.transferFee());
+                            bank.setAllowsLoans(bankInfo.allowsLoans());
+                            bank.setColor(bankInfo.color());
+                            registry.registerBank(bank);
+                        } else {
+                            // Update existing entry
+                            var bank = registry.getBank(bankId);
+                            bank.setName(bankInfo.name());
+                            bank.setDisplayName(bankInfo.displayName());
+                            bank.setInterestRate(bankInfo.interestRate());
+                            bank.setWithdrawalFee(bankInfo.withdrawalFee());
+                            bank.setTransferFee(bankInfo.transferFee());
+                            bank.setAllowsLoans(bankInfo.allowsLoans());
+                            bank.setColor(bankInfo.color());
+                        }
+                    } catch (Exception ignored) {}
+                }
+            }
+
             // Update ATM screen if open
             Minecraft mc = Minecraft.getInstance();
             if (mc.screen instanceof SimpleATMScreen simpleAtm) {
@@ -261,6 +290,13 @@ public class ClientPacketHandler {
             if (mc.screen instanceof com.statecraft.economy.client.screen.StockMarketScreen stockScreen) {
                 stockScreen.updateListings(packet.getEntries(), packet.isMyListingsView(), packet.getPlayerShares());
             }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    public static void handleSyncItemValues(SyncItemValuesPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            com.statecraft.economy.config.ItemValueRegistry.getInstance().receiveSyncedValues(packet.getItemValues());
         });
         ctx.get().setPacketHandled(true);
     }

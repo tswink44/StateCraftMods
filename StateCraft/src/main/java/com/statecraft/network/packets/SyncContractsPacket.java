@@ -116,6 +116,7 @@ public class SyncContractsPacket {
         private final java.util.Set<Integer> pendingMilestoneApprovals;  // Milestones waiting for approval
         private final java.util.List<int[]> chunkCoordinates;  // List of [x, z] chunk coordinates
         private final String dimension;  // e.g., "minecraft:overworld"
+        private final boolean finalApprovalRequested;  // Contractor has submitted for early final approval
 
         public ContractSummary(String contractId, String contractNumber, String title, String description,
                                String creatorName, String status, String compensationType, double budget, double bondAmount,
@@ -123,7 +124,8 @@ public class SyncContractsPacket {
                                int progressPercent, boolean playerHasBid, boolean isPlayerContractor, boolean isPlayerCreator,
                                List<BidSummary> bids, java.util.Map<Integer, Boolean> milestonesCompleted,
                                java.util.Set<Integer> pendingMilestoneApprovals,
-                               java.util.List<int[]> chunkCoordinates, String dimension) {
+                               java.util.List<int[]> chunkCoordinates, String dimension,
+                               boolean finalApprovalRequested) {
             this.contractId = contractId;
             this.contractNumber = contractNumber;
             this.title = title;
@@ -146,6 +148,7 @@ public class SyncContractsPacket {
             this.pendingMilestoneApprovals = pendingMilestoneApprovals;
             this.chunkCoordinates = chunkCoordinates;
             this.dimension = dimension;
+            this.finalApprovalRequested = finalApprovalRequested;
         }
 
         public void encode(FriendlyByteBuf buf) {
@@ -192,6 +195,7 @@ public class SyncContractsPacket {
                 buf.writeVarInt(chunk[1]);
             }
             buf.writeUtf(dimension != null ? dimension : "minecraft:overworld", 128);
+            buf.writeBoolean(finalApprovalRequested);
         }
 
         public static ContractSummary decode(FriendlyByteBuf buf) {
@@ -242,11 +246,12 @@ public class SyncContractsPacket {
                 chunkCoordinates.add(new int[]{buf.readVarInt(), buf.readVarInt()});
             }
             String dimension = buf.readUtf(128);
+            boolean finalApprovalRequested = buf.readBoolean();
 
             return new ContractSummary(contractId, contractNumber, title, description, creatorName,
                 status, compensationType, budget, bondAmount, chunkCount, bidCount, timeRemaining, contractorName,
                 progressPercent, playerHasBid, isPlayerContractor, isPlayerCreator, bids, milestonesCompleted, pendingMilestoneApprovals,
-                chunkCoordinates, dimension);
+                chunkCoordinates, dimension, finalApprovalRequested);
         }
 
         // Getters
@@ -272,6 +277,7 @@ public class SyncContractsPacket {
         public java.util.Set<Integer> getPendingMilestoneApprovals() { return pendingMilestoneApprovals; }
         public java.util.List<int[]> getChunkCoordinates() { return chunkCoordinates; }
         public String getDimension() { return dimension; }
+        public boolean isFinalApprovalRequested() { return finalApprovalRequested; }
     }
 
     /**

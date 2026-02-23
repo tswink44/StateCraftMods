@@ -197,7 +197,7 @@ public class InvitationManager {
         return true;
     }
 
-    private void removeInvitation(UUID invitationId) {
+    public void removeInvitation(UUID invitationId) {
         Invitation invitation = invitations.remove(invitationId);
         if (invitation != null) {
             Set<UUID> playerInvs = playerInvitations.get(invitation.getTargetPlayerId());
