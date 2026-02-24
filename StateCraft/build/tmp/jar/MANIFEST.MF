@@ -3,7 +3,7 @@ Specification-Title: StateCraft
 Specification-Vendor: StateCraft
 Specification-Version: 1
 Implementation-Title: StateCraft
-Implementation-Version: 1.0.0
+Implementation-Version: 1.1.1
 Implementation-Vendor: StateCraft
-Implementation-Timestamp: 2026-02-23T17:07:12-0500
+Implementation-Timestamp: 2026-02-23T21:14:18-0500
 

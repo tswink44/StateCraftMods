@@ -6,6 +6,7 @@ import com.statecraft.core.ChunkClaimManager;
 import com.statecraft.core.City;
 import com.statecraft.core.Nation;
 import com.statecraft.core.State;
+import com.statecraft.data.BackupManager;
 import com.statecraft.event.ProtectionHandler;
 import com.statecraft.network.ServerPacketHandler;
 import net.minecraft.commands.CommandSourceStack;
@@ -122,7 +123,16 @@ public class AdminCommand {
                     .then(Commands.argument("state", com.mojang.brigadier.arguments.StringArgumentType.string())
                         .then(Commands.argument("city", com.mojang.brigadier.arguments.StringArgumentType.string())
                             .then(Commands.argument("newname", com.mojang.brigadier.arguments.StringArgumentType.string())
-                                .executes(AdminCommand::renameCity))))));
+                                .executes(AdminCommand::renameCity))))))
+            .then(Commands.literal("backup")
+                .then(Commands.literal("now")
+                    .executes(AdminCommand::runBackupNow))
+                .then(Commands.literal("status")
+                    .executes(AdminCommand::backupStatus))
+                .then(Commands.literal("enable")
+                    .executes(ctx -> setBackupEnabled(ctx, true)))
+                .then(Commands.literal("disable")
+                    .executes(ctx -> setBackupEnabled(ctx, false))));
     }
 
     /**
@@ -1152,6 +1162,49 @@ public class AdminCommand {
             context.getSource().sendFailure(Component.literal("Error: " + e.getMessage()));
             return 0;
         }
+    }
+
+    // ==================== Backup Commands ====================
+
+    private static int runBackupNow(CommandContext<CommandSourceStack> context) {
+        context.getSource().sendSuccess(() -> Component.literal("§7Creating backup..."), false);
+        boolean success = BackupManager.getInstance().runBackup(context.getSource().getServer());
+        if (success) {
+            context.getSource().sendSuccess(() -> Component.literal("§a§lBackup created successfully!"), true);
+        } else {
+            context.getSource().sendFailure(Component.literal("§cBackup failed. Check server logs."));
+        }
+        return success ? 1 : 0;
+    }
+
+    private static int backupStatus(CommandContext<CommandSourceStack> context) {
+        BackupManager bm = BackupManager.getInstance();
+        boolean enabled = bm.isEnabled();
+        long ticksLeft = bm.getTicksUntilNextBackup();
+        long secondsLeft = ticksLeft / 20;
+        long minutes = secondsLeft / 60;
+        long seconds = secondsLeft % 60;
+
+        context.getSource().sendSuccess(() -> Component.literal(
+            "§6=== Backup Status ===\n" +
+            "§7Auto-backup: " + (enabled ? "§aEnabled" : "§cDisabled") + "\n" +
+            "§7Next backup in: §f" + minutes + "m " + seconds + "s\n" +
+            "§7Interval: §f1 hour\n" +
+            "§7Max backups kept: §f24"
+        ), false);
+        return 1;
+    }
+
+    private static int setBackupEnabled(CommandContext<CommandSourceStack> context, boolean enabled) {
+        BackupManager.getInstance().setEnabled(enabled);
+        if (enabled) {
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§a§lAutomatic backups enabled"), true);
+        } else {
+            context.getSource().sendSuccess(() -> Component.literal(
+                "§c§lAutomatic backups disabled"), true);
+        }
+        return 1;
     }
 }
 

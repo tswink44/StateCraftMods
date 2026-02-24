@@ -2,7 +2,9 @@ package com.statecraft.network.packets;
 
 import net.minecraft.network.FriendlyByteBuf;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -13,12 +15,18 @@ public class SyncChunkMapPacket {
     private final int playerZ;
     private final String playerNation;
     private final Map<Long, ChunkInfo> chunks;
+    private final List<String> claimableCities; // Cities the player can claim chunks for
 
     public SyncChunkMapPacket(int playerX, int playerZ, String playerNation, Map<Long, ChunkInfo> chunks) {
+        this(playerX, playerZ, playerNation, chunks, new ArrayList<>());
+    }
+
+    public SyncChunkMapPacket(int playerX, int playerZ, String playerNation, Map<Long, ChunkInfo> chunks, List<String> claimableCities) {
         this.playerX = playerX;
         this.playerZ = playerZ;
         this.playerNation = playerNation != null ? playerNation : "";
         this.chunks = chunks;
+        this.claimableCities = claimableCities != null ? claimableCities : new ArrayList<>();
     }
 
     public SyncChunkMapPacket(FriendlyByteBuf buf) {
@@ -40,6 +48,13 @@ public class SyncChunkMapPacket {
             );
             chunks.put(key, info);
         }
+
+        // Read claimable cities
+        int cityCount = buf.readVarInt();
+        this.claimableCities = new ArrayList<>(cityCount);
+        for (int i = 0; i < cityCount; i++) {
+            claimableCities.add(buf.readUtf(64));
+        }
     }
 
     public void encode(FriendlyByteBuf buf) {
@@ -58,12 +73,19 @@ public class SyncChunkMapPacket {
             buf.writeBoolean(info.isEnemy);
             buf.writeBoolean(info.canManage);
         }
+
+        // Write claimable cities
+        buf.writeVarInt(claimableCities.size());
+        for (String city : claimableCities) {
+            buf.writeUtf(city, 64);
+        }
     }
 
     public int getPlayerX() { return playerX; }
     public int getPlayerZ() { return playerZ; }
     public String getPlayerNation() { return playerNation; }
     public Map<Long, ChunkInfo> getChunks() { return chunks; }
+    public List<String> getClaimableCities() { return claimableCities; }
 
     public static class ChunkInfo {
         public final String nationName;

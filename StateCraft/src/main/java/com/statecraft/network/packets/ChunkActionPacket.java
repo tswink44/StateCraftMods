@@ -30,14 +30,14 @@ public class ChunkActionPacket {
         this.action = buf.readEnum(Action.class);
         this.chunkX = buf.readInt();
         this.chunkZ = buf.readInt();
-        this.cityName = buf.readUtf(24);
+        this.cityName = buf.readUtf(64);
     }
 
     public void encode(FriendlyByteBuf buf) {
         buf.writeEnum(action);
         buf.writeInt(chunkX);
         buf.writeInt(chunkZ);
-        buf.writeUtf(cityName, 24);
+        buf.writeUtf(cityName, 64);
     }
 
     public Action getAction() {

@@ -4,7 +4,9 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.statecraft.core.ChunkClaimManager;
+import com.statecraft.core.City;
 import com.statecraft.core.Nation;
+import com.statecraft.core.State;
 import com.statecraft.data.NationSavedData;
 import com.statecraft.legislature.Bill;
 import com.statecraft.legislature.Legislature;
@@ -446,17 +448,36 @@ public class LegislatureCommand {
                         int max = Integer.parseInt(entry.getValue());
                         nation.setMaxStates(max);
                     }
+                    case MAX_CITIES_PER_STATE -> {
+                        int max = Integer.parseInt(entry.getValue());
+                        for (State state : nation.getAllStates()) {
+                            state.setMaxCities(max);
+                        }
+                        nation.setDefaultMaxCitiesPerState(max);
+                    }
                     case MAX_CHUNKS_PER_CITY -> {
                         int max = Integer.parseInt(entry.getValue());
+                        for (State state : nation.getAllStates()) {
+                            for (City city : state.getAllCities()) {
+                                city.setMaxChunks(max);
+                            }
+                        }
                         nation.setMaxChunksPerCity(max);
+                    }
+                    case MAX_CHUNKS_PER_PLAYER -> {
+                        int max = Integer.parseInt(entry.getValue());
+                        nation.setMaxChunksPerPlayer(max);
                     }
                     case OPEN_NATION -> {
                         boolean open = Boolean.parseBoolean(entry.getValue());
                         nation.setOpen(open);
                     }
-                    // Other policy types would be handled here
+                    case OPEN_BORDERS -> {
+                        boolean open = Boolean.parseBoolean(entry.getValue());
+                        nation.setOpenBorders(open);
+                    }
                     default -> {
-                        // Custom laws and diplomacy would need special handling
+                        // Custom laws and diplomacy handled by LegislatureManager
                     }
                 }
             } catch (Exception e) {

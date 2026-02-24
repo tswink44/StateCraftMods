@@ -123,6 +123,17 @@ public class ProfileScreen extends StateCraftScreen {
         ));
         row++;
 
+        // Gap before reports section
+        row++;
+
+        // Tax Report row
+        entries.add(new ProfileEntry("§6Tax Report", startY + spacing * row, true, true));
+        this.addRenderableWidget(createCompactArrowButton(
+            arrowX, startY + spacing * row, arrowBtnWidth, buttonHeight,
+            btn -> openTaxReport()
+        ));
+        row++;
+
         // Nickname edit box (hidden by default)
         nicknameEditBox = new EditBox(this.font, guiLeft + 50, guiTop + 24 + spacing * 2 + 2, guiWidth - 90, 12, Component.literal("Nickname"));
         nicknameEditBox.setMaxLength(32);
@@ -234,6 +245,28 @@ public class ProfileScreen extends StateCraftScreen {
         }
     }
 
+    private void openTaxReport() {
+        try {
+            // Use reflection to open TaxReportScreen from the economy module (soft dependency)
+            Class<?> screenClass = Class.forName("com.statecraft.economy.client.screen.TaxReportScreen");
+            var constructor = screenClass.getConstructor(net.minecraft.client.gui.screens.Screen.class);
+            net.minecraft.client.gui.screens.Screen screen =
+                (net.minecraft.client.gui.screens.Screen) constructor.newInstance(this);
+            this.minecraft.setScreen(screen);
+        } catch (ClassNotFoundException e) {
+            // Economy mod not loaded — show message to player
+            if (this.minecraft != null && this.minecraft.player != null) {
+                this.minecraft.player.displayClientMessage(
+                    Component.literal("§cStateCraft Economy mod is required for tax reports."), false);
+            }
+        } catch (Exception e) {
+            if (this.minecraft != null && this.minecraft.player != null) {
+                this.minecraft.player.displayClientMessage(
+                    Component.literal("§cFailed to open tax report: " + e.getMessage()), false);
+            }
+        }
+    }
+
     private void goBack() {
         this.minecraft.setScreen(new MainMenuScreen());
     }
@@ -298,6 +331,13 @@ public class ProfileScreen extends StateCraftScreen {
 
         // Nation row
         entries.add(new ProfileEntry("Nation: " + (nationName.isEmpty() ? "None" : nationName), startY + spacing * row, true, true));
+        row++;
+
+        // Gap
+        row++;
+
+        // Tax Report row
+        entries.add(new ProfileEntry("§6Tax Report", startY + spacing * row, true, true));
 
         // Update nickname edit box value
         if (nicknameEditBox != null) {

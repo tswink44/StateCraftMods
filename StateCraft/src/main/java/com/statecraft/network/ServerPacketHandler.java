@@ -258,8 +258,23 @@ public class ServerPacketHandler {
             }
 
             String nationName = playerNation != null ? playerNation.getName() : null;
+
+            // Build list of cities the player can claim chunks for
+            List<String> claimableCities = new ArrayList<>();
+            if (playerNation != null) {
+                for (State state : playerNation.getAllStates()) {
+                    for (City city : state.getAllCities()) {
+                        if (player.getUUID().equals(city.getMayorId()) ||
+                            player.getUUID().equals(state.getGovernorId()) ||
+                            playerNation.isLeaderOrOfficer(player.getUUID())) {
+                            claimableCities.add(city.getName());
+                        }
+                    }
+                }
+            }
+
             NetworkHandler.sendToPlayer(new SyncChunkMapPacket(
-                playerPos.x, playerPos.z, nationName, chunks
+                playerPos.x, playerPos.z, nationName, chunks, claimableCities
             ), player);
         });
         ctx.get().setPacketHandled(true);
@@ -282,18 +297,41 @@ public class ServerPacketHandler {
                         return;
                     }
 
-                    // Find first city the player can claim for
+                    // If a city name was specified, use it; otherwise find first available
                     City targetCity = null;
-                    for (State state : nation.getAllStates()) {
-                        for (City city : state.getAllCities()) {
-                            if (player.getUUID().equals(city.getMayorId()) ||
-                                player.getUUID().equals(state.getGovernorId()) ||
-                                nation.isLeaderOrOfficer(player.getUUID())) {
-                                targetCity = city;
+                    String requestedCity = packet.getCityName();
+                    if (requestedCity != null && !requestedCity.isEmpty()) {
+                        // Look up the specific city by name
+                        for (State state : nation.getAllStates()) {
+                            City city = state.getCityByName(requestedCity);
+                            if (city != null) {
+                                // Verify the player has permission for this city
+                                if (player.getUUID().equals(city.getMayorId()) ||
+                                    player.getUUID().equals(state.getGovernorId()) ||
+                                    nation.isLeaderOrOfficer(player.getUUID())) {
+                                    targetCity = city;
+                                }
                                 break;
                             }
                         }
-                        if (targetCity != null) break;
+                        if (targetCity == null) {
+                            NetworkHandler.sendToPlayer(new ActionResultPacket(false,
+                                "City '" + requestedCity + "' not found or you don't have permission"), player);
+                            return;
+                        }
+                    } else {
+                        // No city specified — find first city the player can claim for
+                        for (State state : nation.getAllStates()) {
+                            for (City city : state.getAllCities()) {
+                                if (player.getUUID().equals(city.getMayorId()) ||
+                                    player.getUUID().equals(state.getGovernorId()) ||
+                                    nation.isLeaderOrOfficer(player.getUUID())) {
+                                    targetCity = city;
+                                    break;
+                                }
+                            }
+                            if (targetCity != null) break;
+                        }
                     }
 
                     if (targetCity == null) {

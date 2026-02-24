@@ -5,11 +5,13 @@ import com.statecraft.company.CompanyManager;
 import com.statecraft.contract.ContractManager;
 import com.statecraft.core.ChunkClaimManager;
 import com.statecraft.core.InvitationManager;
+import com.statecraft.data.BackupManager;
 import com.statecraft.data.NationSavedData;
 import com.statecraft.legislature.LegislatureManager;
 import com.statecraft.mail.MailManager;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
+import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.level.LevelEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -35,6 +37,16 @@ public class WorldLoadHandler {
 
         // Initialize mail manager
         MailManager.getInstance().init(level.getServer());
+
+        // Reset backup timer so first backup is one full interval after start
+        BackupManager.getInstance().reset();
+    }
+
+    @SubscribeEvent
+    public void onServerTick(TickEvent.ServerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
+        if (event.getServer() == null) return;
+        BackupManager.getInstance().tick(event.getServer());
     }
 
     @SubscribeEvent
@@ -67,10 +79,27 @@ public class WorldLoadHandler {
 
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
-        StateCraft.LOGGER.info("Server stopping, resetting StateCraft managers...");
+        StateCraft.LOGGER.info("Server stopping, saving and resetting StateCraft managers...");
 
         // Save mail data before shutdown
         MailManager.getInstance().save();
+
+        // Run a final backup before shutdown
+        BackupManager.getInstance().runBackup(event.getServer());
+
+        // CRITICAL: Force-save nation data BEFORE resetting the managers.
+        // If we reset first, SavedData.save() runs later with empty managers and wipes all data.
+        ServerLevel overworld = event.getServer().getLevel(Level.OVERWORLD);
+        if (overworld != null) {
+            // Clean up expired invitations before final save
+            InvitationManager.getInstance().cleanupExpired();
+
+            NationSavedData data = NationSavedData.get(overworld);
+            data.markForSave();
+            // Force the DataStorage to write immediately while managers still have data
+            overworld.getDataStorage().save();
+            StateCraft.LOGGER.info("StateCraft nation data saved before shutdown");
+        }
 
         ChunkClaimManager.resetInstance();
         InvitationManager.resetInstance();

@@ -329,6 +329,35 @@ public class ServerPacketHandler {
                         }
                     }
                 }
+                case COMPANY -> {
+                    // Get all companies
+                    try {
+                        var companyManager = com.statecraft.company.CompanyManager.getInstance();
+                        for (var company : companyManager.getAllCompanies()) {
+                            recipients.add(new SyncTransferRecipientsPacket.RecipientInfo(
+                                company.getName(), company.getId().toString()
+                            ));
+                        }
+                    } catch (Exception e) {
+                        StateCraftEconomy.LOGGER.debug("Error getting companies for transfer: {}", e.getMessage());
+                    }
+                }
+                case BANK_DEPOSIT -> {
+                    // Get banks where the player is a member (can deposit)
+                    try {
+                        var companyManager = com.statecraft.company.CompanyManager.getInstance();
+                        var bankManager = com.statecraft.economy.company.BankManager.getInstance();
+                        for (var bank : bankManager.getPlayerBanks(player.getUUID())) {
+                            var company = companyManager.getCompany(bank.getCompanyId());
+                            String bankName = company != null ? company.getName() : "Bank";
+                            recipients.add(new SyncTransferRecipientsPacket.RecipientInfo(
+                                bankName, bank.getCompanyId().toString()
+                            ));
+                        }
+                    } catch (Exception e) {
+                        StateCraftEconomy.LOGGER.debug("Error getting bank accounts for transfer: {}", e.getMessage());
+                    }
+                }
             }
 
             NetworkHandler.sendToPlayer(new SyncTransferRecipientsPacket(typeName, recipients), player);

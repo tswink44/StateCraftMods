@@ -79,13 +79,17 @@ public class SimpleATMScreen extends Screen {
     // Dropdown state
     private boolean accountDropdownOpen = false;
     private int dropdownX, dropdownY, dropdownWidth, dropdownHeight;
+    private int accountDropdownScrollOffset = 0;
+    private static final int MAX_VISIBLE_ACCOUNTS = 6;
 
     // Transfer recipient state
     private enum TransferTargetType {
         PLAYER("Player"),
         NATION("Nation"),
         STATE("State"),
-        CITY("City");
+        CITY("City"),
+        COMPANY("Company"),
+        BANK_DEPOSIT("Bank Account");
 
         private final String displayName;
         TransferTargetType(String displayName) {
@@ -197,6 +201,9 @@ public class SimpleATMScreen extends Screen {
         addMenuButton(Button.builder(Component.literal("▼ " + getSelectedAccountName()),
             btn -> {
                 accountDropdownOpen = !accountDropdownOpen;
+                if (accountDropdownOpen) {
+                    accountDropdownScrollOffset = 0;
+                }
             })
             .bounds(dropdownX, dropdownY, dropdownWidth, dropdownHeight)
             .build());
@@ -502,8 +509,14 @@ public class SimpleATMScreen extends Screen {
 
     private void renderAccountDropdown(GuiGraphics graphics, int mouseX, int mouseY) {
         int itemHeight = 20;
-        int totalHeight = availableAccounts.size() * itemHeight;
+        int visibleCount = Math.min(availableAccounts.size(), MAX_VISIBLE_ACCOUNTS);
+        int visibleHeight = visibleCount * itemHeight;
         int dropdownStartY = dropdownY + dropdownHeight;
+        boolean needsScroll = availableAccounts.size() > MAX_VISIBLE_ACCOUNTS;
+
+        // Clamp scroll offset
+        int maxScroll = Math.max(0, availableAccounts.size() - MAX_VISIBLE_ACCOUNTS);
+        accountDropdownScrollOffset = Math.max(0, Math.min(accountDropdownScrollOffset, maxScroll));
 
         // Push pose and translate to higher z-level to render on top of everything
         graphics.pose().pushPose();
@@ -513,18 +526,24 @@ public class SimpleATMScreen extends Screen {
         RenderSystem.disableDepthTest();
 
         // Dropdown background - use fully opaque colors with black border
-        graphics.fill(dropdownX - 1, dropdownStartY - 1, dropdownX + dropdownWidth + 1, dropdownStartY + totalHeight + 1, 0xFF000000);
-        graphics.fill(dropdownX, dropdownStartY, dropdownX + dropdownWidth, dropdownStartY + totalHeight, 0xFF1A1A2E);
+        graphics.fill(dropdownX - 1, dropdownStartY - 1, dropdownX + dropdownWidth + 1, dropdownStartY + visibleHeight + 1, 0xFF000000);
+        graphics.fill(dropdownX, dropdownStartY, dropdownX + dropdownWidth, dropdownStartY + visibleHeight, 0xFF1A1A2E);
 
         // Border
-        graphics.fill(dropdownX, dropdownStartY, dropdownX + 1, dropdownStartY + totalHeight, COLOR_BORDER);
-        graphics.fill(dropdownX + dropdownWidth - 1, dropdownStartY, dropdownX + dropdownWidth, dropdownStartY + totalHeight, COLOR_BORDER);
-        graphics.fill(dropdownX, dropdownStartY + totalHeight - 1, dropdownX + dropdownWidth, dropdownStartY + totalHeight, COLOR_BORDER);
+        graphics.fill(dropdownX, dropdownStartY, dropdownX + 1, dropdownStartY + visibleHeight, COLOR_BORDER);
+        graphics.fill(dropdownX + dropdownWidth - 1, dropdownStartY, dropdownX + dropdownWidth, dropdownStartY + visibleHeight, COLOR_BORDER);
+        graphics.fill(dropdownX, dropdownStartY + visibleHeight - 1, dropdownX + dropdownWidth, dropdownStartY + visibleHeight, COLOR_BORDER);
 
-        // Render each account option
-        for (int i = 0; i < availableAccounts.size(); i++) {
+        // Enable scissor to clip items outside the visible area
+        graphics.enableScissor(dropdownX, dropdownStartY, dropdownX + dropdownWidth, dropdownStartY + visibleHeight);
+
+        // Render only the visible account options
+        for (int vi = 0; vi < visibleCount; vi++) {
+            int i = vi + accountDropdownScrollOffset;
+            if (i >= availableAccounts.size()) break;
+
             SyncAccountsPacket.AccountInfo account = availableAccounts.get(i);
-            int optionY = dropdownStartY + (i * itemHeight);
+            int optionY = dropdownStartY + (vi * itemHeight);
 
             // Hover highlight
             boolean hovered = mouseX >= dropdownX && mouseX < dropdownX + dropdownWidth &&
@@ -552,9 +571,36 @@ public class SimpleATMScreen extends Screen {
             graphics.drawString(this.font, text, dropdownX + 5, optionY + 6, COLOR_TEXT);
 
             // Show balance on right side
+            int balanceRightEdge = needsScroll ? dropdownX + dropdownWidth - 14 : dropdownX + dropdownWidth - 8;
             String balanceStr = String.format("$%,.0f", account.balance());
             int balanceWidth = this.font.width(balanceStr);
-            graphics.drawString(this.font, "§7" + balanceStr, dropdownX + dropdownWidth - balanceWidth - 8, optionY + 6, COLOR_TEXT);
+            graphics.drawString(this.font, "§7" + balanceStr, balanceRightEdge - balanceWidth, optionY + 6, COLOR_TEXT);
+        }
+
+        graphics.disableScissor();
+
+        // Render scrollbar if needed
+        if (needsScroll) {
+            int scrollbarX = dropdownX + dropdownWidth - 5;
+            int scrollbarWidth = 3;
+
+            // Scrollbar track
+            graphics.fill(scrollbarX, dropdownStartY + 1, scrollbarX + scrollbarWidth, dropdownStartY + visibleHeight - 1, 0x40FFFFFF);
+
+            // Scrollbar thumb
+            float thumbRatio = (float) visibleCount / availableAccounts.size();
+            int thumbHeight = Math.max(10, (int) ((visibleHeight - 2) * thumbRatio));
+            float scrollProgress = maxScroll > 0 ? (float) accountDropdownScrollOffset / maxScroll : 0;
+            int thumbY = dropdownStartY + 1 + (int) ((visibleHeight - 2 - thumbHeight) * scrollProgress);
+            graphics.fill(scrollbarX, thumbY, scrollbarX + scrollbarWidth, thumbY + thumbHeight, 0xAAFFFFFF);
+        }
+
+        // Render scroll indicators if there are items above or below
+        if (accountDropdownScrollOffset > 0) {
+            graphics.drawCenteredString(this.font, "§7▲", dropdownX + dropdownWidth / 2, dropdownStartY + 1, 0xAAFFFFFF);
+        }
+        if (accountDropdownScrollOffset < maxScroll) {
+            graphics.drawCenteredString(this.font, "§7▼", dropdownX + dropdownWidth / 2, dropdownStartY + visibleHeight - 10, 0xAAFFFFFF);
         }
 
         // Re-enable depth test
@@ -608,6 +654,8 @@ public class SimpleATMScreen extends Screen {
                 case NATION -> "§6♛";
                 case STATE -> "§e★";
                 case CITY -> "§a●";
+                case COMPANY -> "§d◆";
+                case BANK_DEPOSIT -> "§9■";
             };
 
             String text = prefix + typeIcon + " " + type.getDisplayName();
@@ -787,24 +835,28 @@ public class SimpleATMScreen extends Screen {
         if (accountDropdownOpen && currentMode == ScreenMode.MAIN_MENU) {
             int itemHeight = 20;
             int dropdownStartY = dropdownY + dropdownHeight;
-            int totalHeight = availableAccounts.size() * itemHeight;
+            int visibleCount = Math.min(availableAccounts.size(), MAX_VISIBLE_ACCOUNTS);
+            int visibleHeight = visibleCount * itemHeight;
 
             // Check if clicked inside dropdown
             if (mouseX >= dropdownX && mouseX < dropdownX + dropdownWidth &&
-                mouseY >= dropdownStartY && mouseY < dropdownStartY + totalHeight) {
+                mouseY >= dropdownStartY && mouseY < dropdownStartY + visibleHeight) {
 
-                int clickedIndex = (int) ((mouseY - dropdownStartY) / itemHeight);
+                int clickedVisibleIndex = (int) ((mouseY - dropdownStartY) / itemHeight);
+                int clickedIndex = clickedVisibleIndex + accountDropdownScrollOffset;
                 if (clickedIndex >= 0 && clickedIndex < availableAccounts.size()) {
                     selectedAccountIndex = clickedIndex;
                     SyncAccountsPacket.AccountInfo account = availableAccounts.get(selectedAccountIndex);
                     currentBalance = account.balance();
                     accountDropdownOpen = false;
+                    accountDropdownScrollOffset = 0;
                     buildUI(); // Rebuild to update button text
                     return true;
                 }
             }
             // Clicked outside dropdown, close it
             accountDropdownOpen = false;
+            accountDropdownScrollOffset = 0;
             return true;
         }
 
@@ -905,6 +957,26 @@ public class SimpleATMScreen extends Screen {
         }
 
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        // Handle scrolling in the account dropdown
+        if (accountDropdownOpen && currentMode == ScreenMode.MAIN_MENU) {
+            int dropdownStartY = dropdownY + dropdownHeight;
+            int visibleCount = Math.min(availableAccounts.size(), MAX_VISIBLE_ACCOUNTS);
+            int visibleHeight = visibleCount * 20;
+
+            // Only scroll if mouse is over the dropdown area
+            if (mouseX >= dropdownX && mouseX < dropdownX + dropdownWidth &&
+                mouseY >= dropdownStartY && mouseY < dropdownStartY + visibleHeight) {
+                int maxScroll = Math.max(0, availableAccounts.size() - MAX_VISIBLE_ACCOUNTS);
+                accountDropdownScrollOffset -= (int) Math.signum(delta); // scroll up = negative delta
+                accountDropdownScrollOffset = Math.max(0, Math.min(accountDropdownScrollOffset, maxScroll));
+                return true;
+            }
+        }
+        return super.mouseScrolled(mouseX, mouseY, delta);
     }
 
     @Override
@@ -1277,6 +1349,8 @@ public class SimpleATMScreen extends Screen {
             case NATION -> RequestTransferRecipientsPacket.RecipientType.NATION;
             case STATE -> RequestTransferRecipientsPacket.RecipientType.STATE;
             case CITY -> RequestTransferRecipientsPacket.RecipientType.CITY;
+            case COMPANY -> RequestTransferRecipientsPacket.RecipientType.COMPANY;
+            case BANK_DEPOSIT -> RequestTransferRecipientsPacket.RecipientType.BANK_DEPOSIT;
         };
         NetworkHandler.sendToServer(new RequestTransferRecipientsPacket(packetType));
     }

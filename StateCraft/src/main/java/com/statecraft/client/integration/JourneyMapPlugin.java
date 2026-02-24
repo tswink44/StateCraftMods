@@ -18,6 +18,9 @@ public class JourneyMapPlugin {
 
     private static boolean registered = false;
 
+    // Store the API reference in case onApiReady is called before MinimapIntegrationLoader registers
+    private static Object pendingApi = null;
+
     /**
      * Attempt to register with JourneyMap API.
      * Safe to call even if JourneyMap is not installed.
@@ -36,19 +39,41 @@ public class JourneyMapPlugin {
     }
 
     /**
-     * Called by JourneyMapPluginImpl when JourneyMap initializes our plugin
+     * Called by JourneyMapPluginImpl when JourneyMap initializes our plugin.
+     * This may be called BEFORE MinimapIntegrationLoader has registered the integration,
+     * so we store the API reference for later retrieval.
      */
     public static void onApiReady(Object api) {
         StateCraft.LOGGER.info("JourneyMap plugin initialized for StateCraft");
+        pendingApi = api;
 
-        // Find and configure the JourneyMapIntegration instance
+        // Try to connect immediately if the integration is already registered
+        if (tryConnectApi(api)) {
+            pendingApi = null;
+        } else {
+            StateCraft.LOGGER.info("JourneyMap API stored — will connect when integration is registered");
+        }
+    }
+
+    /**
+     * Returns the pending API if onApiReady was called before the integration was registered.
+     * Called by MinimapIntegrationLoader after registering JourneyMapIntegration.
+     */
+    public static Object consumePendingApi() {
+        Object api = pendingApi;
+        pendingApi = null;
+        return api;
+    }
+
+    private static boolean tryConnectApi(Object api) {
         for (MinimapIntegration integration : IntegrationRegistry.getMinimapIntegrations()) {
             if (integration instanceof JourneyMapIntegration jmIntegration) {
                 jmIntegration.setClientApi(api);
                 StateCraft.LOGGER.info("JourneyMap API connected to StateCraft integration");
-                break;
+                return true;
             }
         }
+        return false;
     }
 
     /**

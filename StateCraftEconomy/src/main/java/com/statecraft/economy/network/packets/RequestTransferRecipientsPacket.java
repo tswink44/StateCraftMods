@@ -11,7 +11,9 @@ public class RequestTransferRecipientsPacket {
         PLAYER,
         NATION,
         STATE,
-        CITY
+        CITY,
+        COMPANY,
+        BANK_DEPOSIT
     }
 
     private final RecipientType recipientType;

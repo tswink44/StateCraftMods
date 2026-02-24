@@ -645,13 +645,19 @@ public class ChunkClaimManager {
 
         Nation nation = nations.get(state.getNationId());
 
-        // Check nation's maxChunksPerCity limit (can be changed via legislation)
-        if (nation != null && city.getChunkCount() >= nation.getMaxChunksPerCity()) {
-            return ClaimResult.NATION_CHUNK_LIMIT;
-        }
+        // Determine the effective max chunks for this city:
+        // The nation's legislature-set limit takes priority over the city/config default.
+        // Use the HIGHER of the nation limit and city limit so legislation can raise caps.
+        int nationLimit = nation != null ? nation.getMaxChunksPerCity() : Integer.MAX_VALUE;
+        int cityLimit = city.getMaxChunks();
+        int effectiveLimit = Math.max(nationLimit, cityLimit);
 
-        // Check city's own chunk limit (city-specific override)
-        if (city.getChunkCount() >= city.getMaxChunks()) {
+        if (city.getChunkCount() >= effectiveLimit) {
+            // Report as nation limit if nation limit is the binding constraint,
+            // otherwise report as city limit
+            if (nationLimit <= cityLimit) {
+                return ClaimResult.NATION_CHUNK_LIMIT;
+            }
             return ClaimResult.CITY_CHUNK_LIMIT;
         }
 

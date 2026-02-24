@@ -103,6 +103,7 @@ public class ClientPacketHandler {
 
             if (mc.screen instanceof ChunkMapScreen screen) {
                 screen.updateMapData(packet.getPlayerX(), packet.getPlayerZ(), packet.getPlayerNation(), chunkData);
+                screen.updateClaimableCities(packet.getClaimableCities());
             } else if (mc.screen instanceof ContractChunkSelectScreen screen) {
                 screen.updateMapData(packet.getPlayerX(), packet.getPlayerZ(), packet.getPlayerNation(), chunkData);
             }

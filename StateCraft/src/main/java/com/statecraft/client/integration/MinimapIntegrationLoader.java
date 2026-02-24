@@ -36,6 +36,14 @@ public class MinimapIntegrationLoader {
             JourneyMapIntegration journeyMap = new JourneyMapIntegration();
             if (journeyMap.isAvailable()) {
                 IntegrationRegistry.registerMinimapIntegration(journeyMap);
+
+                // JourneyMap may have already called onApiReady before this loader ran.
+                // Check for a pending API reference and apply it now.
+                Object pendingApi = JourneyMapPlugin.consumePendingApi();
+                if (pendingApi != null) {
+                    journeyMap.setClientApi(pendingApi);
+                    StateCraft.LOGGER.info("JourneyMap API connected to StateCraft integration (deferred)");
+                }
             }
         } catch (Exception e) {
             StateCraft.LOGGER.debug("JourneyMap integration skipped: {}", e.getMessage());

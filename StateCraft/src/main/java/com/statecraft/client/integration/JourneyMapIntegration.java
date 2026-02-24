@@ -45,10 +45,30 @@ public class JourneyMapIntegration implements MinimapIntegration {
     private Class<?> overlayClass = null;
     private Class<?> displayTypeEnum = null;
 
-    // Reflected methods
+    // Reflected methods - API operations
     private Method showMethod = null;
     private Method removeMethod = null;
-    private Method getDisplayIdMethod = null;
+
+    // Reflected methods - overlay properties (cached for JourneyMap toggle support)
+    private Method setOverlayGroupNameMethod = null;
+    private Method setTitleMethod = null;
+    private Method setLabelMethod = null;
+    private Method setMinZoomMethod = null;
+    private Method setMaxZoomMethod = null;
+
+    // Reflected methods - shape properties
+    private Method setStrokeWidthMethod = null;
+    private Method setStrokeColorMethod = null;
+    private Method setStrokeOpacityMethod = null;
+    private Method setFillColorMethod = null;
+    private Method setFillOpacityMethod = null;
+
+    // Cached constructors
+    private Constructor<?> blockPosConstructor = null;
+    private Constructor<?> mapPolygonConstructor = null;
+    private Constructor<?> shapePropsConstructor = null;
+    private Constructor<?> polygonOverlayConstructor = null;
+
 
     // Track active overlays by ID for cleanup
     private final Map<String, Object> activeNationOverlays = new HashMap<>();
@@ -123,17 +143,44 @@ public class JourneyMapIntegration implements MinimapIntegration {
             iClientApiClass = Class.forName("journeymap.client.api.IClientAPI");
             polygonOverlayClass = Class.forName("journeymap.client.api.display.PolygonOverlay");
             mapPolygonClass = Class.forName("journeymap.client.api.model.MapPolygon");
-            shapePropertiesClass = Class.forName("journeymap.client.api.display.ShapeProperties");
-            textPropertiesClass = Class.forName("journeymap.client.api.display.TextProperties");
+            shapePropertiesClass = Class.forName("journeymap.client.api.model.ShapeProperties");
+            textPropertiesClass = Class.forName("journeymap.client.api.model.TextProperties");
             overlayClass = Class.forName("journeymap.client.api.display.Displayable");
             displayTypeEnum = Class.forName("journeymap.client.api.display.DisplayType");
 
             showMethod = iClientApiClass.getMethod("show", overlayClass);
             removeMethod = iClientApiClass.getMethod("remove", overlayClass);
-            getDisplayIdMethod = polygonOverlayClass.getMethod("getDisplayId");
+
+            // Cache overlay property methods (inherited from Displayable)
+            setOverlayGroupNameMethod = polygonOverlayClass.getMethod("setOverlayGroupName", String.class);
+            setTitleMethod = polygonOverlayClass.getMethod("setTitle", String.class);
+
+            // Cache ShapeProperties methods
+            setStrokeWidthMethod = shapePropertiesClass.getMethod("setStrokeWidth", float.class);
+            setStrokeColorMethod = shapePropertiesClass.getMethod("setStrokeColor", int.class);
+            setStrokeOpacityMethod = shapePropertiesClass.getMethod("setStrokeOpacity", float.class);
+            setFillColorMethod = shapePropertiesClass.getMethod("setFillColor", int.class);
+            setFillOpacityMethod = shapePropertiesClass.getMethod("setFillOpacity", float.class);
+
+            // Cache constructors
+            blockPosConstructor = Class.forName("net.minecraft.core.BlockPos")
+                .getConstructor(int.class, int.class, int.class);
+            mapPolygonConstructor = mapPolygonClass.getConstructor(List.class);
+            shapePropsConstructor = shapePropertiesClass.getConstructor();
+            polygonOverlayConstructor = polygonOverlayClass.getConstructor(
+                String.class, String.class, ResourceKey.class, shapePropertiesClass, mapPolygonClass);
 
             apiInitialized = true;
             StateCraft.LOGGER.info("JourneyMap API reflection initialized successfully");
+
+            // Optional methods - may not exist in all API versions
+            try {
+                setLabelMethod = polygonOverlayClass.getMethod("setLabel", String.class);
+            } catch (NoSuchMethodException ignored) {}
+            try {
+                setMinZoomMethod = polygonOverlayClass.getMethod("setMinZoom", int.class);
+                setMaxZoomMethod = polygonOverlayClass.getMethod("setMaxZoom", int.class);
+            } catch (NoSuchMethodException ignored) {}
         } catch (Exception e) {
             StateCraft.LOGGER.error("Failed to initialize JourneyMap API reflection: {}", e.getMessage());
             available = false;
@@ -204,10 +251,13 @@ public class JourneyMapIntegration implements MinimapIntegration {
             ChunkBorderCache.ChunkClaimInfo sampleInfo = chunks.get(0);
             int color = getColorForInfo(sampleInfo);
 
+            ChunkBorderCache.ChunkClaimInfo centroid = findCentroidChunk(chunks);
+
             // Create individual chunk overlays for nation layer
             for (ChunkBorderCache.ChunkClaimInfo info : chunks) {
+                boolean showLabel = (info == centroid);
                 createChunkOverlay(activeNationOverlays, "nation", info, color,
-                    FILL_OPACITY_NATION, STROKE_WIDTH_NATION, nationName);
+                    FILL_OPACITY_NATION, STROKE_WIDTH_NATION, nationName, showLabel);
             }
         }
     }
@@ -224,9 +274,12 @@ public class JourneyMapIntegration implements MinimapIntegration {
             int color = sampleInfo.isOwn() ? COLOR_STATE_OWN : COLOR_STATE_OTHER;
             String label = sampleInfo.getStateName() != null ? sampleInfo.getStateName() : "Unknown State";
 
+            ChunkBorderCache.ChunkClaimInfo centroid = findCentroidChunk(chunks);
+
             for (ChunkBorderCache.ChunkClaimInfo info : chunks) {
+                boolean showLabel = (info == centroid);
                 createChunkOverlay(activeStateOverlays, "state", info, color,
-                    FILL_OPACITY_STATE, STROKE_WIDTH_STATE, label);
+                    FILL_OPACITY_STATE, STROKE_WIDTH_STATE, label, showLabel);
             }
         }
     }
@@ -243,16 +296,20 @@ public class JourneyMapIntegration implements MinimapIntegration {
             int color = sampleInfo.isOwn() ? COLOR_CITY_OWN : COLOR_CITY_OTHER;
             String label = sampleInfo.getCityName() != null ? sampleInfo.getCityName() : "Unknown City";
 
+            ChunkBorderCache.ChunkClaimInfo centroid = findCentroidChunk(chunks);
+
             for (ChunkBorderCache.ChunkClaimInfo info : chunks) {
+                boolean showLabel = (info == centroid);
                 createChunkOverlay(activeCityOverlays, "city", info, color,
-                    FILL_OPACITY_CITY, STROKE_WIDTH_CITY, label);
+                    FILL_OPACITY_CITY, STROKE_WIDTH_CITY, label, showLabel);
             }
         }
     }
 
     private void createChunkOverlay(Map<String, Object> overlayMap, String layerType,
                                      ChunkBorderCache.ChunkClaimInfo info, int color,
-                                     int fillOpacity, int strokeWidth, String label) {
+                                     int fillOpacity, int strokeWidth, String label,
+                                     boolean showLabel) {
         if (clientApi == null || !apiInitialized) return;
 
         try {
@@ -272,59 +329,43 @@ public class JourneyMapIntegration implements MinimapIntegration {
             ResourceKey<Level> dimension = mc.level.dimension();
 
             // Create polygon points (chunk corners)
-            Class<?> blockPosClass = Class.forName("net.minecraft.core.BlockPos");
-            Constructor<?> blockPosConstructor = blockPosClass.getConstructor(int.class, int.class, int.class);
-
             Object point1 = blockPosConstructor.newInstance(minX, 64, minZ);
             Object point2 = blockPosConstructor.newInstance(maxX, 64, minZ);
             Object point3 = blockPosConstructor.newInstance(maxX, 64, maxZ);
             Object point4 = blockPosConstructor.newInstance(minX, 64, maxZ);
 
-            List<Object> points = Arrays.asList(point1, point2, point3, point4);
-
             // Create MapPolygon
-            Constructor<?> mapPolygonConstructor = mapPolygonClass.getConstructor(List.class);
-            Object mapPolygon = mapPolygonConstructor.newInstance(points);
+            Object mapPolygon = mapPolygonConstructor.newInstance(
+                Arrays.asList(point1, point2, point3, point4));
 
-            // Create ShapeProperties
-            Constructor<?> shapePropsConstructor = shapePropertiesClass.getConstructor();
+            // Create and configure ShapeProperties
             Object shapeProps = shapePropsConstructor.newInstance();
-
-            // Set shape properties
-            Method setStrokeWidth = shapePropertiesClass.getMethod("setStrokeWidth", float.class);
-            Method setStrokeColor = shapePropertiesClass.getMethod("setStrokeColor", int.class);
-            Method setStrokeOpacity = shapePropertiesClass.getMethod("setStrokeOpacity", float.class);
-            Method setFillColor = shapePropertiesClass.getMethod("setFillColor", int.class);
-            Method setFillOpacity = shapePropertiesClass.getMethod("setFillOpacity", float.class);
-
-            setStrokeWidth.invoke(shapeProps, (float) strokeWidth);
-            setStrokeColor.invoke(shapeProps, color);
-            setStrokeOpacity.invoke(shapeProps, STROKE_OPACITY / 255.0f);
-            setFillColor.invoke(shapeProps, color);
-            setFillOpacity.invoke(shapeProps, fillOpacity / 255.0f);
+            setStrokeWidthMethod.invoke(shapeProps, (float) strokeWidth);
+            setStrokeColorMethod.invoke(shapeProps, color);
+            setStrokeOpacityMethod.invoke(shapeProps, STROKE_OPACITY / 255.0f);
+            setFillColorMethod.invoke(shapeProps, color);
+            setFillOpacityMethod.invoke(shapeProps, fillOpacity / 255.0f);
 
             // Create PolygonOverlay
-            Constructor<?> polygonOverlayConstructor = polygonOverlayClass.getConstructor(
-                String.class, // modId
-                String.class, // displayId
-                ResourceKey.class, // dimension
-                shapePropertiesClass, // shapeProperties
-                mapPolygonClass // mapPolygon
-            );
-
             Object overlay = polygonOverlayConstructor.newInstance(
                 MOD_ID, overlayId, dimension, shapeProps, mapPolygon
             );
 
-            // Set overlay title/label
-            Method setOverlayGroupName = polygonOverlayClass.getMethod("setOverlayGroupName", String.class);
-            Method setTitle = polygonOverlayClass.getMethod("setTitle", String.class);
-            Method setLabel = polygonOverlayClass.getMethod("setLabel", String.class);
+            // Assign to a toggleable overlay group in JourneyMap's UI
+            String groupName = getLayerGroupName(layerType);
+            setOverlayGroupNameMethod.invoke(overlay, groupName);
+            setTitleMethod.invoke(overlay, label);
+            if (setLabelMethod != null && showLabel) {
+                setLabelMethod.invoke(overlay, label);
+            }
 
-            String groupName = "StateCraft " + capitalize(layerType) + "s";
-            setOverlayGroupName.invoke(overlay, groupName);
-            setTitle.invoke(overlay, label);
-            setLabel.invoke(overlay, label);
+            // Set zoom level visibility so layers don't all overlap at every zoom
+            if (setMinZoomMethod != null) {
+                switch (layerType) {
+                    case "state" -> setMinZoomMethod.invoke(overlay, 2);
+                    case "city" -> setMinZoomMethod.invoke(overlay, 4);
+                }
+            }
 
             // Show the overlay
             showMethod.invoke(clientApi, overlay);
@@ -335,6 +376,15 @@ public class JourneyMapIntegration implements MinimapIntegration {
         } catch (Exception e) {
             StateCraft.LOGGER.trace("Error creating JourneyMap {} overlay: {}", layerType, e.getMessage());
         }
+    }
+
+    private String getLayerGroupName(String layerType) {
+        return switch (layerType) {
+            case "nation" -> "StateCraft Nations";
+            case "state" -> "StateCraft States";
+            case "city" -> "StateCraft Cities";
+            default -> "StateCraft " + layerType;
+        };
     }
 
     private void removeOverlaysInArea(Map<String, Object> overlayMap, String layerType,
@@ -389,6 +439,33 @@ public class JourneyMapIntegration implements MinimapIntegration {
             }
         }
         overlayMap.clear();
+    }
+
+    /**
+     * Finds the chunk closest to the centroid of the group, used to place a single label.
+     */
+    private ChunkBorderCache.ChunkClaimInfo findCentroidChunk(List<ChunkBorderCache.ChunkClaimInfo> chunks) {
+        if (chunks.size() == 1) return chunks.get(0);
+
+        double avgX = 0, avgZ = 0;
+        for (ChunkBorderCache.ChunkClaimInfo c : chunks) {
+            avgX += c.getChunkX();
+            avgZ += c.getChunkZ();
+        }
+        avgX /= chunks.size();
+        avgZ /= chunks.size();
+
+        ChunkBorderCache.ChunkClaimInfo closest = chunks.get(0);
+        double minDist = Double.MAX_VALUE;
+        for (ChunkBorderCache.ChunkClaimInfo c : chunks) {
+            double dist = (c.getChunkX() - avgX) * (c.getChunkX() - avgX)
+                        + (c.getChunkZ() - avgZ) * (c.getChunkZ() - avgZ);
+            if (dist < minDist) {
+                minDist = dist;
+                closest = c;
+            }
+        }
+        return closest;
     }
 
     private int getColorForInfo(ChunkBorderCache.ChunkClaimInfo info) {

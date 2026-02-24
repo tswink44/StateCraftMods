@@ -14,7 +14,9 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.levelgen.Heightmap;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -62,6 +64,11 @@ public class ChunkMapScreen extends StateCraftScreen {
     private boolean autoClaimEnabled = false;
     private boolean canUseAutoClaim = false;
     private String autoClaimCityName = null;
+
+    // City selector for claiming
+    private List<String> claimableCities = new ArrayList<>();
+    private int selectedCityIndex = 0;
+    private Button citySelectButton;
 
     // Buttons
     private Button claimButton;
@@ -147,6 +154,14 @@ public class ChunkMapScreen extends StateCraftScreen {
             btn -> showChunkInfo()
         ));
         infoButton.active = false;
+
+        // City selector button (cycles through available cities)
+        citySelectButton = this.addRenderableWidget(createButton(
+            mapRight, buttonY + 92, buttonWidth, 18,
+            Component.literal(getSelectedCityLabel()),
+            btn -> cycleSelectedCity()
+        ));
+        citySelectButton.visible = false; // Hidden until claimable cities are received
 
         // Close button - below the map, not overlapping legend
         this.addRenderableWidget(createButton(
@@ -587,8 +602,8 @@ public class ChunkMapScreen extends StateCraftScreen {
 
     private void renderSelectedInfo(GuiGraphics graphics) {
         int infoX = guiLeft + 10 + MAP_SIZE * cellSize + 8;
-        // Position below the last button (Info button at guiTop+94, height 18 -> guiTop+112)
-        int infoY = guiTop + 118;
+        // Position below the last button (city selector at guiTop+120, height 18 -> guiTop+138)
+        int infoY = guiTop + 144;
 
         // Coordinates display - in the header area, right-aligned
         String posText = "§7Pos: §f" + playerChunkX + ", " + playerChunkZ;
@@ -729,8 +744,9 @@ public class ChunkMapScreen extends StateCraftScreen {
         if (hasSelection) {
             pendingActionChunkKey = chunkKey(selectedChunkX, selectedChunkZ);
             pendingActionTime = System.currentTimeMillis();
+            String cityName = getSelectedCityName();
             NetworkHandler.sendToServer(new ChunkActionPacket(
-                ChunkActionPacket.Action.CLAIM, selectedChunkX, selectedChunkZ, null));
+                ChunkActionPacket.Action.CLAIM, selectedChunkX, selectedChunkZ, cityName));
             // Disable buttons while action is pending
             claimButton.active = false;
             unclaimButton.active = false;
@@ -790,6 +806,44 @@ public class ChunkMapScreen extends StateCraftScreen {
             chunkMap.remove(key);
         }
         updateButtonStates();
+    }
+
+    /**
+     * Called by network handler when claimable cities are received from the server
+     */
+    public void updateClaimableCities(List<String> cities) {
+        this.claimableCities = cities != null ? new ArrayList<>(cities) : new ArrayList<>();
+        // Clamp selected index
+        if (selectedCityIndex >= claimableCities.size()) {
+            selectedCityIndex = 0;
+        }
+        // Show/hide city selector based on whether there are multiple cities
+        if (citySelectButton != null) {
+            citySelectButton.visible = claimableCities.size() > 1;
+            citySelectButton.setMessage(Component.literal(getSelectedCityLabel()));
+        }
+    }
+
+    private void cycleSelectedCity() {
+        if (claimableCities.size() <= 1) return;
+        selectedCityIndex = (selectedCityIndex + 1) % claimableCities.size();
+        if (citySelectButton != null) {
+            citySelectButton.setMessage(Component.literal(getSelectedCityLabel()));
+        }
+    }
+
+    private String getSelectedCityName() {
+        if (claimableCities.isEmpty()) return null;
+        if (selectedCityIndex >= claimableCities.size()) return claimableCities.get(0);
+        return claimableCities.get(selectedCityIndex);
+    }
+
+    private String getSelectedCityLabel() {
+        String name = getSelectedCityName();
+        if (name == null) return "No City";
+        // Truncate long names to fit button
+        if (name.length() > 8) name = name.substring(0, 7) + "…";
+        return "§a● " + name;
     }
 
     // Called by network handler when auto-claim state is synced
