@@ -316,5 +316,15 @@ public class ClientPacketHandler {
         });
         ctx.get().setPacketHandled(true);
     }
+
+    public static void handleSyncTradingHubSuggestions(SyncTradingHubSuggestionsPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.screen instanceof com.statecraft.economy.client.screen.TradingHubSettingsScreen settingsScreen) {
+                settingsScreen.updateSuggestions(packet.getCompanyNames(), packet.getPlayerNames());
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
 }
 

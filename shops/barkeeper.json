@@ -1,0 +1,167 @@
+{
+  "shop_id": "barkeeper",
+  "name": "shop.society_trading.barkeeper",
+  "texture": "beachparty:textures/item/honey_cocktail",
+  "jei_catalyst": {
+    "item": "beachparty:tiki_bar"
+  },
+  "villager_profession": "beach_guy",
+  "selector_weight": 1,
+  "trades": [
+    {
+      "offer": {
+        "item": "bakery:crusty_bread",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10",
+        "count": 6
+      },
+      "trade_id": "barkeeper_crusty_bread_for_cog",
+      "original_numismatics_cost": 64
+    },
+    {
+      "offer": {
+        "item": "farm_and_charm:farmer_salad",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 2
+      },
+      "trade_id": "barkeeper_farmer_salad_for_cog",
+      "original_numismatics_cost": 256
+    },
+    {
+      "offer": {
+        "item": "brewery:mashed_potatoes",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10",
+        "count": 6
+      },
+      "trade_id": "barkeeper_potato_salad_for_cog",
+      "original_numismatics_cost": 64
+    },
+    {
+      "offer": {
+        "item": "bakery:sandwich",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 2
+      },
+      "trade_id": "barkeeper_sandwich_for_cog",
+      "original_numismatics_cost": 256
+    },
+    {
+      "offer": {
+        "item": "herbalbrews:coffee",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 1
+      },
+      "trade_id": "barkeeper_coffee_for_sprocket",
+      "original_numismatics_cost": 128
+    },
+    {
+      "offer": {
+        "item": "brewery:beer_hops",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 2
+      },
+      "trade_id": "barkeeper_beer_hops_for_cog",
+      "original_numismatics_cost": 256
+    },
+    {
+      "offer": {
+        "item": "refurbished_furniture:vegetable_pizza_slice",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 5
+      },
+      "trade_id": "barkeeper_cheese_pizza_slice_for_crown",
+      "original_numismatics_cost": 512
+    },
+    {
+      "offer": {
+        "item": "society:magic_rock_candy",
+        "count": 1
+      },
+      "request": {
+        "item": "society:prismatic_shard",
+        "count": 3
+      },
+      "trade_id": "barkeeper_magic_rock_candy_for_prismatic_shard"
+    },
+    {
+      "offer": {
+        "item": "solonion:lunchbag",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 2
+      },
+      "trade_id": "barkeeper_lunchbag_for_cog",
+      "original_numismatics_cost": 256
+    },
+    {
+      "offer": {
+        "item": "solonion:lunchbox",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 1
+      },
+      "trade_id": "barkeeper_lunchbox_for_sun",
+      "original_numismatics_cost": 16384
+    },
+    {
+      "offer": {
+        "item": "solonion:golden_lunchbox",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 6
+      },
+      "trade_id": "barkeeper_golden_lunchbox_for_sun",
+      "original_numismatics_cost": 65536
+    },
+    {
+      "offer": {
+        "item": "sophisticatedstorage:feeding_upgrade",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 1
+      },
+      "trade_id": "barkeeper_feeding_upgrade_for_sun",
+      "original_numismatics_cost": 16384
+    },
+    {
+      "offer": {
+        "item": "sophisticatedbackpacks:feeding_upgrade",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000000",
+        "count": 64
+      },
+      "trade_id": "barkeeper_feeding_upgrade_for_prismatic_coin",
+      "original_numismatics_cost": 134217728
+    }
+  ]
+}

@@ -1,0 +1,228 @@
+{
+  "shop_id": "shepherd",
+  "name": "shop.society_trading.shepherd",
+  "texture": "minecraft:textures/block/loom_front",
+  "villager_profession": "shepherd",
+  "jei_catalyst": {
+    "item": "minecraft:loom"
+  },
+  "trades": [
+    {
+      "offer": {
+        "item": "society:animal_feed",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10",
+        "count": 1
+      },
+      "trade_id": "minecraft:shepherd_animal_feed_for_sprocket",
+      "original_numismatics_cost": 16
+    },
+    {
+      "offer": {
+        "item": "patchouli:guide_book",
+        "count": 1,
+        "nbt": "{\"patchouli:book\":\"patchouli:almanac\"}"
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10",
+        "count": 6
+      },
+      "trade_id": "shepherd_guide_book_for_cog",
+      "original_numismatics_cost": 64
+    },
+    {
+      "offer": {
+        "item": "society:feeding_trough",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 4
+      },
+      "trade_id": "shepherd_feeding_trough_for_bevel",
+      "original_numismatics_cost": 4096
+    },
+    {
+      "offer": {
+        "item": "minecraft:name_tag",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 2
+      },
+      "trade_id": "librarian_name_tag_for_cog",
+      "original_numismatics_cost": 256
+    },
+    {
+      "offer": {
+        "item": "moblassos:diamond_lasso",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 1
+      },
+      "trade_id": "shepherd_mob_lasso_for_sun",
+      "original_numismatics_cost": 16384
+    },
+    {
+      "offer": {
+        "item": "society:milk_pail",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 2
+      },
+      "trade_id": "shepherd_milk_pail_for_cog",
+      "original_numismatics_cost": 256
+    },
+    {
+      "offer": {
+        "item": "society:miracle_potion",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 1
+      },
+      "trade_id": "shepherd_miracle_potion_for_cog",
+      "original_numismatics_cost": 1024
+    },
+    {
+      "offer": {
+        "item": "splendid_slimes:slime_vac",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 8
+      },
+      "trade_id": "slime_vac_for_sun",
+      "original_numismatics_cost": 8192
+    },
+    {
+      "offer": {
+        "item": "society:magic_shears",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 3
+      },
+      "trade_id": "shepherd_magic_shears_for_crown",
+      "original_numismatics_cost": 3072
+    },
+    {
+      "offer": {
+        "item": "etcetera:handbell",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 5
+      },
+      "trade_id": "shepherd_handbell_for_cog",
+      "original_numismatics_cost": 512
+    },
+    {
+      "offer": {
+        "item": "society:friendship_necklace",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100000",
+        "count": 1
+      },
+      "trade_id": "shepherd_friendship_necklace_for_sun",
+      "original_numismatics_cost": 196608
+    },
+    {
+      "offer": {
+        "item": "minecraft:chicken_spawn_egg",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 1
+      },
+      "trade_id": "shepherd_chicken_spawn_egg_for_cog",
+      "original_numismatics_cost": 128
+    },
+    {
+      "offer": {
+        "item": "minecraft:cow_spawn_egg",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 5
+      },
+      "trade_id": "shepherd_cow_spawn_egg_for_crown",
+      "original_numismatics_cost": 512
+    },
+    {
+      "offer": {
+        "item": "minecraft:sheep_spawn_egg",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 5
+      },
+      "trade_id": "shepherd_sheep_spawn_egg_for_crown",
+      "original_numismatics_cost": 512
+    },
+    {
+      "offer": {
+        "item": "untitledduckmod:duck_sack",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 5
+      },
+      "trade_id": "shepherd_duck_sack_for_crown",
+      "original_numismatics_cost": 512
+    },
+    {
+      "offer": {
+        "item": "minecraft:rabbit_spawn_egg",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 4
+      },
+      "trade_id": "shepherd_rabbit_spawn_egg_for_sun",
+      "original_numismatics_cost": 4096
+    },
+    {
+      "offer": {
+        "item": "minecraft:pig_spawn_egg",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 1
+      },
+      "trade_id": "shepherd_pig_spawn_egg_for_sun",
+      "original_numismatics_cost": 16384
+    },
+    {
+      "offer": {
+        "item": "minecraft:goat_spawn_egg",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 1
+      },
+      "trade_id": "shepherd_goat_spawn_egg_for_sun",
+      "original_numismatics_cost": 16484
+    }
+  ]
+}

@@ -217,11 +217,12 @@ public class State {
 
     public Set<UUID> getAllResidents() {
         Set<UUID> allResidents = new HashSet<>();
-        allResidents.add(governorId);
+        if (governorId != null) allResidents.add(governorId);
         allResidents.addAll(citizens);
         for (City city : cities.values()) {
             allResidents.addAll(city.getResidents());
         }
+        allResidents.remove(null);
         return allResidents;
     }
 

@@ -1,0 +1,325 @@
+{
+  "shop_id": "bookseller",
+  "name": "shop.society_trading.bookseller",
+  "texture": "minecraft:textures/block/bookshelf",
+  "jei_catalyst": {
+    "item": "whimsy_deco:phone"
+  },
+  "selector_weight": -100,
+  "seasons_required": [
+    "late_spring",
+    "late_summer",
+    "late_autumn",
+    "late_winter"
+  ],
+  "trades": [
+    {
+      "offer": {
+        "item": "society:yard_work_yearly",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 8
+      },
+      "trade_id": "bookseller_yard_work_yearly_for_sun",
+      "original_numismatics_cost": 8192
+    },
+    {
+      "offer": {
+        "item": "society:mining_monthly",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 8
+      },
+      "trade_id": "bookseller_mining_monthly_for_sun",
+      "original_numismatics_cost": 8192
+    },
+    {
+      "offer": {
+        "item": "society:wet_weekly",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 8
+      },
+      "trade_id": "bookseller_wet_weekly_for_sun",
+      "original_numismatics_cost": 8192
+    },
+    {
+      "offer": {
+        "item": "society:combat_quarterly",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 8
+      },
+      "trade_id": "bookseller_combat_quarterly_for_sun",
+      "original_numismatics_cost": 8192
+    },
+    {
+      "offer": {
+        "item": "society:book_of_stars",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 1
+      },
+      "trade_id": "bookseller_book_of_stars_for_sun",
+      "original_numismatics_cost": 16384
+    },
+    {
+      "offer": {
+        "item": "society:phenomenology_of_treasure",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 3
+      },
+      "trade_id": "bookseller_phenomenology_of_treasure_for_sun",
+      "seasons_required": [
+        "late_spring"
+      ],
+      "unlock_description": "jei.society_trading.only_spring",
+      "original_numismatics_cost": 32768
+    },
+    {
+      "offer": {
+        "item": "society:bullfish_jobs",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 6
+      },
+      "trade_id": "bookseller_bullfish_jobs_for_sun",
+      "seasons_required": [
+        "late_spring"
+      ],
+      "unlock_description": "jei.society_trading.only_spring",
+      "original_numismatics_cost": 65536
+    },
+    {
+      "offer": {
+        "item": "society:paradise_crop",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 8
+      },
+      "trade_id": "bookseller_paradise_crop_for_sun",
+      "seasons_required": [
+        "late_summer"
+      ],
+      "unlock_description": "jei.society_trading.only_summer",
+      "original_numismatics_cost": 81920
+    },
+    {
+      "offer": {
+        "item": "society:frogs_bounty_bazaar",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100000",
+        "count": 1
+      },
+      "trade_id": "bookseller_frogs_bounty_bazaar_for_sun",
+      "seasons_required": [
+        "late_summer"
+      ],
+      "unlock_description": "jei.society_trading.only_summer",
+      "original_numismatics_cost": 131072
+    },
+    {
+      "offer": {
+        "item": "society:hitting_hard_and_soft",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 4
+      },
+      "trade_id": "bookseller_hitting_hard_and_soft_for_sun",
+      "seasons_required": [
+        "late_autumn"
+      ],
+      "unlock_description": "jei.society_trading.only_autumn",
+      "original_numismatics_cost": 4096
+    },
+    {
+      "offer": {
+        "item": "society:canadian_and_famous",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 4
+      },
+      "trade_id": "bookseller_canadian_and_famous_for_sun",
+      "seasons_required": [
+        "late_autumn"
+      ],
+      "unlock_description": "jei.society_trading.only_autumn",
+      "original_numismatics_cost": 4096
+    },
+    {
+      "offer": {
+        "item": "society:bluegill_meridian",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 8
+      },
+      "trade_id": "bookseller_bluegill_meridian_for_sun",
+      "seasons_required": [
+        "late_winter"
+      ],
+      "unlock_description": "jei.society_trading.only_winter",
+      "original_numismatics_cost": 81920
+    },
+    {
+      "offer": {
+        "item": "society:intro_to_algorithms",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 6
+      },
+      "trade_id": "bookseller_intro_to_algorithms_for_sun",
+      "seasons_required": [
+        "late_winter"
+      ],
+      "unlock_description": "jei.society_trading.only_winter",
+      "original_numismatics_cost": 69632
+    },
+    {
+      "offer": {
+        "item": "society:animal_fancy",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 1
+      },
+      "trade_id": "bookseller_animal_fancy_for_sun",
+      "original_numismatics_cost": 16384
+    },
+    {
+      "offer": {
+        "item": "society:wuthering_logs",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 1
+      },
+      "trade_id": "bookseller_wuthering_logs_for_sun",
+      "original_numismatics_cost": 16384
+    },
+    {
+      "offer": {
+        "item": "society:first_aid_guide",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 3
+      },
+      "trade_id": "bookseller_first_aid_guide_for_sun",
+      "original_numismatics_cost": 32768
+    },
+    {
+      "offer": {
+        "item": "society:slime_contain_protect",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 2
+      },
+      "trade_id": "bookseller_slime_contain_protect_for_sun",
+      "original_numismatics_cost": 24576
+    },
+    {
+      "offer": {
+        "item": "society:brine_and_punishment",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 4
+      },
+      "trade_id": "bookseller_brine_and_punishment_for_sun",
+      "original_numismatics_cost": 40960
+    },
+    {
+      "offer": {
+        "item": "society:no_name_for_the_sheep",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 5
+      },
+      "trade_id": "bookseller_no_name_for_the_sheep_for_sun",
+      "original_numismatics_cost": 53248
+    },
+    {
+      "offer": {
+        "item": "society:banana_karenina",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 6
+      },
+      "trade_id": "bookseller_banana_karenina_for_sun",
+      "original_numismatics_cost": 65536
+    },
+    {
+      "offer": {
+        "item": "society:the_spark_also_rises",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 8
+      },
+      "trade_id": "bookseller_the_spark_also_rises",
+      "original_numismatics_cost": 81920
+    },
+    {
+      "offer": {
+        "item": "society:universal_methods_of_farming",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 4
+      },
+      "trade_id": "bookseller_universal_methods_of_farming",
+      "original_numismatics_cost": 40960
+    },
+    {
+      "offer": {
+        "item": "society:slouching_towards_artistry",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000000",
+        "count": 64
+      },
+      "trade_id": "bookseller_slouching_towards_artistry_for_sun",
+      "original_numismatics_cost": 67108864
+    }
+  ]
+}

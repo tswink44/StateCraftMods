@@ -33,7 +33,7 @@ public class WorldLoadHandler {
         }
 
         StateCraft.LOGGER.info("Loading StateCraft nation data...");
-        NationSavedData.get(level);
+        NationSavedData.init(level.getServer());
 
         // Initialize mail manager
         MailManager.getInstance().init(level.getServer());
@@ -66,15 +66,8 @@ public class WorldLoadHandler {
         // Save mail data
         MailManager.getInstance().save();
 
-        if (ChunkClaimManager.getInstance().isDirty() ||
-            InvitationManager.getInstance().isDirty() ||
-            LegislatureManager.getInstance().isDirty() ||
-            ContractManager.getInstance().isDirty() ||
-            CompanyManager.getInstance().isDirty()) {
-            NationSavedData data = NationSavedData.get(level);
-            data.markForSave();
-            StateCraft.LOGGER.debug("StateCraft data marked for save");
-        }
+        // Save nation data to JSON if dirty
+        NationSavedData.getInstance().saveIfDirty();
     }
 
     @SubscribeEvent
@@ -87,24 +80,17 @@ public class WorldLoadHandler {
         // Run a final backup before shutdown
         BackupManager.getInstance().runBackup(event.getServer());
 
-        // CRITICAL: Force-save nation data BEFORE resetting the managers.
-        // If we reset first, SavedData.save() runs later with empty managers and wipes all data.
-        ServerLevel overworld = event.getServer().getLevel(Level.OVERWORLD);
-        if (overworld != null) {
-            // Clean up expired invitations before final save
-            InvitationManager.getInstance().cleanupExpired();
+        // Clean up expired invitations before final save
+        InvitationManager.getInstance().cleanupExpired();
 
-            NationSavedData data = NationSavedData.get(overworld);
-            data.markForSave();
-            // Force the DataStorage to write immediately while managers still have data
-            overworld.getDataStorage().save();
-            StateCraft.LOGGER.info("StateCraft nation data saved before shutdown");
-        }
+        // Force-save nation data to JSON BEFORE resetting the managers
+        NationSavedData.getInstance().saveToJson();
+        StateCraft.LOGGER.info("StateCraft nation data saved before shutdown");
 
         ChunkClaimManager.resetInstance();
         InvitationManager.resetInstance();
         LegislatureManager.resetInstance();
         ContractManager.resetInstance();
+        NationSavedData.resetInstance();
     }
 }
-

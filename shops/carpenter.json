@@ -1,0 +1,1261 @@
+{
+  "shop_id": "carpenter",
+  "name": "shop.society_trading.carpenter",
+  "texture": "supplementaries:textures/block/cabin_siding_side",
+  "jei_catalyst": {
+    "item": "meadow:woodcutter"
+  },
+  "selector_weight": -96,
+  "trades": [
+    {
+      "offer": {
+        "item": "society:fantasy_box_bone",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 2
+      },
+      "seasons_required": [
+        "late_autumn"
+      ],
+      "trade_id": "carpenter_fantasy_box_bone",
+      "original_numismatics_cost": 2048
+    },
+    {
+      "offer": {
+        "item": "tanukidecor:holiday_tree",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 5
+      },
+      "seasons_required": [
+        "late_winter"
+      ],
+      "trade_id": "carpenter_holiday_tree",
+      "original_numismatics_cost": 512
+    },
+    {
+      "offer": {
+        "item": "society:hive_baseboard",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 2
+      },
+      "seasons_required": [
+        "early_spring"
+      ],
+      "trade_id": "carpenter_hive_baseboard",
+      "original_numismatics_cost": 256
+    },
+    {
+      "offer": {
+        "item": "society:bunny_wallpaper",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 2
+      },
+      "seasons_required": [
+        "early_winter"
+      ],
+      "trade_id": "carpenter_bunny_wallpaper",
+      "original_numismatics_cost": 256
+    },
+    {
+      "offer": {
+        "item": "society:bunny_baseboard",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 2
+      },
+      "seasons_required": [
+        "early_winter"
+      ],
+      "trade_id": "carpenter_bunny_baseboard",
+      "original_numismatics_cost": 256
+    },
+    {
+      "offer": {
+        "item": "society:cloud_wallpaper",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 2
+      },
+      "seasons_required": [
+        "early_summer"
+      ],
+      "trade_id": "carpenter_cloud_wallpaper",
+      "original_numismatics_cost": 256
+    },
+    {
+      "offer": {
+        "item": "society:cloud_baseboard",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 2
+      },
+      "seasons_required": [
+        "early_summer"
+      ],
+      "trade_id": "carpenter_cloud_baseboard",
+      "original_numismatics_cost": 256
+    },
+    {
+      "offer": {
+        "item": "society:pink_flower_wallpaper",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 2
+      },
+      "seasons_required": [
+        "early_autumn"
+      ],
+      "trade_id": "carpenter_pink_flower_wallpaper",
+      "original_numismatics_cost": 256
+    },
+    {
+      "offer": {
+        "item": "society:pink_flower_baseboard",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 2
+      },
+      "seasons_required": [
+        "early_autumn"
+      ],
+      "trade_id": "carpenter_pink_flower_baseboard",
+      "original_numismatics_cost": 256
+    },
+    {
+      "offer": {
+        "item": "minecraft:dirt",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1",
+        "count": 4
+      },
+      "trade_id": "carpenter_dirt",
+      "original_numismatics_cost": 4
+    },
+    {
+      "offer": {
+        "item": "minecraft:gravel",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1",
+        "count": 4
+      },
+      "trade_id": "carpenter_gravel",
+      "original_numismatics_cost": 4
+    },
+    {
+      "offer": {
+        "item": "minecraft:cobblestone",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1",
+        "count": 4
+      },
+      "trade_id": "carpenter_cobblestone",
+      "original_numismatics_cost": 4
+    },
+    {
+      "offer": {
+        "item": "minecraft:cobbled_deepslate",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10",
+        "count": 3
+      },
+      "trade_id": "carpenter_cobbled_deepslate",
+      "original_numismatics_cost": 32
+    },
+    {
+      "offer": {
+        "item": "meadow:cobbled_limestone",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10",
+        "count": 1
+      },
+      "trade_id": "carpenter_cobbled_limestone",
+      "original_numismatics_cost": 16
+    },
+    {
+      "offer": {
+        "item": "supplementaries:fine_wood",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 1
+      },
+      "trade_id": "carpenter_fine_wood",
+      "original_numismatics_cost": 192
+    },
+    {
+      "offer": {
+        "item": "minecraft:glass",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10",
+        "count": 2
+      },
+      "trade_id": "carpenter_glass",
+      "original_numismatics_cost": 24
+    },
+    {
+      "offer": {
+        "item": "minecraft:terracotta",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10",
+        "count": 3
+      },
+      "trade_id": "carpenter_terracotta",
+      "original_numismatics_cost": 32
+    },
+    {
+      "offer": {
+        "item": "clayworks:concrete",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10",
+        "count": 3
+      },
+      "trade_id": "carpenter_concrete",
+      "original_numismatics_cost": 32
+    },
+    {
+      "offer": {
+        "item": "minecraft:bricks",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10",
+        "count": 6
+      },
+      "trade_id": "carpenter_bricks",
+      "original_numismatics_cost": 64
+    },
+    {
+      "offer": {
+        "item": "supplementaries:ash_bricks",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 1
+      },
+      "trade_id": "carpenter_ash_bricks",
+      "original_numismatics_cost": 128
+    },
+    {
+      "offer": {
+        "item": "supplementaries:daub",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10",
+        "count": 1
+      },
+      "trade_id": "carpenter_daub",
+      "original_numismatics_cost": 16
+    },
+    {
+      "offer": {
+        "item": "minecraft:packed_mud",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10",
+        "count": 4
+      },
+      "trade_id": "carpenter_packed_mud",
+      "original_numismatics_cost": 48
+    },
+    {
+      "offer": {
+        "item": "twigs:packed_silt",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10",
+        "count": 6
+      },
+      "trade_id": "carpenter_packed_silt",
+      "original_numismatics_cost": 64
+    },
+    {
+      "offer": {
+        "item": "create:limestone",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10",
+        "count": 6
+      },
+      "trade_id": "carpenter_limestone",
+      "original_numismatics_cost": 64
+    },
+    {
+      "offer": {
+        "item": "twigs:schist",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1",
+        "count": 7
+      },
+      "trade_id": "carpenter_schist",
+      "original_numismatics_cost": 7
+    },
+    {
+      "offer": {
+        "item": "windswept:lunalite",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1",
+        "count": 7
+      },
+      "trade_id": "carpenter_lunalite",
+      "original_numismatics_cost": 7
+    },
+    {
+      "offer": {
+        "item": "windswept:shale",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1",
+        "count": 7
+      },
+      "trade_id": "carpenter_shale",
+      "original_numismatics_cost": 7
+    },
+    {
+      "offer": {
+        "item": "minecraft:prismarine",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 3
+      },
+      "trade_id": "carpenter_prismarine",
+      "original_numismatics_cost": 320
+    },
+    {
+      "offer": {
+        "item": "minecraft:dark_prismarine",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 3
+      },
+      "trade_id": "carpenter_dark_prismarine",
+      "original_numismatics_cost": 384
+    },
+    {
+      "offer": {
+        "item": "minecraft:polished_basalt",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 2
+      },
+      "trade_id": "carpenter_polished_basalt",
+      "original_numismatics_cost": 256
+    },
+    {
+      "offer": {
+        "item": "minecraft:blackstone",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 2
+      },
+      "trade_id": "carpenter_blackstone",
+      "original_numismatics_cost": 256
+    },
+    {
+      "offer": {
+        "item": "create:scorchia",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 1
+      },
+      "trade_id": "carpenter_scorchia",
+      "original_numismatics_cost": 128
+    },
+    {
+      "offer": {
+        "item": "twigs:bloodstone",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 1
+      },
+      "trade_id": "carpenter_bloodstone",
+      "original_numismatics_cost": 128
+    },
+    {
+      "offer": {
+        "item": "create:scoria",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 1
+      },
+      "trade_id": "carpenter_scoria",
+      "original_numismatics_cost": 128
+    },
+    {
+      "offer": {
+        "item": "twigs:rhyolite",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 1
+      },
+      "trade_id": "carpenter_rhyolite",
+      "original_numismatics_cost": 128
+    },
+    {
+      "offer": {
+        "item": "minecraft:end_stone",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 1
+      },
+      "trade_id": "carpenter_end_stone",
+      "original_numismatics_cost": 1024
+    },
+    {
+      "offer": {
+        "item": "quark:dusky_myalite",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 1
+      },
+      "trade_id": "carpenterdusky_myalite_",
+      "original_numismatics_cost": 1024
+    },
+    {
+      "offer": {
+        "item": "quark:myalite_crystal",
+        "count": 8
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 2
+      },
+      "trade_id": "carpenter_myalite_crystal",
+      "original_numismatics_cost": 2048
+    },
+    {
+      "offer": {
+        "item": "minecraft:oak_sapling",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1",
+        "count": 8
+      },
+      "trade_id": "market_oak_sapling",
+      "original_numismatics_cost": 8
+    },
+    {
+      "offer": {
+        "item": "minecraft:spruce_sapling",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1",
+        "count": 8
+      },
+      "trade_id": "market_spruce_sapling",
+      "original_numismatics_cost": 8
+    },
+    {
+      "offer": {
+        "item": "minecraft:birch_sapling",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1",
+        "count": 8
+      },
+      "trade_id": "market_birch_sapling",
+      "original_numismatics_cost": 8
+    },
+    {
+      "offer": {
+        "item": "minecraft:jungle_sapling",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1",
+        "count": 8
+      },
+      "trade_id": "market_jungle_sapling",
+      "original_numismatics_cost": 8
+    },
+    {
+      "offer": {
+        "item": "minecraft:acacia_sapling",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1",
+        "count": 8
+      },
+      "trade_id": "market_acacia_sapling",
+      "original_numismatics_cost": 8
+    },
+    {
+      "offer": {
+        "item": "minecraft:dark_oak_sapling",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1",
+        "count": 8
+      },
+      "trade_id": "market_dark_oak_sapling",
+      "original_numismatics_cost": 8
+    },
+    {
+      "offer": {
+        "item": "minecraft:cherry_sapling",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1",
+        "count": 8
+      },
+      "trade_id": "market_cherry_sapling",
+      "original_numismatics_cost": 8
+    },
+    {
+      "offer": {
+        "item": "minecraft:azalea",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10",
+        "count": 1
+      },
+      "trade_id": "market_azalea",
+      "original_numismatics_cost": 16
+    },
+    {
+      "offer": {
+        "item": "minecraft:flowering_azalea",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10",
+        "count": 1
+      },
+      "trade_id": "market_flowering_azalea",
+      "original_numismatics_cost": 16
+    },
+    {
+      "offer": {
+        "item": "minecraft:mangrove_propagule",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10",
+        "count": 1
+      },
+      "trade_id": "market_mangrove_propagule",
+      "original_numismatics_cost": 16
+    },
+    {
+      "offer": {
+        "item": "autumnity:red_maple_sapling",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1",
+        "count": 8
+      },
+      "trade_id": "market_red_maple_sapling",
+      "original_numismatics_cost": 8
+    },
+    {
+      "offer": {
+        "item": "windswept:pine_sapling",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10",
+        "count": 1
+      },
+      "trade_id": "market_pine_sapling",
+      "original_numismatics_cost": 16
+    },
+    {
+      "offer": {
+        "item": "meadow:pine_sapling",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10",
+        "count": 1
+      },
+      "trade_id": "market_pine_sapling",
+      "original_numismatics_cost": 16
+    },
+    {
+      "offer": {
+        "item": "quark:orange_blossom_sapling",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10",
+        "count": 6
+      },
+      "trade_id": "market_orange_blossom_sapling",
+      "original_numismatics_cost": 64
+    },
+    {
+      "offer": {
+        "item": "society:universal_methods_of_farming",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 8
+      },
+      "trade_id": "market_universal_methods_of_farming",
+      "original_numismatics_cost": 81920
+    }
+  ],
+  "random_sets": [
+    {
+      "random_style": "per_day",
+      "rolled_count": 1,
+      "seasons_required": [
+        "early_spring"
+      ],
+      "trades": [
+        {
+          "offer": {
+            "item": "society:bee_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_bee_wallpaper",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "society:hive_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_hive_wallpaper",
+          "original_numismatics_cost": 256
+        }
+      ]
+    },
+    {
+      "random_style": "per_day",
+      "rolled_count": 2,
+      "seasons_required": [
+        "mid_spring"
+      ],
+      "trades": [
+        {
+          "offer": {
+            "item": "cluttered:checkered_green_strawberry_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_checkered_green_strawberry_wallpaper",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:diamond_wallpaper_green_grapes",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_diamond_wallpaper_green_grapes",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:diamond_wallpaper_strawberry",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_diamond_wallpaper_strawberry",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:checkered_pink_strawberry_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_checkered_pink_strawberry_wallpaper",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:diamond_wallpaper_lemon",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_diamond_wallpaper_lemon",
+          "original_numismatics_cost": 256
+        }
+      ]
+    },
+    {
+      "random_style": "per_day",
+      "rolled_count": 2,
+      "seasons_required": [
+        "late_spring"
+      ],
+      "trades": [
+        {
+          "offer": {
+            "item": "cluttered:striped_floral_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_striped_floral_wallpaper",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:confectionary_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_confectionary_wallpaper",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:tartan_yellow_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_tartan_yellow_wallpaper",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:checkered_pink_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_checkered_pink_wallpaperr",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:checkered_green_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_checkered_green_wallpaper",
+          "original_numismatics_cost": 256
+        }
+      ]
+    },
+    {
+      "random_style": "per_day",
+      "rolled_count": 2,
+      "seasons_required": [
+        "mid_summer"
+      ],
+      "trades": [
+        {
+          "offer": {
+            "item": "cluttered:diamond_wallpaper_blueberry",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_diamond_wallpaper_blueberry",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:diamond_wallpaper_orange",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_diamond_wallpaper_orange",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:checkered_fruit_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_checkered_fruit_wallpaper",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:chic_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_chic_wallpaper",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:pink_striped_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_pink_striped_wallpaper",
+          "original_numismatics_cost": 256
+        }
+      ]
+    },
+    {
+      "random_style": "per_day",
+      "rolled_count": 2,
+      "seasons_required": [
+        "late_summer"
+      ],
+      "trades": [
+        {
+          "offer": {
+            "item": "cluttered:blue_rose_striped_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_blue_rose_striped_wallpaper",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:rialto_gold_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_rialto_gold_wallpaper",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:marigold_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_marigold_wallpaper",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:fish_wallpaper_tropical",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_fish_wallpaper_tropical",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:floral_berry_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_floral_berry_wallpaper",
+          "original_numismatics_cost": 256
+        }
+      ]
+    },
+    {
+      "random_style": "per_day",
+      "rolled_count": 2,
+      "seasons_required": [
+        "mid_autumn"
+      ],
+      "trades": [
+        {
+          "offer": {
+            "item": "cluttered:diamond_wallpaper_red_mushroom",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_diamond_wallpaper_red_mushroom",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:diamond_wallpaper_brown_mushroom",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_diamond_wallpaper_brown_mushroom",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:diamond_wallpaper_plum",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_diamond_wallpaper_plum",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:diamond_wallpaper_pear",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_diamond_wallpaper_pear",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:diamond_wallpaper_apple",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_diamond_wallpaper_apple",
+          "original_numismatics_cost": 256
+        }
+      ]
+    },
+    {
+      "random_style": "per_day",
+      "rolled_count": 2,
+      "seasons_required": [
+        "late_autumn"
+      ],
+      "trades": [
+        {
+          "offer": {
+            "item": "cluttered:apple_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_apple_wallpaper",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:halloween_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_halloween_wallpaper",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:ghost_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_floral_ghost_wallpaper",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:ghost_wallpaper_wainscoting",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_ghost_wallpaper_wainscoting",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:diamond_wallpaper_bones",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_diamond_wallpaper_bones",
+          "original_numismatics_cost": 256
+        }
+      ]
+    },
+    {
+      "random_style": "per_day",
+      "rolled_count": 2,
+      "seasons_required": [
+        "mid_winter"
+      ],
+      "trades": [
+        {
+          "offer": {
+            "item": "cluttered:diamond_wallpaper_blackberry",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_diamond_wallpaper_blackberry",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:retro_rainbow_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_retro_rainbow_wallpaper",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:diamond_wallpaper_purple_grapes",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_diamond_wallpaper_purple_grapes",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:diamond_wallpaper_anchor",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_diamond_wallpaper_anchor",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:floral_border_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_floral_border_wallpaper",
+          "original_numismatics_cost": 256
+        }
+      ]
+    },
+    {
+      "random_style": "per_day",
+      "rolled_count": 2,
+      "seasons_required": [
+        "late_winter"
+      ],
+      "trades": [
+        {
+          "offer": {
+            "item": "cluttered:fish_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_fish_wallpaper",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:dark_starry_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_dark_starry_wallpaper",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:starry_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_starry_wallpaper",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "cluttered:mint_wallpaper",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "carpenter_mint_wallpaper",
+          "original_numismatics_cost": 256
+        },
+        {
+          "offer": {
+            "item": "windswept:pinecone_shingles",
+            "count": 8
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 1
+          },
+          "trade_id": "carpenter_pinecone_shingles",
+          "original_numismatics_cost": 128
+        }
+      ]
+    }
+  ]
+}

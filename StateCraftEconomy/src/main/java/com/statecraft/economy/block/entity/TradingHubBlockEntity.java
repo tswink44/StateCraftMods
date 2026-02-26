@@ -656,9 +656,13 @@ public class TradingHubBlockEntity extends BlockEntity implements MenuProvider {
 
             if (share.isCompany) {
                 // Company share — deposit to company treasury
-                com.statecraft.economy.core.EconomyManager.getInstance().depositToCompanyTreasury(
-                    share.playerUUID, shareValue,
-                    "Trading Hub profit share (" + (int)sharePercentage + "%)");
+                com.statecraft.economy.core.EconomyManager.TransactionResult result =
+                    com.statecraft.economy.core.EconomyManager.getInstance().depositToCompanyTreasury(
+                        share.playerUUID, shareValue,
+                        "Trading Hub profit share (" + (int)sharePercentage + "%)");
+                com.statecraft.economy.StateCraftEconomy.LOGGER.info(
+                    "Trading Hub company deposit: {} -> {} (${}) success={}",
+                    share.playerName, share.playerUUID, String.format("%.2f", shareValue), result.isSuccess());
             } else if (depositToATM) {
                 EconomyManager.getInstance().deposit(share.playerUUID, shareValue,
                     "Trading Hub profit share (" + (int)sharePercentage + "%)");

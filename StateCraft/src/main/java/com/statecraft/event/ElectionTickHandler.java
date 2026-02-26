@@ -88,7 +88,7 @@ public class ElectionTickHandler {
         if (needsSave) {
             ServerLevel overworld = event.getServer().getLevel(Level.OVERWORLD);
             if (overworld != null) {
-                NationSavedData.get(overworld).setDirty();
+                NationSavedData.get(overworld).markForSave();
             }
         }
 

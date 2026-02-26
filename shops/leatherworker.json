@@ -1,0 +1,207 @@
+{
+  "shop_id": "leatherworker",
+  "name": "shop.society_trading.leatherworker",
+  "texture": "quark:textures/block/bonded_leather",
+  "villager_profession": "leatherworker",
+  "jei_catalyst": {
+    "item": "minecraft:cauldron"
+  },
+  "trades": [
+    {
+      "offer": {
+        "item": "minecraft:bundle",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10",
+        "count": 1
+      },
+      "trade_id": "leatherworker_bundle_white_for_sprocket",
+      "original_numismatics_cost": 16
+    },
+    {
+      "offer": {
+        "item": "minecraft:saddle",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 1
+      },
+      "trade_id": "leatherworker_saddle_for_cog",
+      "original_numismatics_cost": 128
+    },
+    {
+      "offer": {
+        "item": "sewingkit:sewing_station",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 2
+      },
+      "trade_id": "leatherworker_sewing_station_for_crown",
+      "original_numismatics_cost": 2048
+    },
+    {
+      "offer": {
+        "item": "sewingkit:iron_sewing_needle",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 2
+      },
+      "trade_id": "leatherworker_iron_sewing_needle_for_cog",
+      "original_numismatics_cost": 256
+    },
+    {
+      "offer": {
+        "item": "naturescompass:naturescompass",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 2
+      },
+      "trade_id": "leatherworker_naturescompass_for_crown",
+      "original_numismatics_cost": 24576
+    },
+    {
+      "offer": {
+        "item": "sophisticatedbackpacks:backpack",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 1
+      },
+      "trade_id": "leatherworker_backpack_for_crown",
+      "original_numismatics_cost": 1024
+    },
+    {
+      "offer": {
+        "item": "sophisticatedbackpacks:upgrade_base",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 5
+      },
+      "trade_id": "leatherworker_upgrade_base_for_crown",
+      "original_numismatics_cost": 512
+    },
+    {
+      "offer": {
+        "item": "sophisticatedbackpacks:stack_upgrade_starter_tier",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 3
+      },
+      "trade_id": "leatherworker_stack_upgrade_starter_tier_for_sun",
+      "original_numismatics_cost": 32768
+    },
+    {
+      "offer": {
+        "item": "sophisticatedbackpacks:stack_upgrade_tier_1",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 6
+      },
+      "trade_id": "leatherworker_stack_upgrade_tier_1_for_sun",
+      "original_numismatics_cost": 65536
+    },
+    {
+      "offer": {
+        "item": "sophisticatedbackpacks:stack_upgrade_tier_2",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100000",
+        "count": 1
+      },
+      "trade_id": "leatherworker_stack_upgrade_tier_2_for_sun",
+      "original_numismatics_cost": 131072
+    },
+    {
+      "offer": {
+        "item": "sophisticatedbackpacks:stack_upgrade_tier_3",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100000",
+        "count": 2
+      },
+      "trade_id": "leatherworker_stack_upgrade_tier_3_for_sun",
+      "original_numismatics_cost": 262144
+    },
+    {
+      "offer": {
+        "item": "sophisticatedbackpacks:stack_upgrade_tier_4",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100000",
+        "count": 5
+      },
+      "second_request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 2
+      },
+      "trade_id": "leatherworker_stack_upgrade_tier_4_for_sun",
+      "original_numismatics_cost": 524288
+    },
+    {
+      "offer": {
+        "item": "sophisticatedbackpacks:stack_upgrade_omega_tier",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000000",
+        "count": 2
+      },
+      "trade_id": "leatherworker_stack_upgrade_omega_tier_for_ancient_coin",
+      "original_numismatics_cost": 2097152
+    },
+    {
+      "offer": {
+        "item": "sophisticatedbackpacks:inception_upgrade",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000000",
+        "count": 64
+      },
+      "trade_id": "leatherworker_inception_upgrade_for_prismatic_coin",
+      "original_numismatics_cost": 67108864
+    },
+    {
+      "offer": {
+        "item": "beachparty:crocs",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000000",
+        "count": 64
+      },
+      "trade_id": "leatherworker_crocs_for_prismatic_coin",
+      "original_numismatics_cost": 268435456
+    },
+    {
+      "offer": {
+        "item": "wildernature:stylin_purple_hat",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000000",
+        "count": 64
+      },
+      "trade_id": "leatherworker_stylin_purple_hat_for_prismatic_coin",
+      "original_numismatics_cost": 1073741824
+    }
+  ]
+}

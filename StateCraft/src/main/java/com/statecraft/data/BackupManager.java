@@ -18,8 +18,8 @@ import java.util.stream.Stream;
  * Automatic hourly backup of all StateCraft and StateCraft Economy data files.
  *
  * Backed up files:
- *   - world/data/statecraft_nations.dat
- *   - world/data/statecraft_economy_economy.dat
+ *   - world/statecraft/nations.json
+ *   - world/statecraft/economy.json
  *   - world/statecraft_mail.json
  *   - world/statecraft_valuations.json
  *
@@ -42,8 +42,8 @@ public class BackupManager {
 
     /** Files to back up, relative to the world root directory */
     private static final String[] BACKUP_FILES = {
-        "data/statecraft_nations.dat",
-        "data/statecraft_economy_economy.dat",
+        "statecraft/nations.json",
+        "statecraft/economy.json",
         "statecraft_mail.json",
         "statecraft_valuations.json"
     };

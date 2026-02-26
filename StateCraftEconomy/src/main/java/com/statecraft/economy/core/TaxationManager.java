@@ -1,6 +1,7 @@
 package com.statecraft.economy.core;
 
 import com.statecraft.economy.StateCraftEconomy;
+import com.statecraft.economy.config.EconomyConfig;
 import com.statecraft.economy.integration.StateCraftIntegration;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -32,7 +33,7 @@ public class TaxationManager {
     private static final double DEFAULT_STATE_PASSTHROUGH = 0.20;   // 20% of city revenue to state
     private static final double DEFAULT_NATION_PASSTHROUGH = 0.20;  // 20% of state revenue to nation
 
-    // Tax period in game ticks (default: 1 real hour = 72000 ticks)
+    // Tax period in game ticks (default from config, fallback: 1 real hour = 72000 ticks)
     private static final long DEFAULT_TAX_PERIOD_TICKS = 72000;
 
     // Chunk base value for taxation
@@ -47,7 +48,8 @@ public class TaxationManager {
 
     // Last tax collection time
     private long lastTaxCollection = 0;
-    private long taxPeriodTicks = DEFAULT_TAX_PERIOD_TICKS;
+    private long taxPeriodTicks;
+    private boolean taxPeriodSetByCommand = false;
 
     // Tax collection enabled flag
     private boolean enabled = true;
@@ -55,7 +57,14 @@ public class TaxationManager {
     // Dirty flag for persistence
     private boolean dirty = false;
 
-    private TaxationManager() {}
+    private TaxationManager() {
+        try {
+            taxPeriodTicks = EconomyConfig.TAX_PERIOD_TICKS.get();
+        } catch (Exception e) {
+            // Config may not be loaded yet during early init
+            taxPeriodTicks = DEFAULT_TAX_PERIOD_TICKS;
+        }
+    }
 
     public static TaxationManager getInstance() {
         if (instance == null) {
@@ -628,6 +637,7 @@ public class TaxationManager {
 
     public void setTaxPeriodTicks(long ticks) {
         this.taxPeriodTicks = ticks;
+        this.taxPeriodSetByCommand = true;
         this.dirty = true;
     }
 
@@ -699,6 +709,14 @@ public class TaxationManager {
         }
         if (tag.contains("TaxPeriodTicks")) {
             taxPeriodTicks = tag.getLong("TaxPeriodTicks");
+            taxPeriodSetByCommand = true;
+        } else {
+            // No saved value — use config default
+            try {
+                taxPeriodTicks = EconomyConfig.TAX_PERIOD_TICKS.get();
+            } catch (Exception e) {
+                taxPeriodTicks = DEFAULT_TAX_PERIOD_TICKS;
+            }
         }
         if (tag.contains("Enabled")) {
             enabled = tag.getBoolean("Enabled");

@@ -2,6 +2,7 @@ package com.statecraft.economy.client.screen;
 
 import com.statecraft.economy.block.entity.TradingHubBlockEntity;
 import com.statecraft.economy.network.NetworkHandler;
+import com.statecraft.economy.network.packets.RequestTradingHubSuggestionsPacket;
 import com.statecraft.economy.network.packets.TradingHubSettingsPacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -12,6 +13,7 @@ import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -57,6 +59,15 @@ public class TradingHubSettingsScreen extends Screen {
     // Error message display
     private String errorMessage = "";
     private int errorMessageTicks = 0;
+
+    // Autocomplete state
+    private List<String> companyNameSuggestions = new ArrayList<>();
+    private List<String> playerNameSuggestions = new ArrayList<>();
+    private List<String> filteredSuggestions = new ArrayList<>();
+    private int suggestionScrollOffset = 0;
+    private static final int MAX_VISIBLE_SUGGESTIONS = 5;
+    private boolean showSuggestions = false;
+    private int selectedSuggestionIndex = -1;
 
     /**
      * Local copy of profit share for editing
@@ -118,6 +129,7 @@ public class TradingHubSettingsScreen extends Screen {
         playerNameInput = new EditBox(this.font, guiLeft + 20, shareY, 100, 18, Component.literal("Name"));
         playerNameInput.setMaxLength(64);
         playerNameInput.setHint(Component.literal("Name or @Company"));
+        playerNameInput.setResponder(this::onNameInputChanged);
         addRenderableWidget(playerNameInput);
 
         // Percentage input
@@ -145,6 +157,9 @@ public class TradingHubSettingsScreen extends Screen {
         ).bounds(guiLeft + guiWidth - 100, guiTop + guiHeight - 30, 80, 20).build());
 
         rebuildShareButtons();
+
+        // Request autocomplete suggestions from server
+        NetworkHandler.sendToServer(new RequestTradingHubSuggestionsPacket());
     }
 
     private void rebuildShareButtons() {
@@ -367,6 +382,43 @@ public class TradingHubSettingsScreen extends Screen {
         graphics.drawString(this.font, "§7" + ownerText, guiLeft + 20, guiTop + guiHeight - 45, 0xFFAAAAAA);
 
         super.render(graphics, mouseX, mouseY, partialTick);
+
+        // Render autocomplete dropdown on top of everything
+        if (showSuggestions && !filteredSuggestions.isEmpty() && playerNameInput.isFocused()) {
+            int dropdownX = playerNameInput.getX();
+            int dropdownW = playerNameInput.getWidth();
+            int visibleCount = Math.min(filteredSuggestions.size() - suggestionScrollOffset, MAX_VISIBLE_SUGGESTIONS);
+            int dropdownH = visibleCount * 12;
+            int dropdownY = playerNameInput.getY() - dropdownH;
+
+            // Background
+            graphics.fill(dropdownX - 1, dropdownY - 1, dropdownX + dropdownW + 1, dropdownY + dropdownH + 1, 0xFF3D3D5C);
+            graphics.fill(dropdownX, dropdownY, dropdownX + dropdownW, dropdownY + dropdownH, 0xEE1A1A2E);
+
+            for (int i = 0; i < visibleCount; i++) {
+                int idx = i + suggestionScrollOffset;
+                int y = dropdownY + i * 12;
+                boolean isHovered = mouseX >= dropdownX && mouseX < dropdownX + dropdownW &&
+                                    mouseY >= y && mouseY < y + 12;
+                boolean isSelected = idx == selectedSuggestionIndex;
+
+                if (isHovered || isSelected) {
+                    graphics.fill(dropdownX, y, dropdownX + dropdownW, y + 12, 0x44FFFFFF);
+                }
+
+                String name = filteredSuggestions.get(idx);
+                int color = name.startsWith("@") ? 0xFFDD88FF : 0xFFFFFFFF;
+                graphics.drawString(this.font, name, dropdownX + 3, y + 2, color);
+            }
+
+            // Scroll indicators
+            if (suggestionScrollOffset > 0) {
+                graphics.drawString(this.font, "▲", dropdownX + dropdownW - 10, dropdownY + 1, 0xFFAAAAAA);
+            }
+            if (suggestionScrollOffset + MAX_VISIBLE_SUGGESTIONS < filteredSuggestions.size()) {
+                graphics.drawString(this.font, "▼", dropdownX + dropdownW - 10, dropdownY + dropdownH - 10, 0xFFAAAAAA);
+            }
+        }
     }
 
     @Override
@@ -379,6 +431,23 @@ public class TradingHubSettingsScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        // Handle suggestion list scrolling
+        if (showSuggestions && !filteredSuggestions.isEmpty()) {
+            int dropdownX = playerNameInput.getX();
+            int dropdownY = playerNameInput.getY() - Math.min(filteredSuggestions.size(), MAX_VISIBLE_SUGGESTIONS) * 12;
+            int dropdownW = playerNameInput.getWidth();
+            int dropdownH = Math.min(filteredSuggestions.size(), MAX_VISIBLE_SUGGESTIONS) * 12;
+            if (mouseX >= dropdownX && mouseX < dropdownX + dropdownW &&
+                mouseY >= dropdownY && mouseY < dropdownY + dropdownH) {
+                if (delta > 0 && suggestionScrollOffset > 0) {
+                    suggestionScrollOffset--;
+                } else if (delta < 0 && suggestionScrollOffset + MAX_VISIBLE_SUGGESTIONS < filteredSuggestions.size()) {
+                    suggestionScrollOffset++;
+                }
+                return true;
+            }
+        }
+
         if (mouseX >= guiLeft && mouseX < guiLeft + guiWidth &&
             mouseY >= guiTop + 75 && mouseY < guiTop + 130) {
             if (delta > 0 && scrollOffset > 0) {
@@ -391,6 +460,138 @@ public class TradingHubSettingsScreen extends Screen {
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+
+    // ==================== Autocomplete ====================
+
+    /**
+     * Called by network handler when suggestions are received from server
+     */
+    public void updateSuggestions(List<String> companyNames, List<String> playerNames) {
+        this.companyNameSuggestions = companyNames;
+        this.playerNameSuggestions = playerNames;
+    }
+
+    private void onNameInputChanged(String text) {
+        updateFilteredSuggestions(text);
+    }
+
+    private void updateFilteredSuggestions(String input) {
+        filteredSuggestions.clear();
+        suggestionScrollOffset = 0;
+        selectedSuggestionIndex = -1;
+
+        if (input.isEmpty()) {
+            showSuggestions = false;
+            return;
+        }
+
+        boolean isCompanyMode = input.startsWith("@");
+        String searchText = isCompanyMode ? input.substring(1).toLowerCase(Locale.ROOT) : input.toLowerCase(Locale.ROOT);
+
+        if (searchText.isEmpty() && isCompanyMode) {
+            // Show all companies when just "@" is typed
+            for (String name : companyNameSuggestions) {
+                filteredSuggestions.add("@" + name);
+            }
+        } else if (isCompanyMode) {
+            for (String name : companyNameSuggestions) {
+                if (name.toLowerCase(Locale.ROOT).startsWith(searchText)) {
+                    filteredSuggestions.add("@" + name);
+                }
+            }
+            // Also add contains matches after startsWith matches
+            for (String name : companyNameSuggestions) {
+                String entry = "@" + name;
+                if (!filteredSuggestions.contains(entry) && name.toLowerCase(Locale.ROOT).contains(searchText)) {
+                    filteredSuggestions.add(entry);
+                }
+            }
+        } else {
+            for (String name : playerNameSuggestions) {
+                if (name.toLowerCase(Locale.ROOT).startsWith(searchText)) {
+                    filteredSuggestions.add(name);
+                }
+            }
+            for (String name : playerNameSuggestions) {
+                if (!filteredSuggestions.contains(name) && name.toLowerCase(Locale.ROOT).contains(searchText)) {
+                    filteredSuggestions.add(name);
+                }
+            }
+        }
+
+        showSuggestions = !filteredSuggestions.isEmpty();
+    }
+
+    private void applySuggestion(String suggestion) {
+        playerNameInput.setValue(suggestion);
+        showSuggestions = false;
+        filteredSuggestions.clear();
+        // Move focus to the percentage input
+        percentageInput.setFocused(true);
+        playerNameInput.setFocused(false);
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // Check if click is on a suggestion
+        if (showSuggestions && !filteredSuggestions.isEmpty()) {
+            int dropdownX = playerNameInput.getX();
+            int dropdownW = playerNameInput.getWidth();
+            int visibleCount = Math.min(filteredSuggestions.size() - suggestionScrollOffset, MAX_VISIBLE_SUGGESTIONS);
+            int dropdownY = playerNameInput.getY() - visibleCount * 12;
+
+            if (mouseX >= dropdownX && mouseX < dropdownX + dropdownW &&
+                mouseY >= dropdownY && mouseY < dropdownY + visibleCount * 12) {
+                int index = (int)(mouseY - dropdownY) / 12 + suggestionScrollOffset;
+                if (index >= 0 && index < filteredSuggestions.size()) {
+                    applySuggestion(filteredSuggestions.get(index));
+                    return true;
+                }
+            }
+            // Clicked outside suggestions — hide them
+            showSuggestions = false;
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (showSuggestions && !filteredSuggestions.isEmpty() && playerNameInput.isFocused()) {
+            // Tab to accept top suggestion
+            if (keyCode == 258) { // Tab
+                int idx = selectedSuggestionIndex >= 0 ? selectedSuggestionIndex : suggestionScrollOffset;
+                if (idx < filteredSuggestions.size()) {
+                    applySuggestion(filteredSuggestions.get(idx));
+                    return true;
+                }
+            }
+            // Up/Down arrow keys to navigate suggestions
+            if (keyCode == 265) { // Up
+                if (selectedSuggestionIndex > 0) {
+                    selectedSuggestionIndex--;
+                    if (selectedSuggestionIndex < suggestionScrollOffset) {
+                        suggestionScrollOffset = selectedSuggestionIndex;
+                    }
+                }
+                return true;
+            }
+            if (keyCode == 264) { // Down
+                if (selectedSuggestionIndex < filteredSuggestions.size() - 1) {
+                    selectedSuggestionIndex++;
+                    if (selectedSuggestionIndex >= suggestionScrollOffset + MAX_VISIBLE_SUGGESTIONS) {
+                        suggestionScrollOffset = selectedSuggestionIndex - MAX_VISIBLE_SUGGESTIONS + 1;
+                    }
+                }
+                return true;
+            }
+            // Enter to accept selected suggestion
+            if (keyCode == 257 && selectedSuggestionIndex >= 0) { // Enter
+                applySuggestion(filteredSuggestions.get(selectedSuggestionIndex));
+                return true;
+            }
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override

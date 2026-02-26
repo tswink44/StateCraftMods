@@ -1,5 +1,9 @@
 package com.statecraft.data;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.statecraft.StateCraft;
 import com.statecraft.company.CompanyManager;
 import com.statecraft.contract.ContractManager;
@@ -8,32 +12,123 @@ import com.statecraft.legislature.LegislatureManager;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.storage.LevelResource;
 
 import javax.annotation.Nonnull;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.*;
 
 /**
- * Persists all nation data using Minecraft's SavedData system
- * Data is stored in the overworld's data folder
+ * Persists all nation data as JSON files in the world's statecraft/ directory.
+ * Data is human-readable and independent from Minecraft's binary SavedData system.
+ *
+ * Migration: If the JSON file doesn't exist but the legacy .dat file does,
+ * data is loaded from .dat and immediately saved as JSON.
  */
-public class NationSavedData extends SavedData {
-    private static final String DATA_NAME = StateCraft.MOD_ID + "_nations";
+public class NationSavedData {
+    private static final String JSON_DIR = "statecraft";
+    private static final String JSON_FILE = "nations.json";
+    private static final String LEGACY_DAT_DIR = "data";
+    private static final String LEGACY_DAT_FILE = StateCraft.MOD_ID + "_nations.dat";
 
-    public NationSavedData() {
-        super();
+    private static NationSavedData instance;
+    private boolean dirty = false;
+    private Path savePath;
+
+    private NationSavedData() {}
+
+    public static NationSavedData getInstance() {
+        if (instance == null) {
+            instance = new NationSavedData();
+        }
+        return instance;
     }
 
     /**
-     * Load data from NBT
+     * Initialize and load data from JSON (or migrate from legacy NBT).
      */
-    public static NationSavedData load(CompoundTag tag) {
-        NationSavedData data = new NationSavedData();
+    public static NationSavedData init(MinecraftServer server) {
+        NationSavedData data = getInstance();
+        Path worldDir = server.getWorldPath(LevelResource.ROOT);
+        data.savePath = worldDir.resolve(JSON_DIR).resolve(JSON_FILE);
+        data.loadData(worldDir);
+        return data;
+    }
 
+    /**
+     * Backward-compatible entry point used by existing callers.
+     * Delegates to init() on first call, returns cached instance thereafter.
+     */
+    public static NationSavedData get(ServerLevel level) {
+        if (instance == null || instance.savePath == null) {
+            return init(level.getServer());
+        }
+        return instance;
+    }
+
+    // ======================== Load ========================
+
+    private void loadData(Path worldDir) {
+        if (Files.exists(savePath)) {
+            loadFromJson();
+        } else {
+            // Try legacy .dat migration
+            Path legacyPath = worldDir.resolve(LEGACY_DAT_DIR).resolve(LEGACY_DAT_FILE);
+            if (Files.exists(legacyPath)) {
+                StateCraft.LOGGER.info("Migrating legacy NBT data to JSON...");
+                loadFromLegacyDat(legacyPath);
+                // Immediately save as JSON
+                saveToJson();
+                // Rename the old .dat so we don't re-migrate
+                try {
+                    Files.move(legacyPath, legacyPath.resolveSibling(LEGACY_DAT_FILE + ".migrated"),
+                        StandardCopyOption.REPLACE_EXISTING);
+                    StateCraft.LOGGER.info("Legacy .dat file renamed to {}.migrated", LEGACY_DAT_FILE);
+                } catch (IOException e) {
+                    StateCraft.LOGGER.warn("Could not rename legacy .dat file: {}", e.getMessage());
+                }
+            } else {
+                StateCraft.LOGGER.info("No existing StateCraft data found, starting fresh");
+            }
+        }
+    }
+
+    private void loadFromJson() {
+        try {
+            String json = Files.readString(savePath);
+            JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+            CompoundTag tag = NbtJsonConverter.fromJson(root);
+            loadFromNbt(tag);
+            StateCraft.LOGGER.info("Loaded StateCraft data from JSON");
+        } catch (Exception e) {
+            StateCraft.LOGGER.error("Failed to load StateCraft data from JSON!", e);
+        }
+    }
+
+    private void loadFromLegacyDat(Path datPath) {
+        try (InputStream is = Files.newInputStream(datPath)) {
+            CompoundTag root = NbtIo.readCompressed(is);
+            // SavedData wraps content inside a "data" key
+            CompoundTag tag = root.contains("data") ? root.getCompound("data") : root;
+            loadFromNbt(tag);
+            StateCraft.LOGGER.info("Loaded StateCraft data from legacy .dat file");
+        } catch (Exception e) {
+            StateCraft.LOGGER.error("Failed to load legacy .dat file!", e);
+        }
+    }
+
+    /**
+     * Core NBT loading logic — shared by both JSON and legacy paths.
+     */
+    private void loadFromNbt(CompoundTag tag) {
         ChunkClaimManager manager = ChunkClaimManager.getInstance();
         manager.clear();
 
@@ -90,8 +185,6 @@ public class NationSavedData extends SavedData {
 
         // Run orphan cleanup to detect and remove stale/orphaned data
         manager.runOrphanCleanup();
-
-        return data;
     }
 
     private static void loadChunksForNation(Nation nation, CompoundTag nationTag) {
@@ -128,9 +221,44 @@ public class NationSavedData extends SavedData {
         }
     }
 
-    @Override
+    // ======================== Save ========================
+
+    /**
+     * Save all data to JSON.
+     */
+    public void saveToJson() {
+        if (savePath == null) return;
+
+        try {
+            CompoundTag tag = saveToNbt();
+            JsonObject json = NbtJsonConverter.toJson(tag);
+
+            Gson gson = new GsonBuilder().setPrettyPrinting().create();
+            String jsonStr = gson.toJson(json);
+
+            // Atomic write: write to temp file first, then rename
+            Files.createDirectories(savePath.getParent());
+            Path tmpPath = savePath.resolveSibling(JSON_FILE + ".tmp");
+            Files.writeString(tmpPath, jsonStr);
+            try {
+                Files.move(tmpPath, savePath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(tmpPath, savePath, StandardCopyOption.REPLACE_EXISTING);
+            }
+
+            clearDirty();
+            StateCraft.LOGGER.debug("Saved StateCraft data to JSON");
+        } catch (IOException e) {
+            StateCraft.LOGGER.error("Failed to save StateCraft data to JSON!", e);
+        }
+    }
+
+    /**
+     * Core NBT save logic — builds the full CompoundTag from all managers.
+     */
     @Nonnull
-    public CompoundTag save(@Nonnull CompoundTag tag) {
+    private CompoundTag saveToNbt() {
+        CompoundTag tag = new CompoundTag();
         ChunkClaimManager manager = ChunkClaimManager.getInstance();
 
         // Save all nations
@@ -171,28 +299,38 @@ public class NationSavedData extends SavedData {
         return tag;
     }
 
-    /**
-     * Get or create the saved data for the server
-     */
-    public static NationSavedData get(ServerLevel level) {
-        // Always use the overworld for storage
-        ServerLevel overworld = level.getServer().getLevel(Level.OVERWORLD);
-        if (overworld == null) {
-            overworld = level;
-        }
+    // ======================== Dirty tracking ========================
 
-        return overworld.getDataStorage().computeIfAbsent(
-            NationSavedData::load,
-            NationSavedData::new,
-            DATA_NAME
-        );
+    public void markForSave() {
+        this.dirty = true;
+    }
+
+    public boolean isDirtyCheck() {
+        return dirty ||
+            ChunkClaimManager.getInstance().isDirty() ||
+            InvitationManager.getInstance().isDirty() ||
+            LegislatureManager.getInstance().isDirty() ||
+            ContractManager.getInstance().isDirty() ||
+            CompanyManager.getInstance().isDirty();
+    }
+
+    private void clearDirty() {
+        this.dirty = false;
     }
 
     /**
-     * Mark data as needing to be saved
+     * Save only if dirty.
      */
-    public void markForSave() {
-        setDirty();
+    public void saveIfDirty() {
+        if (isDirtyCheck()) {
+            saveToJson();
+        }
+    }
+
+    /**
+     * Reset the singleton (called on server stop).
+     */
+    public static void resetInstance() {
+        instance = null;
     }
 }
-

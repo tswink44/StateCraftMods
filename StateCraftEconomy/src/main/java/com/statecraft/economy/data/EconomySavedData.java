@@ -1,5 +1,9 @@
 package com.statecraft.economy.data;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.statecraft.economy.StateCraftEconomy;
 import com.statecraft.economy.core.BankAccount;
 import com.statecraft.economy.core.EconomyManager;
@@ -12,11 +16,15 @@ import com.statecraft.economy.company.CompanyEconomyManager;
 import com.statecraft.economy.company.BankManager;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.Tag;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.saveddata.SavedData;
-import net.minecraft.world.level.storage.DimensionDataStorage;
+import net.minecraft.world.level.storage.LevelResource;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.*;
 import java.util.HashMap;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,10 +32,21 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Persistent storage for economy data
+ * Persistent storage for economy data using JSON files.
+ * Data is saved to the world's statecraft/ directory as human-readable JSON.
+ *
+ * Migration: If the JSON file doesn't exist but the legacy .dat file does,
+ * data is loaded from .dat and immediately saved as JSON.
  */
-public class EconomySavedData extends SavedData {
-    private static final String DATA_NAME = StateCraftEconomy.MOD_ID + "_economy";
+public class EconomySavedData {
+    private static final String JSON_DIR = "statecraft";
+    private static final String JSON_FILE = "economy.json";
+    private static final String LEGACY_DAT_DIR = "data";
+    private static final String LEGACY_DAT_FILE = StateCraftEconomy.MOD_ID + "_economy.dat";
+
+    private static EconomySavedData instance;
+    private boolean dirty = false;
+    private Path savePath;
 
     private final Map<UUID, BankAccount> playerAccounts = new HashMap<>();
     private final Map<UUID, BankAccount> nationTreasuries = new HashMap<>();
@@ -35,19 +54,97 @@ public class EconomySavedData extends SavedData {
     private final Map<UUID, BankAccount> cityTreasuries = new HashMap<>();
     private final Map<UUID, BankAccount> companyTreasuries = new HashMap<>();
 
-    public EconomySavedData() {
-        super();
+    private EconomySavedData() {}
+
+    public static EconomySavedData getInstance() {
+        if (instance == null) {
+            instance = new EconomySavedData();
+        }
+        return instance;
     }
 
-    public static EconomySavedData load(CompoundTag tag) {
-        EconomySavedData data = new EconomySavedData();
+    /**
+     * Initialize and load data from JSON (or migrate from legacy NBT).
+     */
+    public static EconomySavedData init(MinecraftServer server) {
+        EconomySavedData data = getInstance();
+        Path worldDir = server.getWorldPath(LevelResource.ROOT);
+        data.savePath = worldDir.resolve(JSON_DIR).resolve(JSON_FILE);
+        data.loadData(worldDir);
+        return data;
+    }
 
+    /**
+     * Backward-compatible entry point used by existing callers.
+     */
+    public static EconomySavedData get(ServerLevel level) {
+        if (instance == null || instance.savePath == null) {
+            return init(level.getServer());
+        }
+        return instance;
+    }
+
+    // ======================== Load ========================
+
+    private void loadData(Path worldDir) {
+        if (Files.exists(savePath)) {
+            loadFromJson();
+        } else {
+            // Try legacy .dat migration
+            Path legacyPath = worldDir.resolve(LEGACY_DAT_DIR).resolve(LEGACY_DAT_FILE);
+            if (Files.exists(legacyPath)) {
+                StateCraftEconomy.LOGGER.info("Migrating legacy economy NBT data to JSON...");
+                loadFromLegacyDat(legacyPath);
+                // Immediately save as JSON
+                saveToJson();
+                // Rename the old .dat
+                try {
+                    Files.move(legacyPath, legacyPath.resolveSibling(LEGACY_DAT_FILE + ".migrated"),
+                        StandardCopyOption.REPLACE_EXISTING);
+                    StateCraftEconomy.LOGGER.info("Legacy economy .dat file renamed to {}.migrated", LEGACY_DAT_FILE);
+                } catch (IOException e) {
+                    StateCraftEconomy.LOGGER.warn("Could not rename legacy economy .dat file: {}", e.getMessage());
+                }
+            } else {
+                StateCraftEconomy.LOGGER.info("No existing economy data found, starting fresh");
+            }
+        }
+    }
+
+    private void loadFromJson() {
+        try {
+            String json = Files.readString(savePath);
+            JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+            CompoundTag tag = NbtJsonConverter.fromJson(root);
+            loadFromNbt(tag);
+            StateCraftEconomy.LOGGER.info("Loaded economy data from JSON");
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.error("Failed to load economy data from JSON!", e);
+        }
+    }
+
+    private void loadFromLegacyDat(Path datPath) {
+        try (InputStream is = Files.newInputStream(datPath)) {
+            CompoundTag root = NbtIo.readCompressed(is);
+            CompoundTag tag = root.contains("data") ? root.getCompound("data") : root;
+            loadFromNbt(tag);
+            StateCraftEconomy.LOGGER.info("Loaded economy data from legacy .dat file");
+        } catch (Exception e) {
+            StateCraftEconomy.LOGGER.error("Failed to load legacy economy .dat file!", e);
+        }
+    }
+
+    /**
+     * Core NBT loading logic — shared by JSON and legacy paths.
+     */
+    private void loadFromNbt(CompoundTag tag) {
         // Load bank registry
         if (tag.contains("BankRegistry")) {
             EconomyManager.getInstance().getBankRegistry().load(tag.getCompound("BankRegistry"));
         }
 
         // Load player accounts
+        playerAccounts.clear();
         ListTag playerList = tag.getList("PlayerAccounts", Tag.TAG_COMPOUND);
         for (int i = 0; i < playerList.size(); i++) {
             CompoundTag accountTag = playerList.getCompound(i);
@@ -58,10 +155,11 @@ public class EconomySavedData extends SavedData {
 
             BankAccount account = new BankAccount(id, BankAccount.AccountType.PLAYER, bankId, balance);
             account.setLastInterestTime(lastInterest);
-            data.playerAccounts.put(id, account);
+            playerAccounts.put(id, account);
         }
 
         // Load nation treasuries
+        nationTreasuries.clear();
         ListTag nationList = tag.getList("NationTreasuries", Tag.TAG_COMPOUND);
         for (int i = 0; i < nationList.size(); i++) {
             CompoundTag accountTag = nationList.getCompound(i);
@@ -70,10 +168,11 @@ public class EconomySavedData extends SavedData {
             UUID bankId = accountTag.contains("BankId") ? accountTag.getUUID("BankId") : null;
 
             BankAccount account = new BankAccount(id, BankAccount.AccountType.NATION, bankId, balance);
-            data.nationTreasuries.put(id, account);
+            nationTreasuries.put(id, account);
         }
 
         // Load state treasuries
+        stateTreasuries.clear();
         ListTag stateList = tag.getList("StateTreasuries", Tag.TAG_COMPOUND);
         for (int i = 0; i < stateList.size(); i++) {
             CompoundTag accountTag = stateList.getCompound(i);
@@ -82,10 +181,11 @@ public class EconomySavedData extends SavedData {
             UUID bankId = accountTag.contains("BankId") ? accountTag.getUUID("BankId") : null;
 
             BankAccount account = new BankAccount(id, BankAccount.AccountType.STATE, bankId, balance);
-            data.stateTreasuries.put(id, account);
+            stateTreasuries.put(id, account);
         }
 
         // Load city treasuries
+        cityTreasuries.clear();
         ListTag cityList = tag.getList("CityTreasuries", Tag.TAG_COMPOUND);
         for (int i = 0; i < cityList.size(); i++) {
             CompoundTag accountTag = cityList.getCompound(i);
@@ -94,10 +194,11 @@ public class EconomySavedData extends SavedData {
             UUID bankId = accountTag.contains("BankId") ? accountTag.getUUID("BankId") : null;
 
             BankAccount account = new BankAccount(id, BankAccount.AccountType.CITY, bankId, balance);
-            data.cityTreasuries.put(id, account);
+            cityTreasuries.put(id, account);
         }
 
         // Load company treasuries
+        companyTreasuries.clear();
         if (tag.contains("CompanyTreasuries")) {
             ListTag companyList = tag.getList("CompanyTreasuries", Tag.TAG_COMPOUND);
             for (int i = 0; i < companyList.size(); i++) {
@@ -107,12 +208,12 @@ public class EconomySavedData extends SavedData {
                 UUID bankId = accountTag.contains("BankId") ? accountTag.getUUID("BankId") : null;
 
                 BankAccount account = new BankAccount(id, BankAccount.AccountType.COMPANY, bankId, balance);
-                data.companyTreasuries.put(id, account);
+                companyTreasuries.put(id, account);
             }
         }
 
         StateCraftEconomy.LOGGER.info("Loaded economy data: {} player accounts, {} nation treasuries, {} state treasuries, {} city treasuries, {} company treasuries",
-            data.playerAccounts.size(), data.nationTreasuries.size(), data.stateTreasuries.size(), data.cityTreasuries.size(), data.companyTreasuries.size());
+            playerAccounts.size(), nationTreasuries.size(), stateTreasuries.size(), cityTreasuries.size(), companyTreasuries.size());
 
         // Load transaction history
         if (tag.contains("TransactionHistory")) {
@@ -164,7 +265,7 @@ public class EconomySavedData extends SavedData {
             }
         }
 
-        // Load bank manager state (must be after CompanyManager since it bank is a type of company)
+        // Load bank manager state
         if (tag.contains("BankManager")) {
             BankManager.getInstance().load(tag.getCompound("BankManager"));
         }
@@ -178,13 +279,44 @@ public class EconomySavedData extends SavedData {
         if (tag.contains("StockMarketManager")) {
             com.statecraft.economy.stockmarket.StockMarketManager.getInstance().load(tag.getCompound("StockMarketManager"));
         }
-
-        return data;
     }
 
-    @Override
-    public CompoundTag save(CompoundTag tag) {
-        // Sync from manager
+    // ======================== Save ========================
+
+    /**
+     * Save all economy data to JSON.
+     */
+    public void saveToJson() {
+        if (savePath == null) return;
+
+        try {
+            CompoundTag tag = saveToNbt();
+            JsonObject json = NbtJsonConverter.toJson(tag);
+
+            Gson gson = new GsonBuilder().setPrettyPrinting().create();
+            String jsonStr = gson.toJson(json);
+
+            Files.createDirectories(savePath.getParent());
+            Path tmpPath = savePath.resolveSibling(JSON_FILE + ".tmp");
+            Files.writeString(tmpPath, jsonStr);
+            try {
+                Files.move(tmpPath, savePath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(tmpPath, savePath, StandardCopyOption.REPLACE_EXISTING);
+            }
+
+            clearDirty();
+            StateCraftEconomy.LOGGER.debug("Saved economy data to JSON");
+        } catch (IOException e) {
+            StateCraftEconomy.LOGGER.error("Failed to save economy data to JSON!", e);
+        }
+    }
+
+    /**
+     * Core NBT save logic — builds the full CompoundTag from all managers.
+     */
+    private CompoundTag saveToNbt() {
+        CompoundTag tag = new CompoundTag();
         EconomyManager manager = EconomyManager.getInstance();
 
         // Save bank registry
@@ -317,10 +449,47 @@ public class EconomySavedData extends SavedData {
         return tag;
     }
 
-    public static EconomySavedData get(ServerLevel level) {
-        DimensionDataStorage storage = level.getDataStorage();
-        return storage.computeIfAbsent(EconomySavedData::load, EconomySavedData::new, DATA_NAME);
+    // ======================== Dirty tracking ========================
+
+    public void markForSave() {
+        this.dirty = true;
     }
+
+    public boolean isDirtyCheck() {
+        EconomyManager manager = EconomyManager.getInstance();
+        TaxationManager taxManager = TaxationManager.getInstance();
+        SpendingLimitManager spendingMgr = SpendingLimitManager.getInstance();
+        CompanyManager companyMgr = CompanyManager.getInstance();
+        CompanyEconomyManager companyEcoMgr = CompanyEconomyManager.getInstance();
+        BankManager bankMgr = BankManager.getInstance();
+        com.statecraft.economy.marketplace.MarketplaceManager marketMgr = com.statecraft.economy.marketplace.MarketplaceManager.getInstance();
+        com.statecraft.economy.stockmarket.StockMarketManager stockMgr = com.statecraft.economy.stockmarket.StockMarketManager.getInstance();
+        return dirty || manager.isDirty() || taxManager.isDirty() || spendingMgr.isDirty() ||
+            companyMgr.isDirty() || companyEcoMgr.isDirty() || bankMgr.isDirty() ||
+            marketMgr.isDirty() || stockMgr.isDirty();
+    }
+
+    private void clearDirty() {
+        this.dirty = false;
+    }
+
+    /**
+     * Save only if dirty.
+     */
+    public void saveIfDirty() {
+        if (isDirtyCheck()) {
+            saveToJson();
+        }
+    }
+
+    /**
+     * Reset the singleton (called on server stop).
+     */
+    public static void resetInstance() {
+        instance = null;
+    }
+
+    // ======================== Getters for EconomyManager ========================
 
     public Map<UUID, BankAccount> getPlayerAccounts() {
         return playerAccounts;
@@ -340,10 +509,6 @@ public class EconomySavedData extends SavedData {
 
     public Map<UUID, BankAccount> getCompanyTreasuries() {
         return companyTreasuries;
-    }
-
-    public void markForSave() {
-        setDirty();
     }
 }
 

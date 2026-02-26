@@ -28,6 +28,7 @@ public class SyncCompanyDataPacket {
     private final List<ShareholderEntry> shareholders;
     private final List<String> officerNames;
     private final String resultMessage;
+    private final double companyBalance; // Company treasury balance
 
     // Bank-specific fields (only populated when companyType is BANK)
     private final double depositInterestRate;
@@ -53,7 +54,7 @@ public class SyncCompanyDataPacket {
              totalShares, playerShares, shareholderCount, officerCount,
              headquartersCity, isFounder, isOfficer, dividendsEnabled, dividendRate,
              companyType, shareholders, officerNames, resultMessage,
-             0, 0, 0, 0, 0, 0, 0);
+             0, 0, 0, 0, 0, 0, 0, 0);
     }
 
     public SyncCompanyDataPacket(boolean hasCompany, String companyName, String companyId,
@@ -67,6 +68,7 @@ public class SyncCompanyDataPacket {
                                   List<ShareholderEntry> shareholders,
                                   List<String> officerNames,
                                   String resultMessage,
+                                  double companyBalance,
                                   double depositInterestRate, double loanInterestRate,
                                   double withdrawalFee, double transferFee,
                                   double reserveRatio, int activeLoanCount,
@@ -89,6 +91,7 @@ public class SyncCompanyDataPacket {
         this.shareholders = shareholders;
         this.officerNames = officerNames;
         this.resultMessage = resultMessage != null ? resultMessage : "";
+        this.companyBalance = companyBalance;
         this.depositInterestRate = depositInterestRate;
         this.loanInterestRate = loanInterestRate;
         this.withdrawalFee = withdrawalFee;
@@ -128,6 +131,9 @@ public class SyncCompanyDataPacket {
         }
 
         this.resultMessage = buf.readUtf();
+
+        // Company balance
+        this.companyBalance = buf.readDouble();
 
         // Bank-specific fields
         this.depositInterestRate = buf.readDouble();
@@ -170,6 +176,9 @@ public class SyncCompanyDataPacket {
 
         buf.writeUtf(resultMessage);
 
+        // Company balance
+        buf.writeDouble(companyBalance);
+
         // Bank-specific fields
         buf.writeDouble(depositInterestRate);
         buf.writeDouble(loanInterestRate);
@@ -199,6 +208,7 @@ public class SyncCompanyDataPacket {
     public List<ShareholderEntry> getShareholders() { return shareholders; }
     public List<String> getOfficerNames() { return officerNames; }
     public String getResultMessage() { return resultMessage; }
+    public double getCompanyBalance() { return companyBalance; }
     public double getDepositInterestRate() { return depositInterestRate; }
     public double getLoanInterestRate() { return loanInterestRate; }
     public double getWithdrawalFee() { return withdrawalFee; }

@@ -1,0 +1,228 @@
+{
+  "shop_id": "bard",
+  "name": "shop.society_trading.bard",
+  "texture": "minecraft:textures/block/note_block",
+  "jei_catalyst": {
+    "item": "minecraft:note_block"
+  },
+  "villager_profession": "etched:bard",
+  "selector_weight": 1,
+  "trades": [
+    {
+      "offer": {
+        "item": "etched:blank_music_disc",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 5
+      },
+      "trade_id": "bard_blank_music_disc_for_cog",
+      "original_numismatics_cost": 512
+    },
+    {
+      "offer": {
+        "item": "etched:etching_table",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 5
+      },
+      "trade_id": "bard_etching_table_for_crown",
+      "original_numismatics_cost": 512
+    },
+    {
+      "offer": {
+        "item": "etched:album_jukebox",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 4
+      },
+      "trade_id": "bard_album_jukebox_for_sun",
+      "original_numismatics_cost": 4096
+    },
+    {
+      "offer": {
+        "item": "etched:radio",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 2
+      },
+      "trade_id": "bard_radio_for_cog",
+      "original_numismatics_cost": 256
+    },
+    {
+      "offer": {
+        "item": "etched:boombox",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 4
+      },
+      "trade_id": "bard_boombox_for_sun",
+      "original_numismatics_cost": 4096
+    },
+    {
+      "offer": {
+        "item": "exposure:camera",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 5
+      },
+      "trade_id": "bard_camera_for_crown",
+      "original_numismatics_cost": 512
+    },
+    {
+      "offer": {
+        "item": "exposure:black_and_white_film",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 1
+      },
+      "trade_id": "bard_black_and_white_film_for_cog",
+      "original_numismatics_cost": 128
+    },
+    {
+      "offer": {
+        "item": "exposure:color_film",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 2
+      },
+      "trade_id": "bard_color_film_for_cog",
+      "original_numismatics_cost": 256
+    },
+    {
+      "offer": {
+        "item": "exposure:lightroom",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 5
+      },
+      "trade_id": "bard_lightroom_for_crown",
+      "original_numismatics_cost": 512
+    },
+    {
+      "offer": {
+        "item": "immersive_paintings:painting",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 2
+      },
+      "trade_id": "bard_painting_for_cog",
+      "original_numismatics_cost": 256
+    },
+    {
+      "offer": {
+        "item": "immersive_paintings:graffiti",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 2
+      },
+      "trade_id": "bard_graffiti_for_cog",
+      "original_numismatics_cost": 256
+    },
+    {
+      "offer": {
+        "item": "zetter:easel",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 1
+      },
+      "trade_id": "bard_graffiti_for_crown",
+      "original_numismatics_cost": 16384
+    },
+    {
+      "offer": {
+        "item": "zetter:paints",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 2
+      },
+      "trade_id": "bard_paints_for_cog",
+      "original_numismatics_cost": 256
+    },
+    {
+      "offer": {
+        "item": "strawstatues:straw_statue",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 5
+      },
+      "trade_id": "bard_straw_statue_for_crown",
+      "original_numismatics_cost": 512
+    },
+    {
+      "offer": {
+        "item": "waterframes:tv",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 2
+      },
+      "trade_id": "bard_tv_for_crown",
+      "original_numismatics_cost": 28672
+    },
+    {
+      "offer": {
+        "item": "waterframes:frame",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 6
+      },
+      "trade_id": "bard_frame_for_sun",
+      "original_numismatics_cost": 65536
+    },
+    {
+      "offer": {
+        "item": "waterframes:remote",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 1
+      },
+      "trade_id": "bard_remote_for_cog",
+      "original_numismatics_cost": 1536
+    },
+    {
+      "offer": {
+        "item": "gamediscs:game_disc_blocktris",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100000",
+        "count": 2
+      },
+      "trade_id": "bard_game_disc_blocktris_for_ancient_coin",
+      "original_numismatics_cost": 262144
+    }
+  ]
+}

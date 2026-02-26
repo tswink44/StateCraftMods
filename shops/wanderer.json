@@ -1,0 +1,647 @@
+{
+  "shop_id": "wanderer",
+  "name": "shop.society_trading.wanderer",
+  "texture": "minecraft:textures/block/light_blue_glazed_terracotta",
+  "entity": "minecraft:wandering_trader",
+  "hidden_from_selector": true,
+  "jei_catalyst": {
+    "item": "minecraft:wandering_trader_spawn_egg"
+  },
+  "trades": [
+    {
+      "offer": {
+        "item": "society:yard_work_yearly",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 2
+      },
+      "trade_id": "wanderer_yard_work_yearly",
+      "original_numismatics_cost": 2048
+    },
+    {
+      "offer": {
+        "item": "society:husbandry_hourly",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 2
+      },
+      "trade_id": "wanderer_husbandry_hourly",
+      "original_numismatics_cost": 2048
+    },
+    {
+      "offer": {
+        "item": "society:mining_monthly",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 2
+      },
+      "trade_id": "wanderer_mining_monthly",
+      "original_numismatics_cost": 2048
+    },
+    {
+      "offer": {
+        "item": "society:wet_weekly",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 2
+      },
+      "trade_id": "wanderer_wet_weekly",
+      "original_numismatics_cost": 2048
+    },
+    {
+      "offer": {
+        "item": "society:combat_quarterly",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 2
+      },
+      "trade_id": "wanderer_combat_quarterly",
+      "original_numismatics_cost": 2048
+    }
+  ],
+  "random_sets": [
+    {
+      "random_style": "per_entity",
+      "rolled_count": 2,
+      "trades": [
+        {
+          "offer": {
+            "item": "society:book_of_stars",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_1000",
+            "count": 3
+          },
+          "trade_id": "wanderer_book_of_stars",
+          "original_numismatics_cost": 3072
+        },
+        {
+          "offer": {
+            "item": "society:animal_fancy",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_10000",
+            "count": 1
+          },
+          "trade_id": "wanderer_animal_fancy",
+          "original_numismatics_cost": 16384
+        },
+        {
+          "offer": {
+            "item": "society:banana_karenina",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_10000",
+            "count": 6
+          },
+          "trade_id": "wanderer_banana_karenina",
+          "original_numismatics_cost": 65552
+        },
+        {
+          "offer": {
+            "item": "society:brine_and_punishment",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_10000",
+            "count": 4
+          },
+          "trade_id": "wanderer_brine_and_punishment",
+          "original_numismatics_cost": 40970
+        },
+        {
+          "offer": {
+            "item": "society:bluegill_meridian",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_10000",
+            "count": 8
+          },
+          "trade_id": "wanderer_bluegill_meridian",
+          "original_numismatics_cost": 81920
+        },
+        {
+          "offer": {
+            "item": "society:canadian_and_famous",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_10000",
+            "count": 6
+          },
+          "trade_id": "wanderer_canadian_and_famous",
+          "original_numismatics_cost": 65536
+        },
+        {
+          "offer": {
+            "item": "society:first_aid_guide",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_10000",
+            "count": 1
+          },
+          "trade_id": "wanderer_first_aid_guide",
+          "original_numismatics_cost": 16388
+        },
+        {
+          "offer": {
+            "item": "society:hitting_hard_and_soft",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_10000",
+            "count": 3
+          },
+          "trade_id": "wanderer_hitting_hard_and_soft",
+          "original_numismatics_cost": 32768
+        },
+        {
+          "offer": {
+            "item": "society:intro_to_algorithms",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_10000",
+            "count": 6
+          },
+          "trade_id": "wanderer_intro_to_algorithms",
+          "original_numismatics_cost": 69632
+        },
+        {
+          "offer": {
+            "item": "society:no_name_for_the_sheep",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_10000",
+            "count": 5
+          },
+          "trade_id": "wanderer_no_name_for_the_sheep",
+          "original_numismatics_cost": 53248
+        },
+        {
+          "offer": {
+            "item": "society:slouching_towards_artistry",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_1000000",
+            "count": 64
+          },
+          "trade_id": "wanderer_slouching_towards_artistry",
+          "original_numismatics_cost": 67108864
+        },
+        {
+          "offer": {
+            "item": "society:debt_caverns",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_10000",
+            "count": 6
+          },
+          "trade_id": "wanderer_debt_caverns",
+          "original_numismatics_cost": 64536
+        },
+        {
+          "offer": {
+            "item": "society:paradise_crop",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_10000",
+            "count": 8
+          },
+          "trade_id": "wanderer_paradise_crop",
+          "original_numismatics_cost": 81920
+        },
+        {
+          "offer": {
+            "item": "society:slime_contain_protect",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_10000",
+            "count": 2
+          },
+          "trade_id": "wanderer_slime_contain_protect",
+          "original_numismatics_cost": 20480
+        },
+        {
+          "offer": {
+            "item": "society:phenomenology_of_treasure",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_10000",
+            "count": 2
+          },
+          "trade_id": "wanderer_phenomenology_of_treasure",
+          "original_numismatics_cost": 24576
+        },
+        {
+          "offer": {
+            "item": "society:frogs_bounty_bazaar",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100000",
+            "count": 1
+          },
+          "trade_id": "wanderer_frogs_bounty_bazaar",
+          "original_numismatics_cost": 131072
+        },
+        {
+          "offer": {
+            "item": "society:bullfish_jobs",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_10000",
+            "count": 6
+          },
+          "trade_id": "wanderer_bullfish_jobs",
+          "original_numismatics_cost": 65536
+        },
+        {
+          "offer": {
+            "item": "society:wuthering_logs",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_1000",
+            "count": 8
+          },
+          "trade_id": "wanderer_wuthering_logs",
+          "original_numismatics_cost": 8192
+        }
+      ]
+    },
+    {
+      "random_style": "per_entity",
+      "rolled_count": 4,
+      "trades": [
+        {
+          "isRare": false,
+          "offer": {
+            "item": "supplementaries:globe",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_10",
+            "count": 6
+          },
+          "trade_id": "wanderer_globe",
+          "original_numismatics_cost": 64
+        },
+        {
+          "isRare": false,
+          "offer": {
+            "item": "supplementaries:antique_ink",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 5
+          },
+          "trade_id": "wanderer_antique_ink",
+          "original_numismatics_cost": 512
+        },
+        {
+          "isRare": false,
+          "offer": {
+            "item": "society:furniture_box",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 2
+          },
+          "trade_id": "wanderer_furniture_box",
+          "original_numismatics_cost": 256
+        },
+        {
+          "isRare": false,
+          "offer": {
+            "item": "simplehats:hatbag_uncommon",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 1
+          },
+          "trade_id": "wanderer_hatbag_uncommon",
+          "original_numismatics_cost": 128
+        },
+        {
+          "offer": {
+            "item": "simplehats:hatbag_rare",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_1000",
+            "count": 2
+          },
+          "trade_id": "wanderer_hatbag_rare",
+          "original_numismatics_cost": 2048
+        },
+        {
+          "offer": {
+            "item": "furniture:cash_register",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 1
+          },
+          "trade_id": "wanderer_cash_register",
+          "original_numismatics_cost": 128
+        },
+        {
+          "offer": {
+            "item": "whimsy_deco:gatcha_machine",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_10000",
+            "count": 1
+          },
+          "trade_id": "wanderer_gatcha_machine",
+          "original_numismatics_cost": 16384
+        },
+        {
+          "offer": {
+            "item": "tanukidecor:slot_machine",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_10000",
+            "count": 1
+          },
+          "second_request": {
+            "item": "society:prismatic_shard",
+            "count": 1,
+            "priceModifier": 0
+          },
+          "trade_id": "wanderer_slot_machine",
+          "original_numismatics_cost": 16384
+        },
+        {
+          "offer": {
+            "item": "furniture:terrarium",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 1
+          },
+          "trade_id": "wanderer_terrarium",
+          "original_numismatics_cost": 128
+        },
+        {
+          "offer": {
+            "item": "furniture:copper_fish_tank",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 1
+          },
+          "trade_id": "wanderer_copper_fish_tank",
+          "original_numismatics_cost": 128
+        },
+        {
+          "offer": {
+            "item": "furniture:iron_fish_tank",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 1
+          },
+          "trade_id": "wanderer_iron_fish_tank",
+          "original_numismatics_cost": 128
+        },
+        {
+          "offer": {
+            "item": "furniture:telescope",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 1
+          },
+          "trade_id": "wanderer_telescope",
+          "original_numismatics_cost": 128
+        },
+        {
+          "offer": {
+            "item": "furniture:gramophone",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 1
+          },
+          "trade_id": "wanderer_gramophone",
+          "original_numismatics_cost": 128
+        },
+        {
+          "offer": {
+            "item": "furniture:tool_box",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 1
+          },
+          "trade_id": "wanderer_tool_box",
+          "original_numismatics_cost": 128
+        },
+        {
+          "offer": {
+            "item": "furniture:sewing_kit",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 1
+          },
+          "trade_id": "wanderer_sewing_kit",
+          "original_numismatics_cost": 128
+        },
+        {
+          "offer": {
+            "item": "furniture:explorers_box",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 1
+          },
+          "trade_id": "wanderer_explorers_box",
+          "original_numismatics_cost": 128
+        },
+        {
+          "offer": {
+            "item": "furniture:pells",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 1
+          },
+          "trade_id": "wanderer_pells",
+          "original_numismatics_cost": 128
+        },
+        {
+          "offer": {
+            "item": "furniture:blueprints",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 1
+          },
+          "trade_id": "wanderer_blueprints",
+          "original_numismatics_cost": 128
+        },
+        {
+          "offer": {
+            "item": "furniture:boat_in_a_jar",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 1
+          },
+          "trade_id": "wanderer_boat_in_a_jar",
+          "original_numismatics_cost": 128
+        },
+        {
+          "offer": {
+            "item": "furniture:display",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 1
+          },
+          "trade_id": "wanderer_display",
+          "original_numismatics_cost": 128
+        },
+        {
+          "offer": {
+            "item": "furniture:canvas",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_1000",
+            "count": 2
+          },
+          "trade_id": "wanderer_canvas",
+          "original_numismatics_cost": 2048
+        },
+        {
+          "offer": {
+            "item": "supplementaries:clock_block",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_100",
+            "count": 1
+          },
+          "trade_id": "wanderer_clock_block",
+          "original_numismatics_cost": 128
+        },
+        {
+          "offer": {
+            "item": "chimes:iron_chimes",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_1000",
+            "count": 1
+          },
+          "trade_id": "wanderer_iron_chimes",
+          "original_numismatics_cost": 1024
+        },
+        {
+          "offer": {
+            "item": "chimes:bamboo_chimes",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_1000",
+            "count": 1
+          },
+          "trade_id": "wanderer_bamboo_chimes",
+          "original_numismatics_cost": 1024
+        },
+        {
+          "offer": {
+            "item": "chimes:copper_chimes",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_1000",
+            "count": 1
+          },
+          "trade_id": "wanderer_copper_chimes",
+          "original_numismatics_cost": 1024
+        },
+        {
+          "offer": {
+            "item": "chimes:carved_bamboo_chimes",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_1000",
+            "count": 1
+          },
+          "trade_id": "wanderer_carved_bamboo_chimes",
+          "original_numismatics_cost": 1024
+        },
+        {
+          "offer": {
+            "item": "chimes:amethyst_chimes",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_1000",
+            "count": 1
+          },
+          "trade_id": "wanderer_amethyst_chimes",
+          "original_numismatics_cost": 1024
+        },
+        {
+          "offer": {
+            "item": "chimes:glass_bells",
+            "count": 1
+          },
+          "request": {
+            "item": "statecraft_economy:bill_1000",
+            "count": 1
+          },
+          "trade_id": "wanderer_glass_bells",
+          "original_numismatics_cost": 1024
+        }
+      ]
+    }
+  ]
+}

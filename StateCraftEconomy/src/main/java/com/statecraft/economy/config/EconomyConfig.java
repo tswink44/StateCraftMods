@@ -50,6 +50,9 @@ public class EconomyConfig {
     public static final ForgeConfigSpec.DoubleValue DEFAULT_DEPOSIT_INTEREST_RATE;
     public static final ForgeConfigSpec.DoubleValue BANK_REGISTRATION_FEE;
 
+    // Taxation configuration
+    public static final ForgeConfigSpec.LongValue TAX_PERIOD_TICKS;
+
     // Marketplace configuration
     public static final ForgeConfigSpec.BooleanValue MARKETPLACE_ENABLED;
     public static final ForgeConfigSpec.IntValue MAX_LISTINGS_PER_PLAYER;
@@ -181,6 +184,16 @@ public class EconomyConfig {
 
         BUILDER.comment("Fee to register a bank company (higher than a standard company, 0 = free)");
         BANK_REGISTRATION_FEE = BUILDER.defineInRange("bankRegistrationFee", 5000.0, 0.0, Double.MAX_VALUE);
+
+        BUILDER.pop();
+
+        BUILDER.comment("Taxation Settings",
+                       "Configuration for the periodic property-tax collection system.").push("taxation");
+
+        BUILDER.comment("How often property taxes are collected, in game ticks.",
+                       "72000 = 1 real hour at 20 TPS, 1728000 = 1 real day.",
+                       "This is the default; it can also be changed at runtime via /statecraft admin tax period <ticks>.");
+        TAX_PERIOD_TICKS = BUILDER.defineInRange("taxPeriodTicks", 72000L, 1200L, Long.MAX_VALUE);
 
         BUILDER.pop();
 

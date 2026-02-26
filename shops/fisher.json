@@ -1,0 +1,369 @@
+{
+  "shop_id": "fisher",
+  "name": "shop.society_trading.fisher",
+  "texture": "minecraft:textures/block/barrel_side",
+  "villager_profession": "fisherman",
+  "jei_catalyst": {
+    "item": "minecraft:barrel"
+  },
+  "selector_weight": -95,
+  "trades": [
+    {
+      "offer": {
+        "item": "aquaculture:worm",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10",
+        "count": 1
+      },
+      "trade_id": "fisherman_worm_for_sprocket",
+      "original_numismatics_cost": 16
+    },
+    {
+      "offer": {
+        "item": "minecraft:fishing_rod",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 2
+      },
+      "trade_id": "fisherman_fishing_rod_for_crown",
+      "original_numismatics_cost": 2048
+    },
+    {
+      "offer": {
+        "item": "netherdepthsupgrade:lava_fishing_rod",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 9
+      },
+      "trade_id": "fisherman_lava_fishing_rod_rod_for_sun",
+      "original_numismatics_cost": 98304
+    },
+    {
+      "offer": {
+        "item": "society:fish_radar",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 2
+      },
+      "second_request": {
+        "item": "aquaculture:neptunium_ingot",
+        "count": 1
+      },
+      "trade_id": "fisherman_fish_radar_for_crown",
+      "original_numismatics_cost": 2048
+    },
+    {
+      "offer": {
+        "item": "society:fish_pond",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 3
+      },
+      "second_request": {
+        "item": "society:river_jelly",
+        "count": 1
+      },
+      "trade_id": "fisherman_fish_pond_for_sun",
+      "original_numismatics_cost": 32768
+    },
+    {
+      "offer": {
+        "item": "society:fish_smoker",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 6
+      },
+      "trade_id": "fisherman_fish_smoker_for_neptunium_coin",
+      "original_numismatics_cost": 65536
+    },
+    {
+      "offer": {
+        "item": "aquaculture:note_hook",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1",
+        "count": 7
+      },
+      "trade_id": "fisherman_note_hook_for_spur",
+      "original_numismatics_cost": 7
+    },
+    {
+      "offer": {
+        "item": "aquaculture:light_hook",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10",
+        "count": 1
+      },
+      "second_request": {
+        "item": "statecraft_economy:bill_1",
+        "count": 4
+      },
+      "trade_id": "fisherman_light_hook_for_cog_and_sprocket",
+      "original_numismatics_cost": 16
+    },
+    {
+      "offer": {
+        "item": "aquaculture:heavy_hook",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 3
+      },
+      "second_request": {
+        "item": "statecraft_economy:bill_1",
+        "count": 4
+      },
+      "trade_id": "fisherman_heavy_hook_for_cog_and_sprocket",
+      "original_numismatics_cost": 336
+    },
+    {
+      "offer": {
+        "item": "aquaculture:redstone_hook",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 3
+      },
+      "second_request": {
+        "item": "statecraft_economy:bill_1",
+        "count": 4
+      },
+      "trade_id": "fisherman_redstone_hook_for_cog_and_sprocket",
+      "original_numismatics_cost": 336
+    },
+    {
+      "offer": {
+        "item": "aquaculture:gold_hook",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 2
+      },
+      "trade_id": "fisherman_gold_hook_for_crown",
+      "original_numismatics_cost": 2560
+    },
+    {
+      "offer": {
+        "item": "aquaculture:iron_hook",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 4
+      },
+      "trade_id": "fisherman_iron_hook_for_cog",
+      "original_numismatics_cost": 4096
+    },
+    {
+      "offer": {
+        "item": "aquaculture:diamond_hook",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 6
+      },
+      "second_request": {
+        "item": "aquaculture:neptunium_ingot",
+        "count": 2
+      },
+      "trade_id": "fisherman_diamond_hook_for_crown",
+      "original_numismatics_cost": 65536
+    },
+    {
+      "offer": {
+        "item": "stardew_fishing:trap_bobber",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 2
+      },
+      "trade_id": "fisherman_trap_bobber_for_crown",
+      "original_numismatics_cost": 2048
+    },
+    {
+      "offer": {
+        "item": "stardew_fishing:cork_bobber",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 3
+      },
+      "trade_id": "fisherman_cork_bobber_for_crown",
+      "original_numismatics_cost": 3072
+    },
+    {
+      "offer": {
+        "item": "stardew_fishing:sonar_bobber",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 3
+      },
+      "trade_id": "fisherman_sonar_bobber_for_crown",
+      "original_numismatics_cost": 3072
+    },
+    {
+      "offer": {
+        "item": "stardew_fishing:treasure_bobber",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 4
+      },
+      "trade_id": "fisherman_treasure_bobber_for_sun",
+      "original_numismatics_cost": 4096
+    },
+    {
+      "offer": {
+        "item": "stardew_fishing:quality_bobber",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 4
+      },
+      "second_request": {
+        "item": "aquaculture:neptunium_ingot",
+        "count": 1
+      },
+      "trade_id": "fisherman_quality_bobber_for_sun",
+      "original_numismatics_cost": 4096
+    },
+    {
+      "offer": {
+        "item": "aquaculture:double_hook",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 1
+      },
+      "trade_id": "fisherman_double_hook_for_crown",
+      "original_numismatics_cost": 16384
+    },
+    {
+      "offer": {
+        "item": "aquaculture:tackle_box",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 4
+      },
+      "trade_id": "fisherman_tackle_box_for_sun",
+      "original_numismatics_cost": 4096
+    },
+    {
+      "offer": {
+        "item": "aquaculture:worm_farm",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 5
+      },
+      "trade_id": "fisherman_worm_farm_for_crown",
+      "original_numismatics_cost": 512
+    },
+    {
+      "offer": {
+        "item": "society:neptunium_upgrade_smithing_template",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100000",
+        "count": 1
+      },
+      "trade_id": "minecraft:toolsmith_neptunium_upgrade_smithing_template_for_crown",
+      "original_numismatics_cost": 131072
+    },
+    {
+      "offer": {
+        "item": "create:copper_diving_helmet",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 2
+      },
+      "trade_id": "fisherman_copper_diving_helmet_for_crown",
+      "original_numismatics_cost": 2048
+    },
+    {
+      "offer": {
+        "item": "create:copper_backtank",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 2
+      },
+      "trade_id": "fisherman_copper_backtank_for_crown",
+      "original_numismatics_cost": 2048
+    },
+    {
+      "offer": {
+        "item": "create:copper_diving_boots",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 1
+      },
+      "trade_id": "fisherman_copper_diving_boots_for_crown",
+      "original_numismatics_cost": 1536
+    },
+    {
+      "offer": {
+        "item": "candlelight:gold_ring",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100000",
+        "count": 1
+      },
+      "trade_id": "fisherman_gold_ring_for_sun",
+      "original_numismatics_cost": 131072
+    },
+    {
+      "offer": {
+        "item": "patchouli:guide_book",
+        "count": 1,
+        "nbt": "{\"patchouli:book\":\"patchouli:fish_finder\"}"
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 3
+      },
+      "second_request": {
+        "item": "aquaculture:neptunium_block",
+        "count": 1
+      },
+      "trade_id": "fisherman_guide_book_for_neptunium_coin",
+      "original_numismatics_cost": 32768
+    }
+  ]
+}

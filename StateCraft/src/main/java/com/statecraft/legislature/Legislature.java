@@ -56,6 +56,7 @@ public class Legislature {
         // Add all governors
         for (State state : nation.getAllStates()) {
             UUID governorId = state.getGovernorId();
+            if (governorId == null) continue; // Skip states with no governor
             // Governors can vote, but Leader cannot vote even if they're a Governor
             // (unless nation is small - handled below)
             if (!governorId.equals(leaderId)) {

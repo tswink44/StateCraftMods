@@ -1004,5 +1004,37 @@ public class ServerPacketHandler {
         double totalTax = 0;
         CityTaxBuilder(String name, double taxRate) { this.name = name; this.taxRate = taxRate; }
     }
+
+    // ==================== Trading Hub Suggestions ====================
+
+    public static void handleRequestTradingHubSuggestions(RequestTradingHubSuggestionsPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer player = ctx.get().getSender();
+            if (player == null) return;
+
+            // Gather all company names
+            java.util.List<String> companyNames = new java.util.ArrayList<>();
+            try {
+                Class<?> companyManagerClass = Class.forName("com.statecraft.company.CompanyManager");
+                Object companyManager = companyManagerClass.getMethod("getInstance").invoke(null);
+                java.util.Collection<?> allCompanies = (java.util.Collection<?>) companyManagerClass.getMethod("getAllCompanies").invoke(companyManager);
+                for (Object company : allCompanies) {
+                    String name = (String) company.getClass().getMethod("getName").invoke(company);
+                    companyNames.add(name);
+                }
+            } catch (Exception e) {
+                StateCraftEconomy.LOGGER.debug("Could not load company names for autocomplete: {}", e.getMessage());
+            }
+
+            // Gather all online player names
+            java.util.List<String> playerNames = new java.util.ArrayList<>();
+            for (ServerPlayer onlinePlayer : player.getServer().getPlayerList().getPlayers()) {
+                playerNames.add(onlinePlayer.getGameProfile().getName());
+            }
+
+            NetworkHandler.sendToPlayer(new SyncTradingHubSuggestionsPacket(companyNames, playerNames), player);
+        });
+        ctx.get().setPacketHandled(true);
+    }
 }
 

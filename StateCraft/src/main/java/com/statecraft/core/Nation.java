@@ -481,12 +481,13 @@ public class Nation {
 
     public Set<UUID> getAllMembers() {
         Set<UUID> allMembers = new HashSet<>();
-        allMembers.add(leaderId);
+        if (leaderId != null) allMembers.add(leaderId);
         allMembers.addAll(officers);
         allMembers.addAll(members);
         for (State state : states.values()) {
             allMembers.addAll(state.getAllResidents());
         }
+        allMembers.remove(null);
         return allMembers;
     }
 

@@ -97,6 +97,19 @@ public class NetworkHandler {
             .consumerMainThread(TradingHubSettingsPacket::handle)
             .add();
 
+        // Trading Hub autocomplete suggestions
+        CHANNEL.messageBuilder(RequestTradingHubSuggestionsPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .encoder(RequestTradingHubSuggestionsPacket::encode)
+            .decoder(RequestTradingHubSuggestionsPacket::new)
+            .consumerMainThread(ServerPacketHandler::handleRequestTradingHubSuggestions)
+            .add();
+
+        CHANNEL.messageBuilder(SyncTradingHubSuggestionsPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .encoder(SyncTradingHubSuggestionsPacket::encode)
+            .decoder(SyncTradingHubSuggestionsPacket::new)
+            .consumerMainThread(NetworkHandler::handleSyncTradingHubSuggestionsClient)
+            .add();
+
         // Server -> Client packets - use dist-safe handlers
         CHANNEL.messageBuilder(SyncBalancePacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
             .encoder(SyncBalancePacket::encode)
@@ -308,6 +321,11 @@ public class NetworkHandler {
 
     private static void handleSyncTaxReportClient(SyncTaxReportPacket packet, Supplier<NetworkEvent.Context> ctx) {
         DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientPacketHandler.handleSyncTaxReport(packet, ctx));
+        ctx.get().setPacketHandled(true);
+    }
+
+    private static void handleSyncTradingHubSuggestionsClient(SyncTradingHubSuggestionsPacket packet, Supplier<NetworkEvent.Context> ctx) {
+        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientPacketHandler.handleSyncTradingHubSuggestions(packet, ctx));
         ctx.get().setPacketHandled(true);
     }
 

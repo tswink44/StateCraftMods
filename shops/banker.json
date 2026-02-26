@@ -1,0 +1,96 @@
+{
+  "shop_id": "banker",
+  "name": "shop.society_trading.banker",
+  "texture": "numismatics:textures/block/bank_terminal/bank_terminal_front",
+  "jei_catalyst": {
+    "item": "minecraft:cartography_table"
+  },
+  "villager_profession": "cartographer",
+  "selector_weight": 1,
+  "trades": [
+    {
+      "offer": {
+        "item": "society:pig_race_ticket",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 5
+      },
+      "trade_id": "banker_pig_race_ticket_for_crown",
+      "original_numismatics_cost": 512
+    },
+    {
+      "offer": {
+        "item": "society:multiplayer_pig_race_ticket",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 1
+      },
+      "trade_id": "banker_multiplayer_pig_race_ticket_ticket_for_crown",
+      "original_numismatics_cost": 1024
+    },
+    {
+      "offer": {
+        "item": "society:shipping_bin_monitor",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10",
+        "count": 6
+      },
+      "trade_id": "banker_shipping_bin_monitor_for_cog",
+      "original_numismatics_cost": 64
+    },
+    {
+      "offer": {
+        "item": "whimsy_deco:phone",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000",
+        "count": 2
+      },
+      "trade_id": "phone_for_crown",
+      "original_numismatics_cost": 2048
+    },
+    {
+      "offer": {
+        "item": "trading_floor:trading_depot",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_10000",
+        "count": 1
+      },
+      "trade_id": "banker_trading_depot_for_sun",
+      "original_numismatics_cost": 16384
+    },
+    {
+      "offer": {
+        "item": "society:coin_leaderboard",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_100",
+        "count": 2
+      },
+      "trade_id": "banker_coin_leaderboard_for_cog",
+      "original_numismatics_cost": 256
+    },
+    {
+      "offer": {
+        "item": "society:overflow_token",
+        "count": 1
+      },
+      "request": {
+        "item": "statecraft_economy:bill_1000000",
+        "count": 64
+      },
+      "trade_id": "banker_overflow_token_for_prismatic_coin",
+      "original_numismatics_cost": 1006632960
+    }
+  ]
+}

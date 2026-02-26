@@ -40,6 +40,7 @@ public class CompanyScreen extends StateCraftScreen {
     private double reserveRatio = 0;
     private int activeLoanCount = 0;
     private double totalDeposits = 0;
+    private double companyBalance = 0;
     private List<SyncCompanyDataPacket.ShareholderEntry> shareholders = new ArrayList<>();
     private List<String> officerNames = new ArrayList<>();
     private String resultMessage = "";
@@ -440,6 +441,7 @@ public class CompanyScreen extends StateCraftScreen {
         this.reserveRatio = packet.getReserveRatio();
         this.activeLoanCount = packet.getActiveLoanCount();
         this.totalDeposits = packet.getTotalDeposits();
+        this.companyBalance = packet.getCompanyBalance();
         this.shareholders = packet.getShareholders();
         this.officerNames = packet.getOfficerNames();
         this.dataLoaded = true;
@@ -536,6 +538,10 @@ public class CompanyScreen extends StateCraftScreen {
             graphics.drawString(this.font, "§7HQ: §f" + headquartersCity, startX + 4, y, 0xFFFFFFFF);
             y += 12;
         }
+
+        // Treasury Balance
+        graphics.drawString(this.font, "§7Treasury: §a$" + String.format("%,.2f", companyBalance), startX + 4, y, 0xFFFFFFFF);
+        y += 14;
 
         // Dividends
         String divStatus = dividendsEnabled

@@ -3828,6 +3828,7 @@ public class ServerPacketHandler {
             ServerPlayer player = ctx.get().getSender();
             if (player == null) return;
 
+            try {
             ChunkClaimManager manager = ChunkClaimManager.getInstance();
             Nation nation = manager.getNationByName(packet.getNationName());
 
@@ -3943,6 +3944,14 @@ public class ServerPacketHandler {
                 votingMemberNames,
                 votingMembers.size()
             ), player);
+            } catch (Exception e) {
+                StateCraft.LOGGER.error("Failed to build legislature data for '{}': {}", packet.getNationName(), e.getMessage(), e);
+                // Send empty data so client doesn't hang on "Loading..."
+                NetworkHandler.sendToPlayer(new SyncLegislatureDataPacket(
+                    packet.getNationName(), false, false,
+                    new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), 0
+                ), player);
+            }
         });
         ctx.get().setPacketHandled(true);
     }
@@ -5724,6 +5733,7 @@ public class ServerPacketHandler {
             shareholders,
             officerNames,
             resultMessage,
+            IntegrationRegistry.getCompanyBalance(company.getId()),
             IntegrationRegistry.getBankDepositInterestRate(company.getId()),
             IntegrationRegistry.getBankLoanInterestRate(company.getId()),
             IntegrationRegistry.getBankWithdrawalFee(company.getId()),
