@@ -1,0 +1,48 @@
+{
+  "profession": null,
+  "merchant": "bard",
+  "trades": [
+    {
+      "level": 1,
+      "buy": {
+        "item": "minecraft:string",
+        "count": 12
+      },
+      "sell": {
+        "item": "statecraft_economy:currency_1",
+        "count": 1
+      },
+      "maxUses": 16,
+      "xp": 2,
+      "priceMultiplier": 0.05
+    },
+    {
+      "level": 2,
+      "buy": {
+        "item": "statecraft_economy:currency_1",
+        "count": 4
+      },
+      "sell": {
+        "item": "minecraft:note_block",
+        "count": 1
+      },
+      "maxUses": 12,
+      "xp": 5,
+      "priceMultiplier": 0.05
+    },
+    {
+      "level": 3,
+      "buy": {
+        "item": "statecraft_economy:currency_10",
+        "count": 1
+      },
+      "sell": {
+        "item": "minecraft:jukebox",
+        "count": 1
+      },
+      "maxUses": 4,
+      "xp": 10,
+      "priceMultiplier": 0.05
+    }
+  ]
+}

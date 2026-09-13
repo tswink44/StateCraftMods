@@ -1,0 +1,26 @@
+{
+  "files": [
+    "armorer.json",
+    "butcher.json",
+    "cartographer.json",
+    "cleric.json",
+    "farmer.json",
+    "fisherman.json",
+    "fletcher.json",
+    "leatherworker.json",
+    "librarian.json",
+    "mason.json",
+    "shepherd.json",
+    "toolsmith.json",
+    "weaponsmith.json",
+    "banker.json",
+    "bard.json",
+    "barkeeper.json",
+    "botanist.json",
+    "market.json",
+    "baker.json",
+    "winemaker.json",
+    "storage_smith.json",
+    "ribbit.json"
+  ]
+}

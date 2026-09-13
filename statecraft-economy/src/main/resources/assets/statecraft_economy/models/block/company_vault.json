@@ -1,0 +1,12 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "particle": "statecraft_economy:block/company_vault_front",
+    "down": "statecraft_economy:block/company_vault_side",
+    "up": "statecraft_economy:block/company_vault_top",
+    "north": "statecraft_economy:block/company_vault_front",
+    "south": "statecraft_economy:block/company_vault_side",
+    "east": "statecraft_economy:block/company_vault_side",
+    "west": "statecraft_economy:block/company_vault_side"
+  }
+}

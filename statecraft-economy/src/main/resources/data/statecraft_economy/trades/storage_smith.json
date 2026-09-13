@@ -1,0 +1,52 @@
+{
+  "profession": null,
+  "merchant": "storage_smith",
+  "trades": [
+    {
+      "level": 1,
+      "buy": {
+        "item": "statecraft_economy:currency_1",
+        "count": 2
+      },
+      "sell": {
+        "item": "minecraft:barrel",
+        "count": 1
+      },
+      "maxUses": 12,
+      "xp": 2,
+      "priceMultiplier": 0.05
+    },
+    {
+      "level": 2,
+      "buy": {
+        "item": "statecraft_economy:currency_1",
+        "count": 3
+      },
+      "sell": {
+        "item": "minecraft:hopper",
+        "count": 1
+      },
+      "maxUses": 8,
+      "xp": 5,
+      "priceMultiplier": 0.05
+    },
+    {
+      "level": 3,
+      "buy": {
+        "item": "statecraft_economy:currency_10",
+        "count": 2
+      },
+      "sell": {
+        "item": "minecraft:shulker_box",
+        "count": 1
+      },
+      "maxUses": 4,
+      "xp": 10,
+      "priceMultiplier": 0.05,
+      "secondBuy": {
+        "item": "minecraft:chest",
+        "count": 1
+      }
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "replace": false,
+  "values": [
+    "statecraft_economy:atm",
+    "statecraft_economy:trading_hub",
+    "statecraft_economy:marketplace",
+    "statecraft_economy:company_vault",
+    "statecraft_economy:stock_market"
+  ]
+}

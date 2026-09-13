@@ -1,0 +1,34 @@
+modLoader="javafml"
+loaderVersion="[47,)"
+license="All Rights Reserved"
+
+[[mods]]
+modId="statecraft"
+version="${version}"
+displayName="StateCraft"
+authors="StateCraft"
+description='''
+Player-run nations, governments, protected territory, elections, laws,
+diplomacy, companies, contracts, and persistent communications.
+'''
+
+[[dependencies.statecraft]]
+modId="forge"
+mandatory=true
+versionRange="[47.3.22,48)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.statecraft]]
+modId="minecraft"
+mandatory=true
+versionRange="[1.20.1,1.20.2)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.statecraft]]
+modId="journeymap"
+mandatory=false
+versionRange="[5.10.3,6)"
+ordering="AFTER"
+side="CLIENT"

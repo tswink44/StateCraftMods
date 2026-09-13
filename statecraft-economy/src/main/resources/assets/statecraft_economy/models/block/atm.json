@@ -1,0 +1,12 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "particle": "statecraft_economy:block/atm_front",
+    "down": "statecraft_economy:block/atm_side",
+    "up": "statecraft_economy:block/atm_top",
+    "north": "statecraft_economy:block/atm_front",
+    "south": "statecraft_economy:block/atm_side",
+    "east": "statecraft_economy:block/atm_side",
+    "west": "statecraft_economy:block/atm_side"
+  }
+}

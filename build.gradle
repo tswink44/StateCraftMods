@@ -1,26 +1,131 @@
-// Root build file for StateCraft Mods workspace
-// This allows running both mods together in development
-
 plugins {
     id 'base'
+    id 'net.minecraftforge.gradle' version '6.0.54' apply false
 }
 
-// Task to build both mods
-tasks.register('buildAll') {
-    dependsOn ':StateCraft:build'
-    dependsOn ':StateCraftEconomy:build'
+allprojects {
+    group = 'dev.statecraft'
+    version = mod_version
 }
 
-// Task to run client with both mods
-tasks.register('runCombinedClient') {
-    group = 'forgegradle runs'
-    description = 'Runs the client with both StateCraft and StateCraftEconomy loaded'
+project(':statecraft') {
+    ext.modId = 'statecraft'
+    ext.modName = 'StateCraft'
+}
+project(':statecraft-economy') {
+    ext.modId = 'statecraft_economy'
+    ext.modName = 'StateCraft Economy'
+}
 
-    doFirst {
-        println "To run both mods together, run from StateCraft directory:"
-        println "  cd StateCraft && ./gradlew runClient"
-        println ""
-        println "Make sure StateCraftEconomy is included in StateCraft's run configuration."
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'net.minecraftforge.gradle'
+
+    base.archivesName = project.name
+    java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+    minecraft {
+        mappings channel: 'official', version: minecraft_version
+        copyIdeResources = true
+        runs {
+            configureEach {
+                workingDirectory project.file('run')
+                property 'forge.logging.console.level', 'info'
+                mods {
+                    "${project.modId}" { source sourceSets.main }
+                }
+            }
+            client {}
+            server { args '--nogui' }
+            gameTestServer {
+                property 'forge.enabledGameTestNamespaces', 'statecraft,statecraft_economy'
+            }
+        }
+    }
+
+    repositories { mavenCentral() }
+    dependencies {
+        minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+        testImplementation platform('org.junit:junit-bom:5.10.3')
+        testImplementation 'org.junit.jupiter:junit-jupiter'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+        options.release = 17
+    }
+    tasks.named('test', Test) {
+        useJUnitPlatform()
+        maxHeapSize = '1G'
+        testLogging { events 'failed'; exceptionFormat 'full' }
+    }
+    tasks.named('processResources', ProcessResources) {
+        inputs.property 'version', project.version
+        filesMatching('META-INF/mods.toml') {
+            expand version: project.version
+        }
+    }
+    tasks.named('jar', Jar) {
+        preserveFileTimestamps = false
+        reproducibleFileOrder = true
+        manifest.attributes('Implementation-Title': project.modName,
+                            'Implementation-Version': project.version)
+    }
+    tasks.named('build') { dependsOn 'reobfJar' }
+}
+
+project(':statecraft-economy') {
+    dependencies { implementation project(':statecraft') }
+    minecraft.runs.configureEach {
+        mods {
+            statecraft { source project(':statecraft').sourceSets.main }
+        }
     }
 }
 
+project(':statecraft') {
+    apply from: 'compat.gradle'
+}
+
+tasks.register('test') { dependsOn subprojects.collect { it.tasks.named('test') } }
+tasks.named('build') { dependsOn subprojects.collect { it.tasks.named('build') } }
+tasks.register('packageMods', Sync) {
+    dependsOn subprojects.collect { it.tasks.named('build') }
+    dependsOn 'verifyModArchives'
+    from subprojects.collect { it.tasks.named('jar').flatMap { jar -> jar.archiveFile } }
+    into layout.buildDirectory.dir('mods')
+}
+
+tasks.register('verifyModArchives') {
+    dependsOn subprojects.collect { it.tasks.named('reobfJar') }
+    doLast {
+        subprojects.each { modProject ->
+            def archive = modProject.tasks.named('jar').get().archiveFile.get().asFile
+            new java.util.zip.ZipFile(archive).withCloseable { zip ->
+                def metadata = zip.getEntry('META-INF/mods.toml')
+                if (metadata == null) {
+                    throw new GradleException("Missing mod metadata in ${archive.name}")
+                }
+                def toml = zip.getInputStream(metadata).getText('UTF-8')
+                if (!toml.contains("modId=\"${modProject.modId}\"") ||
+                        !toml.contains("version=\"${modProject.version}\"")) {
+                    throw new GradleException("Incorrect mod ID/version in ${archive.name}")
+                }
+                def foreign = ['net/minecraft/', 'net/minecraftforge/', 'journeymap/', 'org/junit/', 'com/google/gson/']
+                zip.entries().each { entry ->
+                    if (entry.name.endsWith('.class') && foreign.any { entry.name.startsWith(it) }) {
+                        throw new GradleException("Bundled dependency ${entry.name} in ${archive.name}")
+                    }
+                    if (entry.name.endsWith('.json')) {
+                        new groovy.json.JsonSlurper().parse(zip.getInputStream(entry), 'UTF-8')
+                    }
+                }
+                if (modProject.name == 'statecraft-economy' &&
+                        zip.getEntry('dev/statecraft/StateCraft.class') != null) {
+                    throw new GradleException('Economy must not embed a second copy of core StateCraft')
+                }
+            }
+        }
+    }
+}

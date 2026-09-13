@@ -1,0 +1,52 @@
+{
+  "profession": null,
+  "merchant": "barkeeper",
+  "trades": [
+    {
+      "level": 1,
+      "buy": {
+        "item": "statecraft_economy:currency_1",
+        "count": 1
+      },
+      "sell": {
+        "item": "minecraft:glass_bottle",
+        "count": 3
+      },
+      "maxUses": 16,
+      "xp": 2,
+      "priceMultiplier": 0.05
+    },
+    {
+      "level": 2,
+      "buy": {
+        "item": "statecraft_economy:currency_1",
+        "count": 2
+      },
+      "sell": {
+        "item": "minecraft:honey_bottle",
+        "count": 1
+      },
+      "maxUses": 12,
+      "xp": 5,
+      "priceMultiplier": 0.05
+    },
+    {
+      "level": 3,
+      "buy": {
+        "item": "statecraft_economy:currency_1",
+        "count": 2
+      },
+      "sell": {
+        "item": "minecraft:mushroom_stew",
+        "count": 1
+      },
+      "maxUses": 12,
+      "xp": 10,
+      "priceMultiplier": 0.05,
+      "secondBuy": {
+        "item": "minecraft:bowl",
+        "count": 1
+      }
+    }
+  ]
+}

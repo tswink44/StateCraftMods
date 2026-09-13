@@ -1,0 +1,174 @@
+{
+  "profession": null,
+  "merchant": "banker",
+  "trades": [
+    {
+      "level": 1,
+      "buy": {
+        "item": "statecraft_economy:currency_1",
+        "count": 10
+      },
+      "sell": {
+        "item": "statecraft_economy:currency_10",
+        "count": 1
+      },
+      "maxUses": 64,
+      "xp": 0,
+      "priceMultiplier": 0.0
+    },
+    {
+      "level": 1,
+      "buy": {
+        "item": "statecraft_economy:currency_10",
+        "count": 1
+      },
+      "sell": {
+        "item": "statecraft_economy:currency_1",
+        "count": 10
+      },
+      "maxUses": 64,
+      "xp": 0,
+      "priceMultiplier": 0.0
+    },
+    {
+      "level": 1,
+      "buy": {
+        "item": "statecraft_economy:currency_10",
+        "count": 10
+      },
+      "sell": {
+        "item": "statecraft_economy:currency_100",
+        "count": 1
+      },
+      "maxUses": 64,
+      "xp": 0,
+      "priceMultiplier": 0.0
+    },
+    {
+      "level": 1,
+      "buy": {
+        "item": "statecraft_economy:currency_100",
+        "count": 1
+      },
+      "sell": {
+        "item": "statecraft_economy:currency_10",
+        "count": 10
+      },
+      "maxUses": 64,
+      "xp": 0,
+      "priceMultiplier": 0.0
+    },
+    {
+      "level": 1,
+      "buy": {
+        "item": "statecraft_economy:currency_100",
+        "count": 10
+      },
+      "sell": {
+        "item": "statecraft_economy:currency_1000",
+        "count": 1
+      },
+      "maxUses": 64,
+      "xp": 0,
+      "priceMultiplier": 0.0
+    },
+    {
+      "level": 1,
+      "buy": {
+        "item": "statecraft_economy:currency_1000",
+        "count": 1
+      },
+      "sell": {
+        "item": "statecraft_economy:currency_100",
+        "count": 10
+      },
+      "maxUses": 64,
+      "xp": 0,
+      "priceMultiplier": 0.0
+    },
+    {
+      "level": 1,
+      "buy": {
+        "item": "statecraft_economy:currency_1000",
+        "count": 10
+      },
+      "sell": {
+        "item": "statecraft_economy:currency_10000",
+        "count": 1
+      },
+      "maxUses": 64,
+      "xp": 0,
+      "priceMultiplier": 0.0
+    },
+    {
+      "level": 1,
+      "buy": {
+        "item": "statecraft_economy:currency_10000",
+        "count": 1
+      },
+      "sell": {
+        "item": "statecraft_economy:currency_1000",
+        "count": 10
+      },
+      "maxUses": 64,
+      "xp": 0,
+      "priceMultiplier": 0.0
+    },
+    {
+      "level": 1,
+      "buy": {
+        "item": "statecraft_economy:currency_10000",
+        "count": 10
+      },
+      "sell": {
+        "item": "statecraft_economy:currency_100000",
+        "count": 1
+      },
+      "maxUses": 64,
+      "xp": 0,
+      "priceMultiplier": 0.0
+    },
+    {
+      "level": 1,
+      "buy": {
+        "item": "statecraft_economy:currency_100000",
+        "count": 1
+      },
+      "sell": {
+        "item": "statecraft_economy:currency_10000",
+        "count": 10
+      },
+      "maxUses": 64,
+      "xp": 0,
+      "priceMultiplier": 0.0
+    },
+    {
+      "level": 1,
+      "buy": {
+        "item": "statecraft_economy:currency_100000",
+        "count": 10
+      },
+      "sell": {
+        "item": "statecraft_economy:currency_1000000",
+        "count": 1
+      },
+      "maxUses": 64,
+      "xp": 0,
+      "priceMultiplier": 0.0
+    },
+    {
+      "level": 1,
+      "buy": {
+        "item": "statecraft_economy:currency_1000000",
+        "count": 1
+      },
+      "sell": {
+        "item": "statecraft_economy:currency_100000",
+        "count": 10
+      },
+      "maxUses": 64,
+      "xp": 0,
+      "priceMultiplier": 0.0
+    }
+  ]
+}

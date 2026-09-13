@@ -1,0 +1,48 @@
+{
+  "profession": "minecraft:toolsmith",
+  "merchant": null,
+  "trades": [
+    {
+      "level": 1,
+      "buy": {
+        "item": "minecraft:raw_iron",
+        "count": 3
+      },
+      "sell": {
+        "item": "statecraft_economy:currency_1",
+        "count": 1
+      },
+      "maxUses": 16,
+      "xp": 2,
+      "priceMultiplier": 0.05
+    },
+    {
+      "level": 2,
+      "buy": {
+        "item": "statecraft_economy:currency_1",
+        "count": 4
+      },
+      "sell": {
+        "item": "minecraft:iron_pickaxe",
+        "count": 1
+      },
+      "maxUses": 8,
+      "xp": 5,
+      "priceMultiplier": 0.05
+    },
+    {
+      "level": 3,
+      "buy": {
+        "item": "statecraft_economy:currency_1",
+        "count": 3
+      },
+      "sell": {
+        "item": "minecraft:iron_shovel",
+        "count": 1
+      },
+      "maxUses": 8,
+      "xp": 10,
+      "priceMultiplier": 0.05
+    }
+  ]
+}

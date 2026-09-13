@@ -1,9 +1,0 @@
-Manifest-Version: 1.0
-Specification-Title: StateCraft
-Specification-Vendor: StateCraft
-Specification-Version: 1
-Implementation-Title: StateCraft
-Implementation-Version: 1.2.0
-Implementation-Vendor: StateCraft
-Implementation-Timestamp: 2026-02-24T19:22:56-0500
-

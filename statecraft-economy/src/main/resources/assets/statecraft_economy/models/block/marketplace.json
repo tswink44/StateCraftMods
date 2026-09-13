@@ -1,0 +1,12 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "particle": "statecraft_economy:block/marketplace_front",
+    "down": "statecraft_economy:block/marketplace_side",
+    "up": "statecraft_economy:block/marketplace_top",
+    "north": "statecraft_economy:block/marketplace_front",
+    "south": "statecraft_economy:block/marketplace_side",
+    "east": "statecraft_economy:block/marketplace_side",
+    "west": "statecraft_economy:block/marketplace_side"
+  }
+}

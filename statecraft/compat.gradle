@@ -1,0 +1,14 @@
+// Apply to project(':statecraft') after applying ForgeGradle.
+// JourneyMap 5.10.3 for Forge 1.20.1 implements the 1.20 API, not a 1.20.1 API artifact.
+repositories {
+    maven {
+        name = 'JourneyMapPublic'
+        url = uri('https://jm.gserv.me/repository/maven-public/')
+        content { includeGroup 'info.journeymap' }
+    }
+}
+
+dependencies {
+    // JourneyMap discovers our plugin only when installed. Do not shade or jar-in-jar its API.
+    compileOnly fg.deobf('info.journeymap:journeymap-api:1.20-1.9-SNAPSHOT')
+}

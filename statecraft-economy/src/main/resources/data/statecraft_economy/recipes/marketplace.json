@@ -1,0 +1,28 @@
+{
+  "category": "misc",
+  "group": "statecraft_economy",
+  "result": {
+    "item": "statecraft_economy:marketplace",
+    "count": 1
+  },
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "PPP",
+    "GCG",
+    "III"
+  ],
+  "key": {
+    "P": {
+      "item": "minecraft:oak_planks"
+    },
+    "G": {
+      "item": "minecraft:gold_nugget"
+    },
+    "C": {
+      "item": "minecraft:chest"
+    },
+    "I": {
+      "item": "minecraft:iron_ingot"
+    }
+  }
+}
