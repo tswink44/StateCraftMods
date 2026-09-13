@@ -5,8 +5,15 @@ import java.util.Objects;
 
 public record FormField(String key, String label, Kind kind, String value, String selectedLabel,
                         String hint, List<String> dependencies, boolean allowCustom,
-                        List<FormChoice> choices, int offset, boolean more) {
+                        List<FormChoice> choices, int offset, boolean more, FormConstraints constraints) {
     public enum Kind { TEXT, MULTILINE, CHOICE }
+
+    public FormField(String key, String label, Kind kind, String value, String selectedLabel,
+                     String hint, List<String> dependencies, boolean allowCustom,
+                     List<FormChoice> choices, int offset, boolean more) {
+        this(key, label, kind, value, selectedLabel, hint, dependencies, allowCustom, choices, offset, more,
+                FormConstraints.DEFAULT);
+    }
 
     public FormField {
         Objects.requireNonNull(key);
@@ -15,6 +22,7 @@ public record FormField(String key, String label, Kind kind, String value, Strin
         Objects.requireNonNull(value);
         Objects.requireNonNull(selectedLabel);
         Objects.requireNonNull(hint);
+        Objects.requireNonNull(constraints);
         dependencies = List.copyOf(dependencies);
         choices = List.copyOf(choices);
         if (key.isBlank() || key.length() > 64 || label.length() > 128 || value.length() > 2048

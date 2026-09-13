@@ -32,6 +32,7 @@ public final class EconomyCommands {
 
     EconomyCommands(EconomyEngine engine) { e = engine; }
     void hooks(Hooks hooks) { this.hooks = java.util.Objects.requireNonNull(hooks); }
+    String guideText() { return hooks.guide(); }
 
     public String execute(Actor actor, String line, InventoryPort inventory) {
         List<String> args = CommandLine.split(line);
@@ -241,7 +242,13 @@ public final class EconomyCommands {
                 need(args, 3, 3, "market buy <id> <quantity|all>");
                 int quantity = args.get(2).equalsIgnoreCase("all") ? e.commerce.market(args.get(1)).remaining : integer(args.get(2));
                 Commerce.Settlement result = e.commerce.buyMarket(actor, args.get(1), quantity);
-                int collected = e.commerce.collect(actor, inventory);
+                int collected;
+                try { collected = e.commerce.collect(actor, inventory); }
+                catch (UserError deferred) {
+                    yield "Purchased for " + Money.format(result.buyerCost()) + " including taxes. Your purchased items are queued."
+                            + " Automatic collection was deferred: " + deferred.getMessage()
+                            + " Use /sce market collect to receive deliveries; do not repeat the purchase.";
+                }
                 yield "Purchased for " + Money.format(result.buyerCost()) + " including taxes; collected " + collected
                         + " queued items. Remaining deliveries persist until market collect.";
             }
@@ -431,7 +438,10 @@ public final class EconomyCommands {
                 need(args, 2, 2, "loan show <id>");
                 Banking.LoanSummary loan = e.banking.loanSummary(actor, args.get(1));
                 yield loan.status() + "; outstanding " + Money.format(loan.total()) + "; currently due " + Money.format(loan.currentlyDue())
-                        + "; missed payments " + loan.missedPayments() + "\n" + loan.terms();
+                        + "; missed payments " + loan.missedPayments()
+                        + "; current automatic payments=" + loan.autoPay()
+                        + (loan.nextDueAt() == 0 ? "" : "; next unpaid installment " + Instant.ofEpochMilli(loan.nextDueAt()))
+                        + "\nOriginal agreement (immutable): " + loan.terms();
             }
             case "approve" -> { need(args, 2, 2, "loan approve <id>"); e.banking.approve(actor, args.get(1)); yield "Loan approved and funded from bank assets."; }
             case "cancel", "reject" -> { need(args, 2, 2, "loan cancel <id>"); e.banking.reject(actor, args.get(1)); yield "Application cancelled and collateral released."; }

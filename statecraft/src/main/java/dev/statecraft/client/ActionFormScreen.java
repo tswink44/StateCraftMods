@@ -8,16 +8,21 @@ import dev.statecraft.api.form.FormContext;
 import dev.statecraft.api.form.FormField;
 import dev.statecraft.api.form.FormQuery;
 import dev.statecraft.api.form.FormState;
+import dev.statecraft.api.ui.ActionIntent;
+import dev.statecraft.api.ui.ActionSelection;
+import dev.statecraft.api.ui.UiText;
+import dev.statecraft.client.state.FormDraft;
+import dev.statecraft.client.state.FormPages;
+import dev.statecraft.client.state.SearchState;
+import dev.statecraft.client.state.UiScope;
 import dev.statecraft.network.SuiteNetwork;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.components.MultiLineEditBox;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -25,369 +30,380 @@ import net.minecraft.network.chat.Component;
 final class ActionFormScreen extends Screen {
     private final ManagementScreen parent;
     private final Screen previous;
+    private final MenuPage page;
     private final MenuPage.Action action;
     private final CommandTemplate template;
-    private final FormState state = new FormState();
-    private final Map<String, Integer> labels = new LinkedHashMap<>();
-    private final Map<String, Integer> hints = new LinkedHashMap<>();
-    private final List<AbstractWidget> inputs = new ArrayList<>();
-    private int offset;
-    private int shown;
+    private final FormDraft draft;
+    private final FormState state;
+    private final UiScope scope;
+    private final Map<String, AbstractWidget> inputs = new LinkedHashMap<>();
+    private FormPages pages;
+    private FormPages.Page visible;
+    private int pageIndex;
     private int pending = -1;
-    private int submitting = -1;
-    private long requestedAt;
-    private long submittedAt;
     private long refreshAt;
     private boolean initialized;
     private boolean loaded;
     private boolean metadataFailed;
-    private boolean uncertain;
-    private String error = "";
+    private boolean keepingOwner;
+    private UiText error = UiText.EMPTY;
     private Button confirm;
     private Button refresh;
+    private Button explanation;
 
     ActionFormScreen(ManagementScreen parent, Screen previous, MenuPage.Action action) {
-        super(Component.literal(action.label()));
+        this(parent, previous, parent.page(), action, Map.of());
+    }
+    ActionFormScreen(ManagementScreen parent, Screen previous, MenuPage page, MenuPage.Action action, Map<String, String> seed) {
+        super(ClientText.action(page.id(), action));
         this.parent = parent;
         this.previous = previous;
+        this.page = page;
         this.action = action;
+        scope = ClientHooks.scope();
         template = new CommandTemplate(action.command());
-        loaded = template.fields().isEmpty();
+        draft = ClientHooks.workspace().draft(page.id(), action.command(), seed);
+        state = draft.state();
+        loaded = template.fields().isEmpty() || !state.schema().fields().isEmpty();
     }
 
     @Override
     protected void init() {
-        labels.clear();
-        hints.clear();
+        saveEditors();
         inputs.clear();
-        int left = Math.max(12, width / 2 - 190);
-        int fieldWidth = Math.min(380, width - 24);
-        int y = 49;
-        shown = 0;
-        List<FormField> fields = state.schema().fields();
-        offset = Math.min(offset, Math.max(0, fields.size() - 1));
+        int left = Math.max(12, width / 2 - 220);
+        int fieldWidth = Math.min(440, width - 24);
+        pages = new FormPages(state.schema().fields(), height);
+        pageIndex = pages.pageContaining(draft.layoutAnchor());
+        visible = pages.page(pageIndex);
+        draft.firstField(visible.start());
         AbstractWidget initialFocus = null;
-        for (int i = offset; loaded && i < fields.size(); i++) {
-            FormField field = fields.get(i);
-            int inputHeight = field.kind() == FormField.Kind.MULTILINE ? 44 : 20;
-            int bottom = height - (error.isEmpty() ? 62 : 92);
-            if (shown > 0 && y + inputHeight + 12 > bottom) {
-                break;
-            }
-            labels.put(field.key(), y - 11);
-            hints.put(field.key(), y + inputHeight + 3);
-            AbstractWidget widget;
+        for (FormPages.Slot slot : visible.slots()) {
+            FormField field = state.schema().fields().get(slot.index());
+            AbstractWidget input;
             if (field.kind() == FormField.Kind.CHOICE) {
-                String selected = state.label(field.key());
-                String caption = selected.isEmpty() ? field.choices().isEmpty() && !field.allowCustom()
-                        ? "No eligible options" : "Choose..." : selected;
-                Button choice = Button.builder(Component.literal(font.plainSubstrByWidth(caption, fieldWidth - 30) + "  v"),
-                                ignored -> minecraft.setScreen(new ChoicePickerScreen(this, field.key())))
-                        .bounds(left, y, fieldWidth, inputHeight).build();
-                widget = choice;
+                Component caption = state.label(field.key()).isEmpty()
+                        ? field.choices().isEmpty() && !field.allowCustom()
+                            ? ClientText.tr("gui.statecraft.choices.none_eligible", "No eligible options")
+                            : ClientText.tr("gui.statecraft.choices.choose", "Choose...")
+                        : Component.literal(state.label(field.key()));
+                input = Button.builder(caption, ignored -> {
+                    if (locked()) return;
+                    keepingOwner = true;
+                    draft.focused(field.key());
+                    minecraft.setScreen(new ChoicePickerScreen(this, field.key()));
+                }).bounds(left, slot.inputY(), fieldWidth, slot.inputHeight()).build();
             } else if (field.kind() == FormField.Kind.MULTILINE) {
-                MultiLineEditBox box = new MultiLineEditBox(font, left, y, fieldWidth, inputHeight,
-                        Component.literal(field.label()), Component.literal(field.label()));
-                box.setCharacterLimit(2048);
-                box.setValue(state.value(field.key()));
-                box.setValueListener(value -> changed(field.key(), value));
-                widget = box;
+                input = new DraftMultilineBox(font, left, slot.inputY(), fieldWidth, slot.inputHeight(),
+                        Component.literal(field.label()), field.constraints().maxLength(), state.value(field.key()),
+                        draft.selection(field.key()), value -> changed(field.key(), value));
             } else {
-                EditBox box = new EditBox(font, left, y, fieldWidth, inputHeight, Component.literal(field.label()));
-                box.setMaxLength(512);
+                RetainedEditBox box = new RetainedEditBox(font, left, slot.inputY(), fieldWidth, slot.inputHeight(),
+                        Component.literal(field.label()));
+                box.setMaxLength(field.constraints().maxLength());
                 box.setValue(state.value(field.key()));
+                box.restore(draft.selection(field.key()));
                 box.setResponder(value -> changed(field.key(), value));
-                widget = box;
+                input = box;
             }
-            String tooltip = field.hint();
-            if (field.kind() == FormField.Kind.CHOICE && !state.value(field.key()).isBlank()) {
-                tooltip += "\nSelected: " + state.value(field.key());
-            }
-            widget.setTooltip(Tooltip.create(Component.literal(tooltip)));
-            addRenderableWidget(widget);
-            inputs.add(widget);
-            if (initialFocus == null && field.kind() != FormField.Kind.CHOICE && state.value(field.key()).isBlank()) {
-                initialFocus = widget;
-            }
-            shown++;
-            y += inputHeight + 26;
+            input.setTooltip(Tooltip.create(fieldDescription(field)));
+            addRenderableWidget(input);
+            inputs.put(field.key(), input);
+            if (field.key().equals(draft.focused())) initialFocus = input;
         }
-        if (initialFocus != null) {
-            setInitialFocus(initialFocus);
-        }
-        if (offset > 0 || offset + shown < fields.size()) {
-            Button back = addRenderableWidget(Button.builder(Component.literal("Previous fields"), ignored -> {
-                offset = Math.max(0, offset - Math.max(1, shown));
-                rebuildWidgets();
-            }).bounds(left, height - 54, 112, 20).build());
-            back.active = offset > 0;
-            Button next = addRenderableWidget(Button.builder(Component.literal("Next fields"), ignored -> {
-                offset = Math.min(fields.size() - 1, offset + Math.max(1, shown));
-                rebuildWidgets();
-            }).bounds(left + 116, height - 54, 112, 20).build());
-            next.active = offset + shown < fields.size();
-        }
+        explanation = addRenderableWidget(Button.builder(Component.empty(), ignored -> minecraft.setScreen(
+                        new InformationScreen(this, ClientText.tr("gui.statecraft.form.validation", "Form status and field details"),
+                                validationDetails())))
+                .bounds(left, height - 88, fieldWidth, 20).build());
         int buttonWidth = (fieldWidth - 8) / 3;
-        confirm = addRenderableWidget(Button.builder(Component.literal("Confirm"), ignored -> confirm())
-                .bounds(left, height - 28, buttonWidth, 20).build());
-        refresh = addRenderableWidget(Button.builder(Component.literal("Refresh choices"), ignored -> {
-            error = "";
-            request(FormQuery.INITIAL);
-        }).bounds(left + buttonWidth + 4, height - 28, buttonWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Back"), ignored -> onClose())
+        Button back = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.form.previous", "Previous fields"), ignored -> {
+            changePage(pages.page(pageIndex - 1).start());
+        }).bounds(left, height - 62, buttonWidth, 20).build());
+        back.active = pageIndex > 0;
+        Button next = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.form.next", "Next fields"), ignored -> {
+            changePage(pages.page(pageIndex + 1).start());
+        }).bounds(left + buttonWidth + 4, height - 62, buttonWidth, 20).build());
+        next.active = pageIndex + 1 < pages.pages().size();
+        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.operations.title", "Operations"),
+                        ignored -> ClientHooks.operations(this))
+                .bounds(left + (buttonWidth + 4) * 2, height - 62, buttonWidth, 20).build());
+        confirm = addRenderableWidget(Button.builder(action.intent() == ActionIntent.QUERY
+                        ? ClientText.tr("gui.statecraft.form.run_query", "Run query") : ClientText.tr("gui.statecraft.form.review", "Review action"),
+                        ignored -> review()).bounds(left, height - 28, buttonWidth, 20).build());
+        refresh = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.form.refresh_choices", "Refresh choices"),
+                        ignored -> {
+                            draft.serverErrors(Map.of());
+                            request(FormQuery.INITIAL);
+                        })
+                .bounds(left + buttonWidth + 4, height - 28, buttonWidth, 20).build());
+        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.back", "Back"), ignored -> onClose())
                 .bounds(left + (buttonWidth + 4) * 2, height - 28, buttonWidth, 20).build());
-        updateControls();
+        if (initialFocus != null && initialFocus.active) setInitialFocus(initialFocus);
+        else if (!inputs.isEmpty()) setInitialFocus(inputs.values().iterator().next());
+        controls();
         if (!initialized) {
             initialized = true;
-            if (!loaded) {
-                request(FormQuery.INITIAL);
-            }
+            if (!template.fields().isEmpty() && !locked()) request(FormQuery.INITIAL);
         }
     }
 
+    private void saveEditors() {
+        inputs.forEach((key, widget) -> {
+            if (widget instanceof RetainedEditBox box) draft.selection(key, box.selection());
+            else if (widget instanceof DraftMultilineBox box) draft.selection(key, box.selection());
+            if (widget.isFocused()) draft.focused(key);
+        });
+    }
+    private void changePage(int first) {
+        saveEditors();
+        draft.firstField(first);
+        draft.focused("");
+        inputs.clear();
+        rebuildWidgets();
+    }
+    private void rebuildForm() {
+        saveEditors();
+        inputs.clear();
+        rebuildWidgets();
+    }
+    @Override
+    public void resize(Minecraft minecraft, int width, int height) {
+        saveEditors();
+        inputs.clear();
+        super.resize(minecraft, width, height);
+    }
     private void changed(String key, String value) {
-        error = "";
-        if (!state.change(key, value).isEmpty() || metadataFailed) {
-            refreshAt = System.currentTimeMillis() + 300;
-        }
-        updateControls();
+        if (locked()) return;
+        error = UiText.EMPTY;
+        draft.edited(key);
+        if (!state.change(key, value).isEmpty() || metadataFailed) refreshAt = ClientHooks.time() + 300;
+        controls();
     }
-
-    private void updateControls() {
-        if (confirm == null) {
-            return;
-        }
-        confirm.active = loaded && !metadataFailed && pending < 0 && submitting < 0 && refreshAt == 0 && !uncertain && state.complete();
-        confirm.setTooltip(error.isEmpty() ? null : Tooltip.create(Component.literal(error)));
-        refresh.active = submitting < 0 && !template.fields().isEmpty();
-        for (int i = 0; i < inputs.size(); i++) {
-            AbstractWidget input = inputs.get(i);
-            FormField field = state.schema().fields().get(offset + i);
-            input.active = submitting < 0 && field.dependencies().stream().noneMatch(key -> state.value(key).isBlank());
-            if (input instanceof Button) {
-                input.active &= !metadataFailed && pending < 0 && refreshAt == 0
-                        && (field.allowCustom() || !field.choices().isEmpty() || field.more());
-            }
-        }
+    boolean locked() {
+        return !ClientHooks.current(scope) || ClientHooks.workspace().operations().blocked(draft.operation());
     }
-
+    private Component reason() {
+        if (!ClientHooks.current(scope)) return ClientText.tr("gui.statecraft.session.changed", "This form belongs to a different session.");
+        if (locked()) {
+            var operation = ClientHooks.workspace().operations().get(draft.operation());
+            return operation.inFlight() ? ClientText.tr("gui.statecraft.operation.waiting",
+                    "Submitted — waiting for the server. Inputs are locked.")
+                    : ClientText.outcome(operation.outcome()).copy().append(". ").append(ClientText.tr(
+                            "gui.statecraft.form.locked", "Inputs are locked. Use Operations to check status or retry the same ready operation."));
+        }
+        if (!error.fallback().isEmpty()) return ClientText.of(error);
+        if (pending >= 0 || refreshAt != 0) return ClientText.tr("gui.statecraft.form.loading", "Loading eligible choices...");
+        if (!loaded || metadataFailed) return ClientText.tr("gui.statecraft.form.retry_metadata", "Refresh choices before continuing.");
+        if (!draft.errors().isEmpty()) return ClientText.tr("gui.statecraft.form.correct_fields",
+                "Correct %s field(s). Open this status for the full explanations.", draft.errors().size());
+        if (action.intent().requiresReview() && !ClientHooks.submissionProblem(action.command()).fallback().isEmpty()) {
+            return ClientText.of(ClientHooks.submissionProblem(action.command()));
+        }
+        var last = ClientHooks.workspace().operations().get(draft.operation());
+        if (last != null && last.terminal() && !last.outcome().success()) {
+            return ClientText.outcome(last.outcome()).copy().append(": ").append(last.text());
+        }
+        return ClientText.tr("gui.statecraft.form.ready", "Fields %s–%s of %s. Ready for %s.",
+                visible.start() + (visible.end() > 0 ? 1 : 0), visible.end(), state.schema().fields().size(),
+                action.intent() == ActionIntent.QUERY ? ClientText.tr("gui.statecraft.form.query", "query").getString()
+                        : ClientText.tr("gui.statecraft.form.server_review", "server review").getString());
+    }
+    private void controls() {
+        if (confirm == null) return;
+        confirm.active = loaded && !metadataFailed && pending < 0 && refreshAt == 0 && !locked()
+                && draft.errors().isEmpty() && (!action.intent().requiresReview() || ClientHooks.submissionProblem(action.command()).fallback().isEmpty());
+        explanation.setMessage(reason());
+        confirm.setTooltip(Tooltip.create(reason()));
+        refresh.active = !locked() && pending < 0 && !template.fields().isEmpty();
+        inputs.forEach((key, input) -> {
+            FormField field = field(key);
+            boolean dependencies = field.dependencies().stream().noneMatch(parent -> state.value(parent).isBlank());
+            if (input instanceof RetainedEditBox box) box.setEditable(!locked() && dependencies);
+            else input.active = !locked() && dependencies;
+            if (input instanceof Button) input.active &= !metadataFailed && pending < 0 && refreshAt == 0
+                    && (field.allowCustom() || !field.choices().isEmpty() || field.more());
+            input.setTooltip(Tooltip.create(fieldDescription(field)));
+        });
+    }
     void request(FormQuery query) {
-        if (submitting >= 0) {
-            return;
-        }
-        if (pending >= 0) {
-            ClientHooks.forgetForm(pending);
-        }
+        if (locked()) return;
+        ClientHooks.forgetForm(pending);
         pending = -1;
         refreshAt = 0;
+        error = UiText.EMPTY;
         Map<String, String> requested = state.values();
         try {
             FormContext.validateValues(action.command(), requested);
-        } catch (UserError invalid) {
+        } catch (UserError failure) {
             metadataFailed = true;
-            error = invalid.getMessage();
-            updateControls();
+            error = UiText.literal(failure.getMessage());
+            controls();
             notifyPicker();
             return;
         }
-        pending = ClientHooks.nextRequest();
-        requestedAt = System.currentTimeMillis();
         long revision = state.dependencyRevision();
-        ClientHooks.watchForm(pending, response -> receive(response, requested, revision));
-        SuiteNetwork.requestForm(pending, parent.page().id(), action.command(), requested, query);
-        updateControls();
+        pending = ClientHooks.requestForm(page.id(), action.command(), requested, query,
+                response -> receive(response, requested, revision), () -> {
+                    pending = -1;
+                    metadataFailed = true;
+                    error = UiText.tr("gui.statecraft.form.timeout", "Choices could not be loaded. Use Refresh choices to retry.");
+                    controls();
+                    notifyPicker();
+                });
+        controls();
         notifyPicker();
     }
-
-    private void receive(SuiteNetwork.FormResponse response, Map<String, String> requested, long dependencyRevision) {
-        if (response.id() != pending || !response.page().equals(parent.page().id()) || !response.command().equals(action.command())) {
-            return;
-        }
+    private void receive(SuiteNetwork.FormResponse response, Map<String, String> requested, long revision) {
+        if (!ClientHooks.current(scope) || response.id() != pending || !response.page().equals(page.id())
+                || !response.command().equals(action.command())) return;
         pending = -1;
-        if (dependencyRevision != state.dependencyRevision()) {
-            request(FormQuery.INITIAL);
-            return;
-        }
+        if (locked()) return;
+        if (revision != state.dependencyRevision()) { request(FormQuery.INITIAL); return; }
         if (response.success()) {
             if (!response.schema().fields().stream().map(FormField::key).toList().equals(template.fields())) {
                 loaded = false;
                 metadataFailed = true;
-                error = "The server returned an incompatible form. Install matching mod versions.";
+                error = UiText.tr("gui.statecraft.form.incompatible", "The server returned an incompatible form. Install matching mod versions.");
             } else {
                 state.apply(response.schema(), requested);
                 loaded = true;
                 metadataFailed = false;
+                error = UiText.EMPTY;
             }
         } else {
             metadataFailed = true;
-            error = response.error();
+            error = UiText.literal(response.error());
         }
-        if (minecraft.screen == this) {
-            rebuildWidgets();
-        }
+        if (minecraft.screen == this) rebuildForm();
         notifyPicker();
-        updateControls();
+        controls();
     }
 
-    FormField field(String key) {
-        return state.schema().field(key).orElseThrow(() -> new IllegalStateException("Unknown form field: " + key));
-    }
-
+    FormField field(String key) { return state.schema().field(key).orElseThrow(); }
+    SearchState search(String key) { return draft.search(key); }
     boolean waiting() { return pending >= 0; }
-    boolean choicesReady() { return loaded && !metadataFailed && pending < 0; }
-    String error() { return error; }
-
-    void selected(String key, FormChoice choice) {
-        state.select(key, choice);
-        error = "";
-        minecraft.setScreen(this);
-        request(FormQuery.INITIAL);
-    }
-
-    void selectedCustom(String key, String value) {
-        state.selectCustom(key, value);
-        error = "";
-        minecraft.setScreen(this);
-        request(FormQuery.INITIAL);
-    }
-
+    boolean choicesReady() { return loaded && !metadataFailed && pending < 0 && !locked(); }
+    String error() { return ClientText.of(error).getString(); }
     String value(String key) { return state.value(key); }
 
-    void returnFromPicker() {
+    void selected(String key, FormChoice choice) {
+        if (locked()) return;
+        state.select(key, choice);
+        draft.edited(key);
+        error = UiText.EMPTY;
         minecraft.setScreen(this);
         request(FormQuery.INITIAL);
     }
-
+    void selectedCustom(String key, String value) {
+        if (locked()) return;
+        var failure = field(key).constraints().error(value, field(key).label());
+        if (failure.isPresent()) throw new UserError(ClientText.of(failure.get()).getString());
+        state.selectCustom(key, value);
+        draft.edited(key);
+        error = UiText.EMPTY;
+        minecraft.setScreen(this);
+        request(FormQuery.INITIAL);
+    }
+    void returnFromPicker() {
+        minecraft.setScreen(this);
+        if (!locked()) request(FormQuery.INITIAL);
+    }
     private void notifyPicker() {
-        if (minecraft != null && minecraft.screen instanceof ChoicePickerScreen picker && picker.owner() == this) {
-            picker.updated();
-        }
+        if (minecraft != null && minecraft.screen instanceof ChoicePickerScreen picker && picker.owner() == this) picker.updated();
     }
-
-    private void confirm() {
-        if (!confirm.active) {
-            return;
-        }
+    private void review() {
+        controls();
+        if (!confirm.active) return;
         try {
-            String command = template.render(state.values());
-            submitting = ClientHooks.nextRequest();
-            submittedAt = System.currentTimeMillis();
-            error = "";
-            ClientHooks.watchAction(submitting, this::actionResult);
-            SuiteNetwork.request(submitting, parent.page().id(), command);
-            updateControls();
-        } catch (UserError e) {
-            error = e.getMessage();
-            rebuildWidgets();
-        }
-    }
-
-    private void actionResult(SuiteNetwork.ActionResponse response) {
-        if (response.id() != submitting || !response.page().equals(parent.page().id())) {
-            return;
-        }
-        submitting = -1;
-        parent.displayResult(response.success(), response.text());
-        if (response.success()) {
-            if (minecraft.screen == this) {
+            template.render(state.values());
+            ActionSelection selection = draft.capture();
+            if (action.intent() == ActionIntent.QUERY) {
+                ClientHooks.query(parent.state(), selection);
                 minecraft.setScreen(parent);
-            }
-        } else {
-            error = response.text();
-            if (template.fields().isEmpty()) {
-                rebuildWidgets();
             } else {
-                request(FormQuery.INITIAL);
+                minecraft.setScreen(new TransactionReviewScreen(parent, this, selection, action.intent(), draft));
             }
+        } catch (UserError failure) {
+            error = UiText.literal(failure.getMessage());
+            controls();
         }
-        updateControls();
     }
-
     void tickRequests() {
-        long now = System.currentTimeMillis();
-        if (pending >= 0 && now - requestedAt > 15000) {
-            ClientHooks.forgetForm(pending);
-            pending = -1;
-            metadataFailed = true;
-            error = "Choices could not be loaded. Use Refresh choices to retry.";
-            notifyPicker();
-            if (minecraft.screen == this) {
-                rebuildWidgets();
-            }
-        }
-        if (submitting >= 0 && now - submittedAt > 15000) {
-            ClientHooks.forget(submitting);
-            submitting = -1;
-            uncertain = true;
-            error = "The action may have completed. Go Back and refresh the section before retrying.";
-            rebuildWidgets();
-        }
-        if (refreshAt != 0 && now >= refreshAt) {
-            request(FormQuery.INITIAL);
-        }
-        updateControls();
+        if (refreshAt != 0 && ClientHooks.time() >= refreshAt && !locked()) request(FormQuery.INITIAL);
+        controls();
     }
-
     @Override
     public void tick() {
-        inputs.stream().filter(EditBox.class::isInstance).map(EditBox.class::cast).forEach(EditBox::tick);
+        if (!ClientHooks.current(scope)) { minecraft.setScreen(null); return; }
+        inputs.values().forEach(widget -> {
+            if (widget instanceof RetainedEditBox box) box.tick();
+            else if (widget instanceof DraftMultilineBox box) box.tick();
+        });
         tickRequests();
     }
-
+    private Component fieldDescription(FormField field) {
+        Component text = Component.literal(field.label() + "\n" + field.hint());
+        UiText failure = draft.errors().get(field.key());
+        if (failure != null) text = text.copy().append("\n").append(ClientText.of(failure));
+        if (!field.dependencies().isEmpty()) text = text.copy().append("\n").append(ClientText.tr(
+                "gui.statecraft.field.depends", "Choose these fields first: %s", String.join(", ", field.dependencies())));
+        return text.copy().append("\n").append(ClientText.tr("gui.statecraft.field.limit",
+                "Maximum %s characters.", field.constraints().maxLength()));
+    }
+    private Component validationDetails() {
+        Component text = reason();
+        for (FormField field : state.schema().fields()) text = text.copy().append("\n\n").append(fieldDescription(field));
+        return text;
+    }
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public Component getNarrationMessage() { return title.copy().append(". ").append(reason()); }
+    @Override
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
         renderBackground(graphics);
         graphics.fill(0, 0, width, height, 0xEC121923);
-        int left = Math.max(12, width / 2 - 190);
-        int fieldWidth = Math.min(380, width - 24);
+        int left = Math.max(12, width / 2 - 220);
+        int fieldWidth = Math.min(440, width - 24);
         graphics.drawCenteredString(font, title, width / 2, 10, 0x71D6C1);
-        graphics.drawCenteredString(font, parent.page().title(), width / 2, 24, 0x9DB4C7);
-        for (FormField field : state.schema().fields()) {
-            Integer y = labels.get(field.key());
-            if (y != null) {
-                graphics.drawString(font, font.plainSubstrByWidth(field.label(), fieldWidth), left, y, 0xDCE8F1, false);
-                graphics.drawString(font, font.plainSubstrByWidth(field.hint(), fieldWidth), left, hints.get(field.key()),
-                        0x94A9BC, false);
+        graphics.drawCenteredString(font, ClientText.page(page), width / 2, 26, 0xA8BECE);
+        Map<String, UiText> errors = draft.errors();
+        for (FormPages.Slot slot : visible.slots()) {
+            FormField field = state.schema().fields().get(slot.index());
+            graphics.drawString(font, font.plainSubstrByWidth(field.label(), fieldWidth), left, slot.labelY(), 0xDCE8F1, false);
+            Component hint = errors.containsKey(field.key()) ? ClientText.tr("gui.statecraft.field.error", "Error: %s",
+                    ClientText.of(errors.get(field.key())).getString()) : Component.literal(field.hint());
+            graphics.drawString(font, font.plainSubstrByWidth(hint.getString(), fieldWidth), left, slot.messageY(),
+                    errors.containsKey(field.key()) ? 0xFFB5A8 : 0xA8BECE, false);
+        }
+        if (!loaded || template.fields().isEmpty()) {
+            Component message = !loaded ? ClientText.tr("gui.statecraft.form.loading", "Loading eligible choices...")
+                    : ClientText.tr("gui.statecraft.form.no_fields", "This action needs no additional fields. Continue to run the query or request a server review.");
+            int y = 54;
+            for (var line : font.split(message, fieldWidth)) {
+                if (y + 10 >= height - FormPages.FOOTER_HEIGHT) break;
+                graphics.drawString(font, line, left, y, 0xDFE9F2, false);
+                y += 11;
             }
         }
-        if (!loaded && pending >= 0) {
-            graphics.drawCenteredString(font, "Loading eligible choices...", width / 2, 55, 0xB7C9D9);
-        } else if (template.fields().isEmpty()) {
-            int y = 52;
-            for (var line : font.split(Component.literal("Confirm this action:\n" + action.command()), width - 32)) {
-                graphics.drawString(font, line, 16, y, 0xDFE9F2, false);
-                y += 12;
-            }
-        }
-        if (!error.isEmpty()) {
-            int y = height - 88;
-            for (var line : font.split(Component.literal(error), fieldWidth).stream().limit(3).toList()) {
-                graphics.drawString(font, line, left, y, 0xFF9292, false);
-                y += 10;
-            }
-        } else if (submitting >= 0) {
-            graphics.drawCenteredString(font, "Submitting to the server...", width / 2, height - 67, 0xB7C9D9);
-        }
-        super.render(graphics, mouseX, mouseY, partialTick);
+        super.render(graphics, mouseX, mouseY, delta);
     }
-
     @Override
-    public void onClose() {
-        if (submitting >= 0) {
-            error = "Waiting for the server. This action has already been submitted.";
-            rebuildWidgets();
-            return;
-        }
-        if (pending >= 0) {
+    public void removed() {
+        saveEditors();
+        inputs.clear();
+        if (!keepingOwner) {
             ClientHooks.forgetForm(pending);
             pending = -1;
+            refreshAt = 0;
         }
-        minecraft.setScreen(uncertain ? parent : previous);
-        if (uncertain) {
-            parent.submit(parent.page().query());
-        }
+        keepingOwner = false;
     }
-
+    @Override
+    public void onClose() {
+        ClientHooks.forgetForm(pending);
+        pending = -1;
+        refreshAt = 0;
+        minecraft.setScreen(previous);
+    }
     @Override
     public boolean isPauseScreen() { return false; }
 }

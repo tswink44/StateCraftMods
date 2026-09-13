@@ -1,0 +1,19 @@
+{
+  "ui.statecraft.runtime.error": "Could not complete this request (%s). See the server log.",
+  "ui.statecraft.runtime.review.advanced": "Review advanced command",
+  "ui.statecraft.runtime.review.advanced_warning": "Detailed pricing is unavailable for an advanced command. Use a guided action for itemized costs.",
+  "ui.statecraft.runtime.dashboard.title": "Your dashboard",
+  "ui.statecraft.runtime.dashboard.body": "Authorized pending work and your recent operations. Select a row to inspect it.",
+  "ui.statecraft.runtime.dashboard.paused": "World saving is paused. Operation status remains available; ask an operator to restore saving.",
+  "ui.statecraft.runtime.dashboard.home": "Dashboard",
+  "ui.statecraft.runtime.dashboard.empty": "No matching pending work or recent operations.",
+  "ui.statecraft.runtime.operations.title": "Your operations",
+  "ui.statecraft.runtime.operations.admin_title": "Operation administration",
+  "ui.statecraft.runtime.operations.help": "Receipts are bounded. An unknown or uncertain ID is never automatically executed again.",
+  "ui.statecraft.runtime.operations.empty": "No matching operations.",
+  "ui.statecraft.runtime.operations.detail": "Operation details",
+  "ui.statecraft.runtime.operations.resolve_completed": "Confirm completed after audit",
+  "ui.statecraft.runtime.operations.resolve_rejected": "Confirm not executed after audit",
+  "ui.statecraft.runtime.operations.resolve_title": "Review manual reconciliation",
+  "ui.statecraft.runtime.operations.resolve_warning": "Verify the world, inventory and account history first. This only records the outcome; it does not replay, refund, or undo an action."
+}

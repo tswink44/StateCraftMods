@@ -1,13 +1,28 @@
-# Script to build and run both StateCraft and StateCraftEconomy together
-# The StateCraft build.gradle includes Economy source sets directly,
-# so we don't need to copy JAR files - just run from StateCraft
+[CmdletBinding()]
+param(
+    [switch]$DryRun
+)
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "=== Running StateCraft with Economy (source integration) ===" -ForegroundColor Cyan
-Write-Host "Note: Economy mod is loaded directly from source via build.gradle source sets" -ForegroundColor Yellow
+$wrapper = Join-Path $PSScriptRoot "gradlew.bat"
+$task = ":statecraft-economy:runClient"
+if (-not (Test-Path -LiteralPath $wrapper -PathType Leaf)) {
+    throw "The root Gradle wrapper is missing: $wrapper"
+}
 
-Push-Location "StateCraft"
-./gradlew runClient
-Pop-Location
+if ($DryRun) {
+    Write-Output "& `"$wrapper`" --project-dir `"$PSScriptRoot`" $task"
+    return
+}
 
+Push-Location $PSScriptRoot
+try {
+    & $wrapper --project-dir $PSScriptRoot $task
+    if ($LASTEXITCODE -ne 0) {
+        throw "The combined StateCraft client exited with code $LASTEXITCODE."
+    }
+}
+finally {
+    Pop-Location
+}

@@ -9,6 +9,7 @@ import dev.statecraft.api.UserError;
 import dev.statecraft.api.form.FormBuilder;
 import dev.statecraft.api.form.FormChoice;
 import dev.statecraft.api.form.FormContext;
+import dev.statecraft.api.form.FormConstraints;
 import dev.statecraft.api.form.FormField;
 import dev.statecraft.api.form.FormQuery;
 import org.junit.jupiter.api.Test;
@@ -310,6 +311,122 @@ class GovernanceFormsTest extends DomainFixture {
         config.requireLegislationForPolicy = true;
         configure();
         assertEquals(Set.of("open"), catalog(form(alice, command, Map.of("government", nation)), "key"));
+    }
+
+    @Test
+    void legislationOnlyFormsRestrictNationalPoliciesButKeepAuthorizedLocalPolicies() {
+        Tree tree = tree(alice, "Alpha");
+        join(bob, tree);
+        join(cara, tree);
+        run(alice, "state leader " + tree.state() + " Bob");
+        run(alice, "city leader " + tree.city() + " Cara");
+        config.requireLegislationForPolicy = true;
+        configure();
+        String command = "government setting <government> <key> <value>";
+        FormBuilder national = form(alice, command, Map.of("government", tree.nation()));
+        assertEquals(Set.of("open"), catalog(national, "key"));
+        assertTrue(field(national, "key").hint().contains("National mechanical policies require bills"));
+        FormBuilder state = form(bob, command, Map.of("government", tree.state(), "key", "incomeTaxBps"));
+        assertTrue(catalog(state, "key").contains("incomeTaxBps"));
+        assertEquals("0", state.value("value"));
+        assertTrue(field(state, "key").hint().contains("only nationally"));
+        FormBuilder city = form(cara, command, Map.of("government", tree.city(), "key", "propertyTaxBps"));
+        assertTrue(catalog(city, "key").contains("propertyTaxBps"));
+        assertEquals(Set.of(tree.city()), catalog(city, "government"));
+        assertTrue(catalog(form(dave, command, Map.of("government", tree.city())), "government").isEmpty());
+        assertTrue(catalog(form(cara, command, Map.of("government", tree.state())), "key").isEmpty());
+        assertTrue(catalog(form(operator, command, Map.of("government", tree.nation())), "key").contains("incomeTaxBps"));
+        String bills = "bill propose <nation> <policy> <value> <title> <text>";
+        assertFalse(catalog(form(bob, bills), "nation").contains(tree.state()));
+        assertFalse(catalog(form(cara, bills), "nation").contains(tree.city()));
+    }
+
+    @Test
+    void kickFormsCompareCallerAuthorityAndStillExcludeAffectedLeaders() {
+        Tree tree = tree(alice, "Alpha");
+        join(bob, tree);
+        join(cara, tree);
+        run(alice, "nation officer " + tree.nation() + " Bob add");
+        run(alice, "city leader " + tree.city() + " Cara");
+        String command = "city kick <city> <player>";
+        assertTrue(catalog(form(alice, command, Map.of("city", tree.city())), "player").contains(bob.id().toString()));
+        assertFalse(catalog(form(cara, command, Map.of("city", tree.city())), "player").contains(bob.id().toString()));
+        assertFalse(catalog(form(alice, command, Map.of("city", tree.city())), "player").contains(cara.id().toString()));
+        run(alice, "city leader " + tree.city() + " Bob");
+        assertFalse(catalog(form(alice, command, Map.of("city", tree.city())), "player").contains(bob.id().toString()));
+    }
+
+    @Test
+    void historicalBidsStaySelectableAfterTheUnencumberedContractorCompanyDissolves() {
+        Tree tree = tree(alice, "Alpha");
+        String key = claim(alice, tree, 0, 0);
+        String company = company(bob, "Builders");
+        run(alice, "contract create " + tree.nation() + " Road Work " + key);
+        String contract = latestContract();
+        run(bob, "contract bid " + contract + " 0 Work company:" + company);
+        run(alice, "contract review " + contract);
+        run(alice, "contract award " + contract + " Bob");
+        run(bob, "contract submit " + contract + " Done");
+        run(alice, "contract complete " + contract);
+        run(bob, "company disband " + company);
+        String template = "contract bids <contract> <page>";
+        FormBuilder retained = form(alice, template, Map.of("contract", contract));
+        assertEquals(contract, retained.value("contract"));
+        assertTrue(catalog(retained, "contract").contains(contract));
+        assertTrue(run(alice, "contract bids " + contract).contains("company:" + company));
+        assertTrue(catalog(form(cara, template), "contract").isEmpty());
+        assertThrows(UserError.class, () -> run(cara, "contract bids " + contract));
+        assertTrue(catalog(form(alice, "contract complete <contract>"), "contract").isEmpty());
+    }
+
+    @Test
+    void constraintsMatchConfiguredTextLengthsMoneyAndDependentPolicyTypes() {
+        Tree tree = tree(alice, "Alpha");
+        String government = "government setting <government> <key> <value>";
+        FormBuilder tax = form(alice, government, Map.of("government", tree.city(), "key", "incomeTaxBps"));
+        FormConstraints rate = field(tax, "value").constraints();
+        assertEquals(FormConstraints.Type.INTEGER, rate.type());
+        assertEquals(0, rate.minimum());
+        assertEquals(10_000, rate.maximum());
+        assertEquals(List.of("inherit"), rate.alternatives());
+        assertTrue(rate.error("10001", "Rate").isPresent());
+        assertTrue(rate.error("inherit", "Rate").isEmpty());
+        FormBuilder bill = form(alice, "bill propose <nation> <policy> <value> <title> <text>",
+                Map.of("nation", tree.nation(), "policy", "incomeTaxBps"));
+        assertTrue(field(bill, "value").constraints().alternatives().isEmpty());
+        assertEquals(100, field(bill, "title").constraints().maxLength());
+        assertEquals(config.maxDescriptionLength, field(bill, "text").constraints().maxLength());
+        assertEquals(config.maxNameLength, field(form(alice, "company create <name>"), "name").constraints().maxLength());
+        assertEquals(12, field(form(alice, "city tag <city> <tag>"), "tag").constraints().maxLength());
+        assertEquals(128, field(form(alice, "city flag <city> <flag>"), "flag").constraints().maxLength());
+        assertEquals(5, field(form(alice, "chunk map <radius>"), "radius").constraints().maximum());
+        assertEquals(1_000_000, field(form(alice, "nation list <page>"), "page").constraints().maximum());
+        assertEquals(config.maxMailBodyLength, field(form(alice, "mail send <recipient> <subject> <body>"), "body").constraints().maxLength());
+        FormConstraints amount = field(form(bob, "contract bid <contract> <amount> <description>"), "amount").constraints();
+        assertEquals(FormConstraints.Type.MONEY, amount.type());
+        assertEquals(0, amount.minimum());
+        assertTrue(amount.error("-1", "Bid").isPresent());
+        assertTrue(amount.error("1.001", "Bid").isPresent());
+        assertTrue(amount.error("0", "Bid").isEmpty());
+    }
+
+    @Test
+    void constraintsFollowShareReservationsAndDividendsAndOfferDashOnlyWhereAccepted() {
+        String company = company(alice, "Builders");
+        engine.reserveShares(company, alice.id(), "held", 500);
+        FormBuilder transfer = form(alice, "company transfer <company> <player> <shares>", Map.of("company", company));
+        assertEquals(9_500, field(transfer, "shares").constraints().maximum());
+        String template = "company propose <company> <type> <value> <title> <text>";
+        FormConstraints dividend = field(form(alice, template, Map.of("company", company, "type", "dividend")), "value").constraints();
+        assertEquals(FormConstraints.Type.MONEY, dividend.type());
+        assertEquals(1, dividend.minimum());
+        assertTrue(dividend.error("0", "Dividend").isPresent());
+        assertTrue(dividend.alternatives().isEmpty());
+        FormConstraints roleplay = field(form(alice, template, Map.of("company", company, "type", "roleplay")), "value").constraints();
+        assertEquals(List.of("-"), roleplay.alternatives());
+        FormConstraints terms = field(form(alice, "diplomacy peace <from_nation> <to_nation> <offer_amount> <demand_amount> <chunk_terms_or_dash> <message>"),
+                "chunk_terms_or_dash").constraints();
+        assertEquals(List.of("-"), terms.alternatives());
     }
 
     @Test

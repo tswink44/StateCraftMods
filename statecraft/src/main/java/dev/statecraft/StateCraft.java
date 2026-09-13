@@ -8,6 +8,7 @@ import dev.statecraft.network.SuiteNetwork;
 import dev.statecraft.runtime.CoreCommands;
 import dev.statecraft.runtime.ProtectionEvents;
 import dev.statecraft.runtime.ServerRuntime;
+import dev.statecraft.runtime.UiMenus;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import net.minecraftforge.common.MinecraftForge;
@@ -43,6 +44,7 @@ public final class StateCraft {
         MinecraftForge.EVENT_BUS.register(new CoreCommands());
         MinecraftForge.EVENT_BUS.register(new ProtectionEvents());
         CoreMenus.register();
+        UiMenus.register();
         SuiteNetwork.register();
     }
 
@@ -99,14 +101,14 @@ public final class StateCraft {
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public void worldSave(LevelEvent.Save event) {
         if (active != null && event.getLevel() == active.server().overworld()) {
-            active.flush();
+            active.saveNow();
         }
     }
 
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public void stopping(ServerStoppingEvent event) {
         if (active != null) {
-            active.flush();
+            active.saveNow();
         }
     }
 

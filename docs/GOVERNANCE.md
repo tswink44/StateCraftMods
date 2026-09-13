@@ -104,7 +104,11 @@ National leaders and officers manage their nation's descendants. Governors and
 state officers manage their state and its cities; mayors/city officers manage only
 their city. Siblings do not inherit authority. Appointing leaders/officers and
 executive policy actions require the current leader or an ancestor **leader**,
-not merely an officer. A subordinate cannot expel a superior official.
+not merely an officer. Removing an ancestor official's descendant membership
+requires a caller who outranks that office: its leader or an official of a higher
+ancestor government. A subordinate or peer officer cannot bypass this protection.
+For example, a national leader may remove a national officer's ordinary city
+membership without removing their national citizenship or office.
 
 Leaving/kicking removes the selected membership and its descendant memberships,
 preserving ancestors. **Every affected leadership office must be transferred
@@ -147,8 +151,12 @@ valuation instead resolve root-to-leaf, with the closest override winning.
 Boolean input is exactly `true` or `false`; rates are basis points (100 = 1%).
 
 Direct policy changes are executive administrative actions. With
-`requireLegislationForPolicy=true`, nonoperators must use bills for mechanical
-policies; direct `open` membership administration remains permitted.
+`requireLegislationForPolicy=true`, nonoperators must use bills for **national**
+mechanical policies only. Authorized state/city leaders and their ancestor leaders
+can still directly manage their local policies, including independent local taxes.
+Bills continue to target nations only; national tax rates do not inherit into
+states or cities. Direct `open` membership administration remains permitted at
+every level, and operators retain their administrative override.
 Unknown policies are rejected, not recorded as if they were enforced.
 
 ## Territory and protection
@@ -339,8 +347,13 @@ already agreed. A failed ratification cancels the other pending ballot.
 
 Final settlement revalidates every term, then uses **one `transferBatch` for all
 monetary transfers before any land or war mutation**. Nonzero terms require economy
-even at proposal time. If ratified settlement cannot pay, status remains `READY`,
-war/claims remain unchanged, and either leader can `execute` a retry before expiry.
+even at proposal time. If ratified settlement cannot pay or its references are
+invalid, status remains `READY`, war/claims remain unchanged, and an actionable
+blocked reason is recorded. Malformed terms require operator repair before either
+leader can `execute` a retry before expiry. Startup/audit checks active terms'
+required fields, canonical chunk keys, and source/destination city references.
+Concluded historical treaties may retain references to cities or claims that no
+longer exist; they are not reopened or treated as active obligations.
 Successful settlement changes public title to the destination city, preserves
 improvements, clears old permits and starts a binding configured truce. Repeat
 acceptance/execution cannot pay twice. Official mail records proposals, acceptance,
@@ -441,10 +454,20 @@ contract cancel <contractId> <reason>
 
 The issuer selects government-owned chunks in its political subtree; private land
 and encumbered land are rejected. Selected chunks remain reserved while active.
+`maxContractChunks` limits new selections, not settlement of an unchanged selection
+that was valid when created. Reducing it does not strand an existing award or its
+escrow. Award/completion still recheck political/private ownership, competing
+reservations, the accepted bid/payee and all applicable financial guards.
 A bidder chooses only their own player account, or a company they actually manage,
 never an arbitrary payment destination. Nonzero bids require economy. Bids may be
 updated while open or withdrawn before award. Detailed bid review is visible only
 to authorized government officials.
+
+That read authorization does not depend on the former contractor company's
+continued existence. Retained completed-contract bids remain selectable and
+readable by current issuing-government officials after an unencumbered contractor
+company dissolves. Historical payee labels preserve the original company account;
+mutation and settlement paths still validate the destinations they require.
 
 ```text
 OPEN → REVIEW → AWARDED → SUBMITTED → COMPLETED
@@ -682,6 +705,8 @@ Public entry points are:
 ```java
 new GovernanceEngine(GovernanceData data, GovernanceConfig config,
                      EconomyAccess economy, LongSupplier clock)
+new GovernanceEngine(GovernanceData data, GovernanceConfig config,
+                     EconomyAccess economy, LongSupplier clock, Runnable dirty)
 String execute(Actor actor, String line)
 void tick(long now)
 void setEconomy(EconomyAccess economy)
@@ -695,6 +720,10 @@ void autoClaim(Actor actor)
 boolean bypassEnabled(UUID player)
 List<String> validationIssues()
 CoreMenus.register()
+new GovernancePresentation(GovernanceEngine engine)
+UiView GovernancePresentation.view(UiContext context)
+UiView GovernancePresentation.dashboard(Actor actor, String search, int offset)
+ActionPreview GovernancePresentation.preview(Actor actor, ActionSelection selection)
 ```
 
 The engine implements every `GovernanceAccess` method. Views contain defensive
@@ -731,6 +760,19 @@ contract/treaty commitments always remain binding.
 public nested records-as-POJOs, maps/lists/sets, String UUIDs and a schema version.
 The supplied object is mutated **in place**. No domain command writes world files.
 The runtime must serialize/save atomically on its coordinated server/store path.
+Production integrations should supply the `dirty` callback; the four-argument
+constructor retains a no-op callback for compatibility. Notifications cover
+commands, trusted `GovernanceAccess` mutations, scheduled transitions, cleanup,
+mail-read flags and legacy read-side initialization, including mutations that
+precede a later command error. Callbacks signal dirty state, not a committed
+transaction, and may run more than once per operation. They must be ready during
+construction, lightweight and non-throwing; persistence belongs to the runtime.
+Ordinary reads and unchanged/idempotent operations do not trigger notifications
+solely for `lastSeen` or `lastTick` activity updates. Those timestamps stay current
+in memory and are included in periodic/explicit save, world-save, shutdown and
+join snapshots. Player creation/name changes and the first `economySeen` update
+do notify. Direct external edits to the public model must arrange their own dirty
+notification; fixture-only direct edits are outside this domain contract.
 The shared runtime owns the versioned `world.json` containing governance and
 economy together, including preservation of an unknown economy section and
 persistent `integration_locks` with core alone. Domain validation errors must not
@@ -750,12 +792,22 @@ statecraft:executive        statecraft:diplomacy       statecraft:companies
 statecraft:shareholders     statecraft:contracts       statecraft:mail
 statecraft:official_mail    statecraft:profile         statecraft:admin
 statecraft:help
+statecraft:dashboard        statecraft:detail
 ```
 
 Registration is idempotent. Each page has a query command and action templates
 using `<field>` placeholders. Clients should quote substituted field values with
 `CommandLine.quote`, then let the server execute and authorize the command. A page
 being visible is not authorization to invoke its actions.
+
+Every core action declares `QUERY`, `MUTATION`, or `NAVIGATION`; only mutations
+that can set monetary terms or transfer money carry the financial flag. Queries
+such as opening mail can still make their documented read-side changes, so the
+runtime must honor dirty notifications rather than infer persistence from intent.
+Navigation actions target fixed registered `gui statecraft:<page>` destinations.
+The dashboard is listed; the generic detail page is **unlisted**, has a safe
+`info` fallback query and registered navigation actions. The runtime owns its
+separate operations/reconciliation page, not `CoreMenus`.
 
 Discovery queries work for unaffiliated players: elections list nation IDs;
 `bill list all`, `law list all`, `diplomacy proposals all`, and
@@ -784,9 +836,150 @@ contracts. Mail selectors expose only authorized message IDs and subjects, never
 message bodies. Policy values are typed, existing editable settings are prefilled,
 and votes/new payment amounts are not preselected. Financial affordability,
 claim connectivity and entered multi-chunk terms remain command-time checks.
+In legislation-only mode, national direct-setting forms offer `open` to
+nonoperators and explain the bill requirement; authorized local forms retain
+their full policy selection. Kick forms use the same caller-versus-ancestor-office
+rule as commands and exclude anyone who still leads an affected government.
 
 The builder owns search and 20-choice pagination; dependent selectors resolve
 against the complete eligible catalog, including selections outside the displayed
 page. For economy forms, core supplies conservative player, organization and
 account catalogs without importing economy implementation types; the economy
 provider may refine them. Form suggestions never replace execution authorization.
+
+Field constraints now expose configured name/narrative lengths, 100-character
+titles/subjects, 12-character tags, 128-character flags, page/radius bounds,
+nonnegative dollar amounts with two-decimal precision, and positive share counts.
+Share-transfer bounds reflect the selected company's currently unreserved shares.
+Policy inputs change with their selected type: rates use 0–10000 basis points,
+chunk values use integer cents, and direct settings alone permit `inherit`.
+Dividend proposals require a positive amount; `-` is advertised only for the
+roleplay/dissolution/no-territory inputs that accept it. Comma-separated territory
+fields disclose the current chunk-count limit. The shared form transport caps
+each field at 2048 characters, even when a command-side mail limit is higher;
+the complete submitted command is still bounded by its normal command limit.
+
+### Typed sections, details and pending work
+
+`GovernancePresentation` implements `UiProvider` and returns immutable, bounded
+`UiView` records rather than parsing command output. Section requests use
+`UiQuery.page("statecraft:<section>")`; details use `UiQuery.detail(EntityRef)`.
+Search is case-insensitive over authorized row titles, summaries and stable IDs.
+The offset is an absolute row offset; each core response contains at most **20**
+rows and a `more` flag, within the shared 60-row combined-dashboard budget.
+Empty responses explain how to clear search, return to the first page or create
+eligible records. Context actions reference registered templates and seed only
+their actual field names with canonical domain values; votes are never prefilled.
+Unavailable actions carry a reason, and all choices/permissions are rechecked
+when the action is reviewed and executed.
+
+The provider supports the existing government, member/officer, claim/map, company,
+election, bill, codex, executive, diplomacy, shareholder, contract, invitation,
+profile, personal/official-mail, overview, help and operator sections, plus the
+dashboard and generic detail page. Detail identity kinds are:
+
+```text
+GOVERNMENT  COMPANY  CLAIM  ELECTION  BILL  LAW  DIPLOMACY
+COMPANY_PROPOSAL  CONTRACT  INVITATION  MAIL  PLAYER
+```
+
+Most IDs are the record's canonical UUID; claims use canonical chunk keys and
+elections use their nation's UUID. Laws use the structured
+`<nation UUID>:<law UUID>` identity. Mail uses
+`<owner account>|inbox|<message UUID>` or
+`<owner account>|sent|<message UUID>` to distinguish persistent copies.
+These are typed identity encodings, never IDs extracted from display text.
+Namespaces, record kinds, record existence and mailbox ownership are validated.
+Bid rows exist only in an authorized contract detail view and use the structured
+`CONTRACT` identity `<contract UUID>|<bidder UUID>` to open the full retained bid
+with prefilled award/withdraw actions. Their authority is rechecked on every
+detail request. Existing claim keys longer than the shared 256-character identity
+limit display an explicit command-only hint instead of breaking a directory.
+Canonical map coordinates without a persisted claim open a read-only wilderness
+detail with the exact chunk prefilled for an authorized claim action. Noncanonical
+or out-of-border coordinates are rejected, and malformed existing claim records
+are never presented as unclaimed land.
+
+Public organizational/workflow information remains public. Detailed contract bids
+require current issuing-government authority. Official inboxes require current
+government-management authority; personal inboxes have **no operator exception**.
+Lists and dashboard rows do not contain mail bodies. Historical summaries tolerate
+missing nonessential former parents/payees; actions whose authority or settlement
+requires a missing entity are unavailable.
+
+The dashboard includes live invitations addressed to the actor, eligible uncast
+legislative/shareholder ballots, executive bill decisions, relevant contract bid
+review/work submission/independent completion approval, incoming diplomatic
+decisions or settlement retries, and unread authorized personal/official mail.
+Peer/subordinate authority, frozen electorates, deadlines and paid-contract
+conflicts remain enforced. General section directories remain available when no
+pending work matches.
+
+Views do not log players in, advance clocks/workflows, initialize legacy deadlines
+or charge money. Opening an authorized mail detail marks **only that persistent
+copy** read and emits the existing dirty notification; lists, searches and action
+previews do not mark it read. In repair-required mode, nonoperators can inspect
+authorized typed details without changing mail flags, while their unavailable
+commands explain the repair requirement.
+
+### Pure server action reviews
+
+`preview(Actor, ActionSelection)` validates a registered form selection, or a core
+advanced command on a registered page, without executing a command, rolling back
+state, paying the economy or mutating the model. It requires a known, current
+player profile; a changed stored name must be refreshed before reviewing named
+targets. The response explains material parties, parameters, effects and
+prerequisites. Missing/invalid/ineligible financial state produces `UserError`,
+never a fabricated zero-price review.
+All preview timing uses the engine's injected clock, never direct system time.
+Due-work processing belongs outside preview; the runtime can advance those policies
+and hold both engines at one shared decision instant during review and commit.
+
+Monetary coverage includes:
+
+- National/state/city/company creation fees, claim fees and candidate fees.
+- Contract bids as **conditional future terms**, issuer-to-escrow awards,
+  original-payee completion payouts and issuer-only cancellation refunds.
+- Peace/truce terms, acceptance with or without legislative ratification, and
+  ratified settlement retries. Changing ratification requirements changes whether
+  acceptance pays now and therefore changes the material review.
+- Shareholder dividend proposals as conditional obligations and approved dividend
+  execution using exact current-shareholder cent allocations.
+- Automatic claiming's per-future-claim fee, explicitly distinguished from
+  enabling the toggle without creating or paying for a claim now.
+
+Real commands and previews share creation/claim/candidate fee calculation,
+contract bid/award/completion/cancellation plans, treaty transfer calculation,
+dividend allocation and the relevant domain authorization/commitment checks.
+Nonfinancial membership, office, policy, bill, vote, mail, destruction and repair
+reviews explain their actual affected scope rather than pretending to make a
+payment. The legislation-only setting remains **national only**.
+
+`ActionPreview.Line.material` identifies confirmation-affecting values. The
+`stateKey` digest binds relevant selected state that may not fit on the card,
+including affected cascade records, claim titles/permits and accepted terms;
+it is not a world snapshot or dirty-state detector. Current source balances are
+informational and do not by themselves invalidate an otherwise unchanged quote.
+Spatial commands resolve `here` into the actual dimension-qualified chunk before
+building material review data. Single-chunk actions record that requested target
+independently of saved claim fields, and contract selections record their complete
+resolved chunk list. Changing location or dimension therefore changes the review
+even when the command text, owner and price remain the same.
+Immediate plans check current net funding, while external banking/reservation
+guards remain authoritative at settlement. Zero-price operations work without
+Economy; nonzero actions that require it refuse explicitly. A review is not a
+payment or durable success acknowledgement: the runtime owns quote expiry,
+operation IDs, fingerprint comparison, persistence and outcome reconciliation.
+
+Reviews with more than eight transfer terms group funding accounts and report a
+recipient count instead of emitting every shareholder. An incremental digest binds
+every exact source, destination and amount into `stateKey`, so an undisplayed
+payout change still requires a new review. Balance lines expose only accounts the
+actor may access (or explicit operator access); other funding balances remain
+undisclosed, including when a bidder or shareholder can propose or execute a
+conditional payment without general treasury-management authority.
+
+New view/review metadata uses `UiText` keys under `ui.statecraft.gov.*`, with fully
+rendered English fallbacks and bounded string arguments. The corresponding flat
+English `%s` templates are in `tools\translations\governance.json` for the shared
+resource generator. User-authored names and narrative values remain literal data.

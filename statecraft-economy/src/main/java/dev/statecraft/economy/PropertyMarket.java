@@ -34,6 +34,21 @@ public final class PropertyMarket {
     }
 
     public EconomyData.Valuation recalculate(GovernanceAccess.ClaimView claim) {
+        EconomyData.Valuation result = calculate(claim);
+        e.data.valuations.put(claim.key(), result);
+        e.dirty.run();
+        return result;
+    }
+
+    EconomyData.Valuation previewValue(String key) {
+        e.ledger.thread();
+        ChunkKey.parse(key);
+        GovernanceAccess.ClaimView claim = e.governance.claim(key).orElseThrow(() -> new UserError("That chunk is not claimed."));
+        EconomyData.Valuation existing = e.data.valuations.get(key);
+        return existing != null && existing.nextRecalculationAt > e.clock.millis() ? existing : calculate(claim);
+    }
+
+    private EconomyData.Valuation calculate(GovernanceAccess.ClaimView claim) {
         e.ledger.thread();
         ValuationEnvironment.Conditions input = environment.sample(claim);
         if (input == null || input.biome() == null || input.distanceChunks() < 0 || input.nearbyClaims() < 0) {
@@ -75,12 +90,25 @@ public final class PropertyMarket {
         result.nextRecalculationAt = EconomyEngine.deadline(result.calculatedAt, e.config.valuationIntervalMillis);
         result.nextTaxAt = previous == null ? EconomyEngine.deadline(result.calculatedAt, e.config.propertyTaxPeriodMillis)
                 : previous.nextTaxAt;
-        e.data.valuations.put(claim.key(), result);
-        e.dirty.run();
         return result;
     }
 
     public String list(Actor actor, String key, long price) {
+        GovernanceAccess.ClaimView claim = quoteList(actor, key, price);
+        EconomyData.PropertyListing listing = new EconomyData.PropertyListing();
+        listing.id = EconomyEngine.id();
+        listing.chunk = claim.key();
+        listing.ownerAccount = claim.ownerAccount();
+        listing.price = price;
+        listing.createdAt = e.clock.millis();
+        listing.expiresAt = EconomyEngine.deadline(listing.createdAt, e.config.propertyListingLifetimeMillis);
+        e.data.properties.put(claim.key(), listing);
+        e.schedule("property", claim.key());
+        e.dirty.run();
+        return listing.id;
+    }
+
+    GovernanceAccess.ClaimView quoteList(Actor actor, String key, long price) {
         e.ledger.thread();
         Money.positive(price);
         GovernanceAccess.ClaimView claim = e.governance.claim(ChunkKey.parse(key).toString())
@@ -91,28 +119,24 @@ public final class PropertyMarket {
         if (e.isClaimEncumbered(key)) throw new UserError("The chunk is already listed or pledged as loan collateral.");
         if (e.data.properties.size() >= e.config.maximumActiveListings) throw new UserError("The property listing limit has been reached.");
         e.validateDestination(claim.ownerAccount());
-        EconomyData.PropertyListing listing = new EconomyData.PropertyListing();
-        listing.id = EconomyEngine.id();
-        listing.chunk = key;
-        listing.ownerAccount = claim.ownerAccount();
-        listing.price = price;
-        listing.createdAt = e.clock.millis();
-        listing.expiresAt = EconomyEngine.deadline(listing.createdAt, e.config.propertyListingLifetimeMillis);
-        e.data.properties.put(key, listing);
-        e.schedule("property", key);
-        e.dirty.run();
-        return listing.id;
+        EconomyEngine.deadline(e.clock.millis(), e.config.propertyListingLifetimeMillis);
+        return claim;
     }
 
     public void delist(Actor actor, String key) {
+        quoteDelist(actor, key);
+        e.data.properties.remove(key);
+        e.dirty.run();
+    }
+
+    EconomyData.PropertyListing quoteDelist(Actor actor, String key) {
         e.ledger.thread();
         EconomyData.PropertyListing listing = e.data.properties.get(key);
         if (listing == null) throw new UserError("That chunk is not for sale.");
         if (!actor.admin() && !listing.ownerAccount.equals(actor.account()) && !e.governance.maySellProperty(actor.id(), key)) {
             throw new UserError("You cannot delist someone else's property.");
         }
-        e.data.properties.remove(key);
-        e.dirty.run();
+        return listing;
     }
 
     public Commerce.Settlement buy(Actor buyer, String key, boolean fundWithCash, InventoryPort inventory) {
@@ -137,25 +161,11 @@ public final class PropertyMarket {
         if (e.banking.encumbers(key)) throw new UserError("The property is pledged as collateral.");
         e.validateDestination(listing.ownerAccount);
         settleDueBeforeTransfer(key);
-        Commerce.Settlement settlement = e.commerce.settlement(buyer, listing.ownerAccount, key, claim.nationId(),
-                listing.price, 0, "Property purchase " + listing.id);
-        InventoryPort.Plan cash = inventory.plan();
-        long deposit = 0;
-        if (fundWithCash) {
-            inventory.require(InventoryPort.Utility.ATM, InventoryPort.Utility.VAULT);
-            deposit = e.values.removeCash(cash);
-        }
-        List<Ledger.Adjustment> adjustments = deposit == 0 ? List.of()
-                : List.of(new Ledger.Adjustment(buyer.account(), deposit, true, "system:cash", "Cash funding for property"));
-        if (fundingBank != null) e.banking.bank(fundingBank, true);
-        long shortage = BigInteger.valueOf(settlement.buyerCost()).subtract(BigInteger.valueOf(e.balance(buyer.account())))
-                .subtract(BigInteger.valueOf(deposit)).max(BigInteger.ZERO).longValueExact();
-        Banking.WalletFunding bankFunding = fundingBank != null && shortage > 0
-                ? e.banking.walletFunding(buyer, fundingBank, shortage) : null;
-        List<dev.statecraft.api.EconomyAccess.Transfer> transfers = new ArrayList<>(settlement.transfers());
-        if (bankFunding != null) transfers.add(bankFunding.transfer());
-        Ledger.Plan payment = e.ledger.prepare(transfers, adjustments, true,
-                bankFunding == null ? Map.of() : bankFunding.reserveOverrides());
+        PurchaseQuote quote = prepareFunding(buyer, listing, claim, fundWithCash, fundingBank, inventory, true);
+        Commerce.Settlement settlement = quote.settlement();
+        InventoryPort.Plan cash = quote.cash();
+        Banking.WalletFunding bankFunding = quote.bankFunding();
+        Ledger.Plan payment = quote.payment();
         if (fundWithCash) cash.checkUnchanged();
         e.data.properties.remove(key);
         try {
@@ -181,6 +191,51 @@ public final class PropertyMarket {
         }
         e.dirty.run();
         return settlement;
+    }
+
+    record PurchaseQuote(EconomyData.PropertyListing listing, Commerce.Settlement settlement, long cashDeposit,
+                         InventoryPort.Plan cash, Banking.WalletFunding bankFunding, Ledger.Plan payment) {}
+
+    PurchaseQuote quoteBuy(Actor buyer, String key, boolean fundWithCash, String fundingBank, InventoryPort inventory) {
+        e.ledger.thread();
+        EconomyData.PropertyListing listing = e.data.properties.get(ChunkKey.parse(key).toString());
+        if (listing == null || listing.expiresAt <= e.clock.millis()) throw new UserError("That property listing is unavailable or expired.");
+        GovernanceAccess.ClaimView claim = e.governance.claim(key).orElseThrow(() -> new UserError("That claim no longer exists."));
+        if (!claim.ownerAccount().equals(listing.ownerAccount)) throw new UserError("The property's ownership changed; delist and relist it.");
+        if (buyer.account().equals(listing.ownerAccount)) throw new UserError("You already own this property.");
+        if (!buyer.admin() && !e.governance.mayBuyProperty(buyer.id(), key)) throw new UserError("You are not eligible to buy this property.");
+        if (e.banking.encumbers(key)) throw new UserError("The property is pledged as collateral.");
+        e.validateDestination(listing.ownerAccount);
+        // Validate the same assessment inputs without recording the seller's obligations.
+        EconomyData.Valuation value = previewValue(key);
+        if (value.nextTaxAt <= e.clock.millis()) e.taxes.quote(key, claim.nationId(), value.value, "propertyTaxBps");
+        return prepareFunding(buyer, listing, claim, fundWithCash, fundingBank, inventory, false);
+    }
+
+    private PurchaseQuote prepareFunding(Actor buyer, EconomyData.PropertyListing listing, GovernanceAccess.ClaimView claim,
+                                         boolean fundWithCash, String fundingBank, InventoryPort inventory, boolean accrue) {
+        String key = listing.chunk;
+        Commerce.Settlement settlement = e.commerce.settlement(buyer, listing.ownerAccount, key, claim.nationId(),
+                listing.price, 0, "Property purchase " + listing.id);
+        InventoryPort.Plan cash = inventory.plan();
+        long deposit = 0;
+        if (fundWithCash) {
+            inventory.require(InventoryPort.Utility.ATM, InventoryPort.Utility.VAULT);
+            deposit = e.values.removeCash(cash);
+        }
+        List<Ledger.Adjustment> adjustments = deposit == 0 ? List.of()
+                : List.of(new Ledger.Adjustment(buyer.account(), deposit, true, "system:cash", "Cash funding for property"));
+        if (fundingBank != null) e.banking.bank(fundingBank, true);
+        long shortage = BigInteger.valueOf(settlement.buyerCost()).subtract(BigInteger.valueOf(e.balance(buyer.account())))
+                .subtract(BigInteger.valueOf(deposit)).max(BigInteger.ZERO).longValueExact();
+        Banking.WalletFunding bankFunding = fundingBank != null && shortage > 0
+                ? accrue ? e.banking.walletFunding(buyer, fundingBank, shortage)
+                    : e.banking.quoteWalletFunding(buyer, fundingBank, shortage) : null;
+        List<dev.statecraft.api.EconomyAccess.Transfer> transfers = new ArrayList<>(settlement.transfers());
+        if (bankFunding != null) transfers.add(bankFunding.transfer());
+        Ledger.Plan payment = e.ledger.prepare(transfers, adjustments, true,
+                bankFunding == null ? Map.of() : bankFunding.reserveOverrides());
+        return new PurchaseQuote(listing, settlement, deposit, cash, bankFunding, payment);
     }
 
     boolean tickListing(String key) {
@@ -215,7 +270,6 @@ public final class PropertyMarket {
             value.nextTaxAt = next;
             e.dirty.run();
         }
-        if (e.config.mandatoryPropertyTaxes) e.taxes.pay(claim.ownerAccount(), Money.MAX, true);
         return true;
     }
 
@@ -234,7 +288,9 @@ public final class PropertyMarket {
 
     void transferred(String key, String ownerAccount) {
         EconomyData.Valuation value = e.data.valuations.get(key);
-        if (value != null) value.taxOwnerAccount = ownerAccount;
-        e.dirty.run();
+        if (value != null && !ownerAccount.equals(value.taxOwnerAccount)) {
+            value.taxOwnerAccount = ownerAccount;
+            e.dirty.run();
+        }
     }
 }

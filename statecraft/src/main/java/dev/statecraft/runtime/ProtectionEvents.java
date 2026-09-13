@@ -85,7 +85,6 @@ public final class ProtectionEvents {
     public void trackBreak(BlockEvent.BreakEvent event) {
         if (event.getLevel() instanceof ServerLevel level && StateCraft.runtimeOrNull() != null) {
             StateCraft.runtime().engine().recordImprovement(key(level, event.getPos()), -1);
-            StateCraft.runtime().markDirty();
         }
     }
 
@@ -120,7 +119,6 @@ public final class ProtectionEvents {
         } else {
             StateCraft.runtime().engine().recordImprovement(key(level, event.getPos()), 1);
         }
-        StateCraft.runtime().markDirty();
     }
 
     @SubscribeEvent(priority = EventPriority.HIGH)
@@ -232,7 +230,6 @@ public final class ProtectionEvents {
                     runtime.engine().recordImprovement(key(event.getLevel(), pos), -1);
                 }
             }
-            runtime.markDirty();
         }
     }
 

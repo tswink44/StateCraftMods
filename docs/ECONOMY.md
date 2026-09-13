@@ -83,8 +83,10 @@ Use canonical IDs in account strings. Company/bank management commands can also
 look up names; an account named `company:SomeName` is not an alias for an account
 whose actual ID is different. `me` resolves to the sender's wallet, and
 `selected` resolves to their currently selected, newly reauthorized account.
-Payments also accept a remembered player name or full UUID. Quote names with
-spaces.
+Payments also accept a remembered player name or full UUID. Both raw UUIDs and
+`player:` accounts require the complete lowercase UUID; shortened components
+are rejected, never silently padded into another player's account. Remembered
+names are matched case-insensitively. Quote names with spaces.
 
 Every player-facing balance, activity, selection, cash, and transfer source path
 requires the sender's own wallet, the matching StateCraft treasury permission,
@@ -141,6 +143,57 @@ Lists contain twelve entries per page. Prefix a paginated query with
 
 The global prefix does not persist into the next request. In addition,
 `history` and `tax report` accept an explicit trailing page.
+
+### Guided views and transaction reviews
+
+Economy sections now provide searchable, twenty-row pages of typed records.
+Selecting an account, bank, loan, item/share listing, property, company,
+obligation, or delivery opens authorized details and prefilled actions. IDs
+come from server records, never from parsing the displayed text. Disabled actions
+explain missing permissions, unavailable funds, closed records, or prerequisites.
+Historical loan details retain their bank identity and original agreement even
+after the bank and its company close.
+
+`economy:dashboard` collects your pending loan applications, bank-manager
+approvals, upcoming manual or overdue loans, unpaid obligations, deliveries,
+and your outstanding listings. Search and paging remain role-scoped; a treasury
+recipient cannot use the dashboard to inspect another payer's private debts.
+`economy:loans` and `economy:deliveries` provide dedicated management lists.
+The generic `economy:detail` page is hidden from navigation catalogs and opened
+through typed links. The guide retains the server's loaded recipe/help content.
+
+Guided mutations show a server-calculated review before submission. Monetary
+reviews include parties, quantity, actual denomination issuance, applicable
+fees/taxes/tariffs, total/net amounts, and informational available funds. Property
+funding itemizes cash deposited, wallet contribution, bank withdrawal, and its
+fee. Loan applications, future bank terms, listing offers, and autopay changes
+explicitly distinguish future obligations from payments occurring now.
+
+Reviews use the same quote/plan arithmetic as execution, without granting money,
+booking interest, creating valuations, reserving assets, or changing inventory.
+The shared runtime binds a thirty-second review to the exact selected action
+and checks a fresh quote immediately before submission. Material price, party,
+item metadata, or term changes require another review; a balance display or
+clock advancing alone does not. Electronic marketplace reviews do not bind
+unrelated held items or inventory contents. Physical-item reviews bind the
+relevant inventory/held-item state.
+Property actions using `here` bind the resolved dimension-qualified chunk, not
+the word `here`: moving to an equally priced property still requires a new
+review. Held-item sales/listings bind item identity, stack count, selected slot,
+and exact metadata; cash reviews bind the inventory's note counts and metadata.
+Item/share listings also bind the seller's recorded tax-origin chunk and nation.
+
+Forms advertise integer, money, rate, text-length, repayment-period, listing-
+quantity, available-share, and applicable live amount limits. `all` remains an
+explicit supported alternative for purchases and repayment. Local validation
+helps explain errors but never replaces server permission, reserve, inventory,
+or settlement checks.
+
+The one-time player grant is normally applied at login. If initialization is
+still pending (for example after logging in while saving was paused), use the
+offered **Initialize economy profile / My balance** query first. Mutating reviews
+do not silently grant money or quote against a balance that execution would
+immediately change through initialization.
 
 ## Trading Hub and configurable prices
 
@@ -239,6 +292,11 @@ funds cannot partly settle a trade.
 
 Purchased items go into the buyer's persistent delivery queue. The command also
 attempts immediate collection. Offline sellers are paid electronically.
+If automatic collection is refused with an expected inventory/domain error,
+the command still confirms the **completed purchase**, explains why collection
+was deferred, and directs the buyer to `market collect`. Do not repeat the
+purchase to collect an existing delivery. Unexpected adapter failures are not
+silently swallowed; the shared operation workflow handles uncertain outcomes.
 Cancellation/expiration queues the unsold items for the seller and sends mail;
 listing fees are nonrefundable. Full inventories leave items queued rather than
 dropping them on the ground. Collection may partially fill available slots and
@@ -348,6 +406,16 @@ overdrafting; the rest remains owed. Obligations use arbitrary-precision integer
 cents, so repeated assessments cannot overflow and erase arrears. Destination
 balance limits defer payment rather than discarding it.
 
+Mandatory collection follows outstanding **property-tax obligations**, not
+current claim owners. A former owner remains eligible after selling their last
+claim or losing it to repossession, including after reload. Each obligation gets
+its own rotating work entry, so one blocked debtor/recipient cannot prevent
+other debts from being processed. A collection work unit handles only that
+obligation; it does not scan all payers or automatically collect unrelated
+income taxes, company fees, or other optional arrears. Mandatory property
+payments bypass voluntary daily spending limits, but still respect available
+funds, protected bank balances, and recipient capacity.
+
 Catch-up is bounded per tick. Economy property sales/repossessions settle all
 overdue assessment periods against the previous owner before changing the tax
 owner; buying a claim does not inherit the seller's already-due tax. If another
@@ -435,6 +503,11 @@ somebody else's deposit or withdraw it.
   cash are distinct fields; a deposit is not a second minted ledger balance.
 * Ordinary transfers/cash/capital withdrawals from a bank protect at least all
   customer liabilities and the configured minimum reserve.
+* Reserve and spendable-balance decisions include interest earned through the
+  decision time, even if scheduled maintenance has not booked it yet. They use
+  every deposit's saved principal, rate, period, and fractional remainder.
+  Validation and reserve reports calculate these liabilities without changing
+  deposits or ledger balances.
 * Approved lending and customer withdrawals use their specific post-operation
   reserve preflight. Lending may use fractional reserves, but a bank owner
   cannot exploit the generic transfer/ATM path to siphon customer deposits.
@@ -475,6 +548,14 @@ loan recover <loanId>
 `bank loan ...` is an alias. `bank loans` lists the borrower's loans; specifying
 a bank requires its manager role and lists that bank's applications/contracts.
 
+`loan show` and the loan detail panel display **current automatic payments**
+separately from the clearly labeled **original immutable agreement**. Enabling
+or disabling autopay never rewrites that agreement or grants new recovery
+consent. The panel also shows principal, current interest, outstanding/currently
+due amounts, status, and the next unpaid installment date (which remains in the
+past when overdue). Repayment, approval, cancellation, and enable/disable-autopay
+actions use the same server authorization as commands.
+
 A borrower must associate with the bank, satisfy debt limits, and have no
 unresolved default. Unsecured lending is disabled by default and has a separate
 maximum when enabled. Secured lending requires a specifically named private
@@ -484,9 +565,17 @@ simultaneous applications, sales, or transfers from double pledging it.
 Unapproved applications expire; rejection/cancellation releases their hold.
 
 Only an authorized bank manager approves funding. Approval rechecks collateral,
-eligibility, balance, reserve requirements, and the saved terms. The borrower
+eligibility, aggregate borrower exposure, balance, reserve requirements, and the saved terms. The borrower
 receives principal less the saved origination fee; debt principal remains the
 contracted principal.
+
+Both application and funding check the borrower limit across all banks,
+including outstanding principal, interest earned through the decision time
+under each saved contract and lifetime cap, and other unexpired applications.
+The application being approved counts once, not twice. Expired applications
+do not reserve debt capacity while waiting for maintenance, and unresolved
+defaults still prevent borrowing. These checks do not depend on first running
+`loan show` or a maintenance pass to book interest.
 
 Interest is simple on outstanding principal, never compounded on unpaid
 interest, and cannot exceed the saved lifetime interest cap. Repayment applies
@@ -672,9 +761,15 @@ liabilities, loans, associations, selections, quotas, and suggestions are
 persistent. StateCraft share reservations and private ownership live in the
 same shared snapshot, not separately committed economy files.
 
-The module marks the shared runtime dirty; the core owns flushing and backups.
-Player commands use the core's module invocation path, including its disk-error
-pause behavior. Console actions mark the snapshot dirty for the core save loop.
+Domain mutations mark the shared runtime dirty; the core owns flushing and
+backups. This includes accrual from `loan show`, assessments before a refused
+purchase, expired-listing refunds, and scheduled financial changes, even when
+the surrounding command fails. Established-player balance/history/menu queries
+that do not change persistent state do not request a snapshot. Fractional
+interest changes remain persistent; advancing only an idle interest clock
+(zero-rate deposits or capped loans) can wait for periodic/explicit saves.
+Player and console commands use the core's shared invocation/persistence
+gateway, including its disk-error pause behavior.
 Scheduled work also pauses after a core disk-write failure. Unexpected scheduled
 errors are logged and pause that scheduler until an operator fixes the cause
 and successfully reloads.
@@ -704,16 +799,50 @@ permission, mail, property, and share-reservation methods. `transferBatch` is a
 **trusted server integration API**, since its shared signature has no `Actor`.
 Untrusted client/command routes always use the actor-authorized services instead.
 
-The Forge adapter uses the provided boot/load/install/register/dirty hooks.
-It also uses the existing core methods `ServerRuntime.server()`,
-`requireWritable()`, `isWritable()`, and `invoke(...)`, and the existing
+The Forge adapter uses the shared boot/load/install/register/dirty hooks,
+runtime invocation and writable-state checks, and
 `ForgeConfigBinding.loaded(...)` / `reload()` methods. It does not add a
-competing save file or require a new core method.
+competing save file.
 
 GUI namespace is `economy`. Registered page IDs are:
 `economy:atm`, `economy:hub`, `economy:market`, `economy:property`,
 `economy:company`, `economy:bank`, `economy:stock`, `economy:guide`,
-`economy:tax`. The Forge blocks/items use exactly the IDs in the resource pack.
+`economy:tax`, `economy:dashboard`, `economy:loans`, `economy:deliveries`,
+and the unlisted `economy:detail`. The Forge blocks/items use exactly the IDs
+in the resource pack.
+
+### Presentation integration API
+
+`EconomyPresentation` implements the shared `UiProvider`:
+
+```java
+public EconomyPresentation(EconomyEngine engine);
+public UiView view(UiContext context);
+public UiView dashboard(Actor actor, String search, int offset);
+public ActionPreview preview(Actor actor, ActionSelection selection, InventoryPort inventory);
+```
+
+The Forge runtime supplies the authoritative actor and inventory on both review
+and final verification. The presentation uses typed `ACCOUNT`, `BANK`, `LOAN`,
+`MARKET_LISTING`, `STOCK_LISTING`, `CLAIM`, `COMPANY`, `ARREARS`, `DELIVERY`, and
+section-navigation `DASHBOARD` entity references. Arrear reference IDs are
+stable SHA-256 digests of persistent debt IDs to stay within the shared ID limit.
+Every contextual action names its registered source page, exact template, and
+seed map. Every economy menu action explicitly declares query, navigation, or
+mutation intent; the financial flag denotes actions that may move money now.
+Future-term/consent mutations still receive a full parameter/obligation review.
+
+Views return at most twenty rows, with search capped at eighty characters and
+offsets bounded by the shared 100,000 limit. Review payloads stay within forty
+lines. Large tax/dividend recipient groups display up to twenty account totals
+and an explicit remainder count, while the material fingerprint binds **all**
+actual payment recipients and amounts. Inventory collection examines at most
+thirty-two delivery entries per attempt; remaining entries persist.
+
+New presentation text uses `ui.statecraft.economy.*` translation keys. English
+templates live in `tools\translations\economy.json` and are merged into the
+generated core language resources. Record names, IDs, item metadata, and original
+contract text remain data, not executable UI instructions.
 
 ## Tests
 
@@ -723,9 +852,19 @@ and governance fake. Coverage includes negative/overflow batch rollback,
 authorization on every account route, cash precision/full-inventory failures,
 taxes/quotas, partial SNBT escrow/refunds/expiry/offline delivery, valuation and
 arrears, combined wallet/bank/cash property funding, dividends, bank liabilities/
-reserve protection and funded simple interest, loan repayment/default/consented
-repossession, share reservations, bounded histories, pagination, atomic price
-edits, malformed reloads, and financial JSON round trips.
+reserve protection including unprocessed contractual interest, borrower limits
+at application and funding, loan repayment/default/consented repossession,
+former-owner mandatory property collections, strict UUID recipients, dirty
+callbacks for ordinary/read/scheduled/error paths, share reservations, bounded
+histories, pagination, atomic price edits, malformed reloads, and financial JSON
+round trips.
+
+`EconomyPresentationScenarios`, also wired into `EconomyEngineTest`, covers
+purchase-confirmation/collection failures, current autopay, typed-view privacy,
+forged references, retained history, dashboard role scoping/paging, every
+registered mutation's pure review, quote-to-commit amounts, cash/Hub/trade taxes,
+all four property funding modes, interest projection, material fingerprints,
+registered contextual seeds, and field constraints.
 
 Run the suite with the repository's existing Gradle test runner:
 
@@ -735,6 +874,7 @@ gradlew.bat :statecraft-economy:test --tests dev.statecraft.economy.EconomyEngin
 
 The same scenario bodies also have plain Java entry points:
 `dev.statecraft.economy.EconomyRegressionScenarios` and
+`dev.statecraft.economy.EconomyPresentationScenarios`, plus
 `dev.statecraft.economy.EconomyDataScenarios`. The latter requires Gson and the
 economy resource directory on the classpath. File fixtures are created under the
 current project's `build` directory and removed after each scenario, never in

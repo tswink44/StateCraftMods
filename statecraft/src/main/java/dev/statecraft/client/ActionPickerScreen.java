@@ -1,82 +1,157 @@
 package dev.statecraft.client;
 
-import dev.statecraft.api.MenuPage;
 import dev.statecraft.api.CommandLine;
+import dev.statecraft.api.MenuPage;
+import dev.statecraft.api.MenuRegistry;
+import dev.statecraft.api.UserError;
+import dev.statecraft.api.ui.ActionIntent;
+import dev.statecraft.api.ui.UiAction;
+import dev.statecraft.client.state.SearchState;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import org.lwjgl.glfw.GLFW;
 
 final class ActionPickerScreen extends Screen {
+    private record Option(MenuPage page, MenuPage.Action action, UiAction seed) {
+        Component label() { return seed == null ? ClientText.action(page.id(), action) : ClientText.of(seed.label()); }
+    }
     private final ManagementScreen parent;
     private final MenuPage page;
-    private String search = "";
-    private int offset;
+    private final SearchState state;
+    private final List<Button> rows = new ArrayList<>();
+    private RetainedEditBox search;
+    private List<Option> available = List.of();
+    private Button previous;
+    private Button next;
 
     ActionPickerScreen(ManagementScreen parent, MenuPage page) {
-        super(Component.literal(page.title() + " - Actions"));
+        super(ClientText.tr("gui.statecraft.actions.title", "%s — Actions", ClientText.page(page).getString()));
         this.parent = parent;
         this.page = page;
+        state = parent.state().actionSearch();
     }
-
     @Override
     protected void init() {
-        int left = Math.max(12, width / 2 - 170);
-        int listWidth = Math.min(340, width - 24);
-        EditBox filter = new EditBox(font, left, 32, listWidth, 20, Component.literal("Find an action"));
-        filter.setHint(Component.literal("Find an action..."));
-        filter.setValue(search);
-        filter.setResponder(value -> {
-            search = value;
-            offset = 0;
-            rebuildWidgets();
+        if (search != null) state.selection(search.selection());
+        int left = Math.max(12, width / 2 - 200);
+        int listWidth = Math.min(400, width - 24);
+        search = new RetainedEditBox(font, left, 34, listWidth, 20, ClientText.tr("gui.statecraft.actions.search", "Find an action"));
+        search.setMaxLength(80);
+        search.setHint(ClientText.tr("gui.statecraft.actions.search_hint", "Find an action..."));
+        search.setValue(state.text());
+        search.restore(state.selection());
+        search.setResponder(value -> {
+            state.text(value);
+            updateRows();
         });
-        addRenderableWidget(filter);
-        setInitialFocus(filter);
-        List<MenuPage.Action> available = page.actions().stream()
-                .filter(action -> (action.label() + " " + action.command()).toLowerCase(Locale.ROOT)
-                        .contains(search.toLowerCase(Locale.ROOT))).toList();
-        int count = Math.max(1, (height - 96) / 24);
-        offset = Math.min(offset, Math.max(0, available.size() - count));
-        for (int i = 0; i < count && i + offset < available.size(); i++) {
-            MenuPage.Action action = available.get(i + offset);
-            addRenderableWidget(Button.builder(Component.literal(action.label()), ignored -> {
-                        List<String> words = CommandLine.split(action.command());
-                        if (words.size() == 2 && words.get(0).equals("gui")) {
-                            ClientHooks.open(words.get(1));
-                        } else {
-                            minecraft.setScreen(new ActionFormScreen(parent, this, action));
-                        }
-                    })
-                    .tooltip(Tooltip.create(Component.literal(action.command())))
-                    .bounds(left, 60 + i * 24, listWidth, 20).build());
+        addRenderableWidget(search);
+        rows.clear();
+        int count = Math.max(1, (height - 111) / 24);
+        for (int i = 0; i < count; i++) {
+            final int index = i;
+            rows.add(addRenderableWidget(Button.builder(Component.empty(), ignored -> choose(state.offset() + index))
+                    .bounds(left, 62 + i * 24, listWidth, 20).build()));
         }
-        Button previous = addRenderableWidget(Button.builder(Component.literal("Previous"), ignored -> {
-            offset = Math.max(0, offset - count);
-            rebuildWidgets();
-        }).bounds(left, height - 28, 80, 20).build());
-        previous.active = offset > 0;
-        Button next = addRenderableWidget(Button.builder(Component.literal("Next"), ignored -> {
-            offset = Math.min(Math.max(0, available.size() - count), offset + count);
-            rebuildWidgets();
-        }).bounds(left + 84, height - 28, 80, 20).build());
-        next.active = offset + count < available.size();
-        addRenderableWidget(Button.builder(Component.literal("Back"), ignored -> onClose())
-                .bounds(left + listWidth - 80, height - 28, 80, 20).build());
+        int buttonWidth = (listWidth - 8) / 3;
+        previous = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.previous", "Previous"), ignored -> {
+            state.offset(state.offset() - rows.size());
+            updateRows();
+        }).bounds(left, height - 28, buttonWidth, 20).build());
+        next = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.next", "Next"), ignored -> {
+            state.offset(state.offset() + rows.size());
+            updateRows();
+        }).bounds(left + buttonWidth + 4, height - 28, buttonWidth, 20).build());
+        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.back", "Back"), ignored -> onClose())
+                .bounds(left + (buttonWidth + 4) * 2, height - 28, buttonWidth, 20).build());
+        updateRows();
+        setInitialFocus(search);
     }
 
+    private void updateRows() {
+        if (rows.isEmpty() || previous == null) return;
+        var options = new ArrayList<Option>();
+        if (parent.state().view() != null) {
+            for (UiAction seed : parent.state().view().actions()) {
+                try {
+                    MenuPage target = MenuRegistry.get(seed.page());
+                    var action = target.actions().stream().filter(candidate -> candidate.command().equals(seed.template())).findFirst();
+                    options.add(new Option(target, action.orElse(null), seed));
+                } catch (UserError ignored) {
+                    options.add(new Option(null, null, seed));
+                }
+            }
+        }
+        for (MenuPage.Action action : page.actions()) options.add(new Option(page, action, null));
+        String term = state.text().toLowerCase(Locale.ROOT);
+        available = options.stream().filter(option -> (option.label().getString() + " "
+                + (option.action() == null ? option.seed().template() : option.action().command()))
+                .toLowerCase(Locale.ROOT).contains(term)).toList();
+        state.offset(Math.min(state.offset(), Math.max(0, (available.size() - 1) / rows.size() * rows.size())));
+        for (int i = 0; i < rows.size(); i++) {
+            Button row = rows.get(i);
+            int index = state.offset() + i;
+            row.visible = index < available.size();
+            row.active = row.visible;
+            if (!row.visible) continue;
+            Option option = available.get(index);
+            Component label = option.label();
+            if (option.action() == null || option.seed() != null && !option.seed().enabled()) {
+                label = ClientText.tr("gui.statecraft.action.disabled_label", "[Unavailable] %s", label.getString());
+            }
+            row.setMessage(label);
+            row.setTooltip(Tooltip.create(option.action() == null ? ClientText.tr("gui.statecraft.navigation.version",
+                    "This section is not registered. Install matching client/server modules.") : option.seed() != null && !option.seed().enabled()
+                    ? ClientText.of(option.seed().disabledReason()) : Component.literal(option.action().command())));
+        }
+        previous.active = state.offset() > 0;
+        next.active = state.offset() + rows.size() < available.size();
+    }
+    private void choose(int index) {
+        if (index < 0 || index >= available.size()) return;
+        Option option = available.get(index);
+        if (option.action() == null) {
+            minecraft.setScreen(new InformationScreen(this, option.label(), ClientText.tr("gui.statecraft.navigation.version",
+                    "This section is not registered. Install matching client/server modules.")));
+        } else if (option.seed() != null && !option.seed().enabled()) {
+            minecraft.setScreen(new InformationScreen(this, option.label(), ClientText.of(option.seed().disabledReason())));
+        } else if (option.action().intent() == ActionIntent.NAVIGATION) {
+            ClientHooks.open(CommandLine.split(option.action().command()).get(1));
+        } else {
+            minecraft.setScreen(new ActionFormScreen(parent, this, option.page(), option.action(),
+                    option.seed() == null ? Map.of() : option.seed().values()));
+        }
+    }
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
-        graphics.fill(0, 0, width, height, 0xE8121923);
-        graphics.drawCenteredString(font, title, width / 2, 13, 0x71D6C1);
-        super.render(graphics, mouseX, mouseY, partialTick);
+    public void tick() { search.tick(); }
+    @Override
+    public void removed() { if (search != null) state.selection(search.selection()); }
+    @Override
+    public boolean keyPressed(int key, int scan, int modifiers) {
+        if ((key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) && search.isFocused()) {
+            if (available.size() == 1) choose(0);
+            else if (!available.isEmpty()) setFocused(rows.get(0));
+            return true;
+        }
+        return super.keyPressed(key, scan, modifiers);
     }
-
+    @Override
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
+        renderBackground(graphics);
+        graphics.fill(0, 0, width, height, 0xEC121923);
+        graphics.drawCenteredString(font, title, width / 2, 12, 0x71D6C1);
+        Component status = available.isEmpty() ? ClientText.tr("gui.statecraft.actions.empty", "No matching actions. Try another search.")
+                : ClientText.tr("gui.statecraft.actions.page", "Actions %s–%s of %s. Unavailable actions explain why.",
+                        state.offset() + 1, Math.min(available.size(), state.offset() + rows.size()), available.size());
+        graphics.drawString(font, font.plainSubstrByWidth(status.getString(), width - 24), 12, height - 43, 0xB7C9D9, false);
+        super.render(graphics, mouseX, mouseY, delta);
+    }
     @Override
     public void onClose() { minecraft.setScreen(parent); }
     @Override

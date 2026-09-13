@@ -13,6 +13,7 @@ import dev.statecraft.economy.EconomyCommands;
 import dev.statecraft.economy.EconomyConfig;
 import dev.statecraft.economy.EconomyData;
 import dev.statecraft.economy.EconomyEngine;
+import dev.statecraft.economy.EconomyPresentation;
 import dev.statecraft.economy.InventoryPort;
 import dev.statecraft.economy.data.EconomyFiles;
 import dev.statecraft.network.SuiteNetwork;
@@ -60,7 +61,6 @@ import org.slf4j.Logger;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.time.Clock;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -166,7 +166,7 @@ public final class StateCraftEconomy {
             ForgeTrades trades = new ForgeTrades();
             ForgeTrades.Prepared prepared = trades.prepare(loaded);
             EconomyData data = runtime.store().load("economy", EconomyData.class, EconomyData::new);
-            EconomyEngine engine = new EconomyEngine(data, runtime.governance(), config, loaded.values(), Clock.systemUTC(),
+            EconomyEngine engine = new EconomyEngine(data, runtime.governance(), config, loaded.values(), runtime.clock(),
                     runtime::markDirty, new ForgeValuationEnvironment(event.getServer(), runtime.governance()), ForgeInventory::stackSize);
             Running running = new Running(runtime, engine, files, trades);
             engine.setCommandHooks(new EconomyCommands.Hooks() {
@@ -193,6 +193,9 @@ public final class StateCraftEconomy {
             runtime.installEconomy(engine);
             runtime.registerModule("economy", StateCraftEconomy::executePlayer);
             runtime.registerFormProvider("economy", new dev.statecraft.economy.EconomyForms(engine));
+            EconomyPresentation presentation = new EconomyPresentation(engine);
+            runtime.ui().register("economy", presentation, (player, selection) -> presentation.preview(
+                    ServerRuntime.actor(player), selection, new ForgeInventory(player, engine.config().utilityRadius)));
             MinecraftForge.EVENT_BUS.register(trades);
             active = running;
             ticks = 0;
@@ -278,19 +281,14 @@ public final class StateCraftEconomy {
             else source.sendFailure(Component.literal(reply.text()));
             return reply.success() ? 1 : 0;
         }
-        try {
-            running.runtime.requireWritable();
-            Actor console = new Actor(new UUID(0, 0), source.getTextName(), source.hasPermission(2),
-                    source.getLevel().dimension().location().toString(),
-                    ((int) Math.floor(source.getPosition().x)) >> 4, ((int) Math.floor(source.getPosition().z)) >> 4);
-            String reply = running.engine.execute(console, line, InventoryPort.NONE);
-            running.runtime.markDirty();
-            source.sendSuccess(() -> Component.literal(reply), false);
-            return 1;
-        } catch (UserError error) {
-            source.sendFailure(Component.literal(error.getMessage()));
-            return 0;
-        }
+        Actor console = new Actor(new UUID(0, 0), source.getTextName(), source.hasPermission(2),
+                source.getLevel().dimension().location().toString(),
+                ((int) Math.floor(source.getPosition().x)) >> 4, ((int) Math.floor(source.getPosition().z)) >> 4);
+        ServerRuntime.Reply reply = running.runtime.invoke(console, "economy", line,
+                () -> running.engine.execute(console, line, InventoryPort.NONE));
+        if (reply.success()) source.sendSuccess(() -> Component.literal(reply.text()), false);
+        else source.sendFailure(Component.literal(reply.text()));
+        return reply.success() ? 1 : 0;
     }
 
     private static String executePlayer(ServerPlayer player, String line) {

@@ -32,3 +32,10 @@ mandatory=false
 versionRange="[5.10.3,6)"
 ordering="AFTER"
 side="CLIENT"
+
+[[dependencies.statecraft]]
+modId="statecraft_economy"
+mandatory=false
+versionRange="[2.2.0,3)"
+ordering="NONE"
+side="BOTH"

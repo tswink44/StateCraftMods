@@ -50,7 +50,8 @@ public final class EconomyEngine implements EconomyAccess {
         this.dirty = dirty;
         this.itemStackSize = itemStackSize;
         ledger = new Ledger(data, () -> this.config, clock, dirty, this::guardReserves);
-        taxes = new Taxation(data, governance, ledger, () -> this.config, clock, dirty, this::spendable);
+        taxes = new Taxation(data, governance, ledger, () -> this.config, clock, dirty, this::spendable,
+                id -> schedule("propertyArrear", id));
         property = new PropertyMarket(this, environment);
         commerce = new Commerce(this);
         banking = new Banking(this);
@@ -73,12 +74,14 @@ public final class EconomyEngine implements EconomyAccess {
         replacement.validate();
         this.config = replacement;
         this.values = Objects.requireNonNull(values);
+        int historySize = data.transactions.size(), taxHistorySize = data.taxHistory.size();
         Ledger.trim(data.transactions, replacement.historyLimit);
         Ledger.trim(data.taxHistory, replacement.taxHistoryLimit);
-        dirty.run();
+        if (data.transactions.size() != historySize || data.taxHistory.size() != taxHistorySize) dirty.run();
     }
 
     public void setCommandHooks(EconomyCommands.Hooks hooks) { commands.hooks(hooks); }
+    String guideText() { return commands.guideText(); }
 
     public String execute(Actor actor, String line, InventoryPort inventory) {
         ledger.thread();
@@ -89,7 +92,7 @@ public final class EconomyEngine implements EconomyAccess {
     public void ensurePlayer(Actor actor) {
         ledger.thread();
         if (!data.playerNames.containsKey(actor.id().toString())) {
-            if (config.initialPlayerBalanceCents > 0) {
+            if (initialGrantPending(actor)) {
                 ledger.prepare(List.of(), List.of(new Ledger.Adjustment(actor.account(),
                         config.initialPlayerBalanceCents, true, "system:initial", "Initial player balance")), false, Map.of()).commit();
             }
@@ -101,12 +104,16 @@ public final class EconomyEngine implements EconomyAccess {
         }
     }
 
+    boolean initialGrantPending(Actor actor) {
+        return config.initialPlayerBalanceCents > 0 && !data.playerNames.containsKey(actor.id().toString());
+    }
+
     public String resolveAccount(Actor actor, String text) {
         if (text == null || text.equalsIgnoreCase("me")) return actor.account();
         if (text.equalsIgnoreCase("selected")) return selectedAccount(actor);
         if (text.contains(":")) return Ledger.account(text);
-        try { return Ledger.account("player:" + UUID.fromString(text)); }
-        catch (IllegalArgumentException ignored) { }
+        try { return Ledger.account("player:" + text); }
+        catch (UserError ignored) { }
         List<String> matching = data.playerNames.entrySet().stream().filter(e -> e.getValue().equalsIgnoreCase(text))
                 .map(Map.Entry::getKey).toList();
         if (matching.size() == 1) return "player:" + matching.get(0);
@@ -138,8 +145,7 @@ public final class EconomyEngine implements EconomyAccess {
 
     public void selectAccount(Actor actor, String account) {
         account = requireAccount(actor, account);
-        data.selectedAccounts.put(actor.id().toString(), account);
-        dirty.run();
+        if (!account.equals(data.selectedAccounts.put(actor.id().toString(), account))) dirty.run();
     }
 
     public List<String> accessibleAccounts(Actor actor) {
@@ -190,25 +196,43 @@ public final class EconomyEngine implements EconomyAccess {
     }
 
     public void pay(Actor actor, String from, String to, long cents, String reason) {
+        ledger.transferBatch(List.of(quoteTransfer(actor, from, to, cents, reason)));
+    }
+
+    Transfer quoteTransfer(Actor actor, String from, String to, long cents, String reason) {
         from = requireAccount(actor, from);
         to = resolveAccount(actor, to);
         validatePublicDestination(actor, to);
         Money.positive(cents);
         if (from.equals(to)) throw new UserError("Choose a different destination account.");
-        ledger.transferBatch(List.of(new Transfer(from, to, cents, reason)));
+        return new Transfer(from, to, cents, reason);
     }
 
     public long depositCash(Actor actor, String account, InventoryPort inventory) {
+        CashQuote quote = quoteCashDeposit(actor, account, inventory);
+        quote.payment().commitWith(quote.items()::commit);
+        return quote.cents();
+    }
+
+    record CashQuote(String account, long cents, InventoryPort.Plan items, Ledger.Plan payment) {}
+
+    CashQuote quoteCashDeposit(Actor actor, String account, InventoryPort inventory) {
         inventory.require(InventoryPort.Utility.ATM, InventoryPort.Utility.VAULT);
         account = requireAccount(actor, account);
         InventoryPort.Plan items = inventory.plan();
         long cents = Money.positive(values.removeCash(items));
-        ledger.prepare(List.of(), List.of(new Ledger.Adjustment(account, cents, true, "system:cash",
-                "Physical currency deposited")), false, Map.of()).commitWith(items::commit);
-        return cents;
+        Ledger.Plan payment = ledger.prepare(List.of(), List.of(new Ledger.Adjustment(account, cents, true, "system:cash",
+                "Physical currency deposited")), false, Map.of());
+        return new CashQuote(account, cents, items, payment);
     }
 
     public long withdrawCash(Actor actor, String account, long requested, InventoryPort inventory) {
+        CashQuote quote = quoteCashWithdrawal(actor, account, requested, inventory);
+        quote.payment().commitWith(quote.items()::commit);
+        return quote.cents();
+    }
+
+    CashQuote quoteCashWithdrawal(Actor actor, String account, long requested, InventoryPort inventory) {
         inventory.require(InventoryPort.Utility.ATM, InventoryPort.Utility.VAULT);
         account = requireAccount(actor, account);
         Money.positive(requested);
@@ -216,9 +240,9 @@ public final class EconomyEngine implements EconomyAccess {
         if (balance(account) < requested) throw new UserError("Insufficient funds.");
         InventoryPort.Plan items = inventory.plan();
         long issued = values.addCash(items, requested, itemStackSize);
-        ledger.prepare(List.of(), List.of(new Ledger.Adjustment(account, issued, false, "system:cash",
-                "Physical currency withdrawn")), true, Map.of()).commitWith(items::commit);
-        return issued;
+        Ledger.Plan payment = ledger.prepare(List.of(), List.of(new Ledger.Adjustment(account, issued, false, "system:cash",
+                "Physical currency withdrawn")), true, Map.of());
+        return new CashQuote(account, issued, items, payment);
     }
 
     public void adminAdjust(Actor actor, String target, String operation, long amount) {
@@ -287,6 +311,9 @@ public final class EconomyEngine implements EconomyAccess {
         data.market.keySet().forEach(id -> schedule("market", id));
         data.properties.keySet().forEach(id -> schedule("property", id));
         data.stocks.keySet().forEach(id -> schedule("stock", id));
+        data.arrears.forEach((id, debt) -> {
+            if (Taxation.isPropertyArrear(debt)) schedule("propertyArrear", id);
+        });
         data.loans.forEach((id, loan) -> {
             if (Set.of("REQUESTED", "ACTIVE", "DEFAULTED").contains(loan.status)) schedule("loan", id);
         });
@@ -308,6 +335,7 @@ public final class EconomyEngine implements EconomyAccess {
                     case "market" -> commerce.tickMarket(entry.id());
                     case "property" -> property.tickListing(entry.id());
                     case "stock" -> commerce.tickStock(entry.id());
+                    case "propertyArrear" -> taxes.tickPropertyArrear(entry.id());
                     case "loan" -> banking.tickLoan(entry.id());
                     case "deposit" -> banking.tickDeposit(entry.id());
                     default -> false;

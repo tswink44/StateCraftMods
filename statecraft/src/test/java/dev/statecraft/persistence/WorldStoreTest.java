@@ -1,5 +1,7 @@
 package dev.statecraft.persistence;
 
+import com.google.gson.JsonParser;
+import dev.statecraft.runtime.IntegrationLocks;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -90,5 +92,38 @@ class WorldStoreTest {
         assertTrue(Files.exists(legacy));
         assertFalse(store.migrated());
         assertEquals(4L, new WorldStore(world).load("governance", Data.class, Data::new).balances.get("legacy"));
+    }
+
+    @Test
+    void everySnapshotPreparesIntegrationLocksIncludingDirectBackups() throws IOException {
+        Data economy = new Data();
+        IntegrationLocks locks = new IntegrationLocks();
+        WorldStore store = new WorldStore(world, () -> {
+            locks.accounts.clear();
+            economy.balances.forEach((account, balance) -> {
+                if (balance > 0) locks.accounts.add(account);
+            });
+        });
+        store.load("economy", Data.class, () -> economy);
+        store.load("integration_locks", IntegrationLocks.class, () -> locks);
+        store.save();
+        economy.balances.put("nation:newly-funded", 1000L);
+
+        Path backup = store.backup();
+
+        IntegrationLocks restored = new WorldStore(world).load("integration_locks",
+                IntegrationLocks.class, IntegrationLocks::new);
+        assertTrue(restored.offlineAccess().isAccountInUse("nation:newly-funded"));
+        var sections = JsonParser.parseString(Files.readString(backup)).getAsJsonObject().getAsJsonObject("sections");
+        assertEquals(1000L, sections.getAsJsonObject("economy").getAsJsonObject("balances")
+                .get("nation:newly-funded").getAsLong());
+        assertEquals("nation:newly-funded", sections.getAsJsonObject("integration_locks")
+                .getAsJsonArray("accounts").get(0).getAsString());
+
+        economy.balances.clear();
+        assertTrue(store.save());
+        assertFalse(new WorldStore(world).load("integration_locks", IntegrationLocks.class,
+                IntegrationLocks::new).offlineAccess().isAccountInUse("nation:newly-funded"));
+        assertFalse(store.save());
     }
 }

@@ -43,6 +43,15 @@ public final class FormBuilder {
     public String value(String key) { return fields.containsKey(key) ? fields.get(key).value() : ""; }
     public List<FormChoice> choices(String key) { return catalogs.getOrDefault(key, List.of()); }
 
+    public void constraints(String key, FormConstraints constraints) {
+        FormField field = fields.get(key);
+        if (field != null) {
+            fields.put(key, new FormField(field.key(), field.label(), field.kind(), field.value(), field.selectedLabel(),
+                    field.hint(), field.dependencies(), field.allowCustom(), field.choices(), field.offset(), field.more(),
+                    constraints));
+        }
+    }
+
     public void text(String key, String label, String hint, String defaultValue, boolean multiline, String... dependencies) {
         if (!fields.containsKey(key) && !new CommandTemplate(context.command()).fields().contains(key)) {
             return;

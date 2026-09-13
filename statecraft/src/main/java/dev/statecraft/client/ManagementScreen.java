@@ -1,251 +1,281 @@
 package dev.statecraft.client;
 
 import dev.statecraft.api.MenuPage;
-import dev.statecraft.api.MenuCategory;
 import dev.statecraft.api.MenuRegistry;
-import dev.statecraft.api.ResultSelection;
+import dev.statecraft.api.UserError;
+import dev.statecraft.api.ui.ActionIntent;
+import dev.statecraft.api.ui.ActionOutcome;
+import dev.statecraft.api.ui.ActionSelection;
+import dev.statecraft.api.ui.EntityRef;
+import dev.statecraft.api.ui.OperationRef;
+import dev.statecraft.api.ui.UiQuery;
+import dev.statecraft.api.ui.UiText;
+import dev.statecraft.api.ui.UiView;
+import dev.statecraft.client.state.PendingOperations;
+import dev.statecraft.client.state.UiScope;
+import dev.statecraft.client.state.ViewState;
 import dev.statecraft.network.SuiteNetwork;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import net.minecraft.util.FormattedCharSequence;
 import org.lwjgl.glfw.GLFW;
 
 public final class ManagementScreen extends Screen {
-    private static final int SIDEBAR = 126;
+    private final ViewState state;
     private final MenuPage page;
-    private final MenuCategory category;
-    private String output = "Loading...";
-    private boolean success = true;
-    private boolean loaded;
-    private int pending = -1;
-    private int navigationOffset;
-    private int scroll;
-    private List<FormattedCharSequence> lines = List.of();
-    private List<String> rowSources = List.of();
-    private String selectedRow = "";
-    private String copied = "";
-    private EditBox command;
+    private final UiScope scope;
+    private RetainedEditBox search;
+    private RetainedEditBox command;
+    private TextPanel results;
+    private Button status;
+    private Button operations;
+    private Button previous;
+    private Button next;
+    private Button open;
+    private Button copy;
     private Button run;
     private Button refresh;
-    private Button actions;
-    private long sentAt;
+    private UiView shownView;
+    private String shownOutput;
+    private ViewState.Content shownContent;
+    private UiText shownPlaceholder;
 
     public ManagementScreen(MenuPage page) {
-        super(Component.literal(page.title()));
-        this.page = page;
-        category = MenuCategory.of(page.id());
-        List<MenuPage> pages = category.pages(MenuRegistry.pages());
-        int index = pages.indexOf(page);
-        navigationOffset = Math.max(0, index - 4);
+        this(ClientHooks.workspace().navigation().open(UiQuery.page(page.id())));
     }
+    ManagementScreen(ViewState state) {
+        super(ClientText.page(MenuRegistry.get(state.query().page())));
+        this.state = state;
+        page = MenuRegistry.get(state.query().page());
+        scope = ClientHooks.scope();
+    }
+    MenuPage page() { return page; }
+    ViewState state() { return state; }
 
     @Override
     protected void init() {
-        List<MenuPage> pages = category.pages(MenuRegistry.pages());
-        int visible = Math.max(1, (height - 118) / 22);
-        addRenderableWidget(Button.builder(Component.literal("All sections"),
-                        ignored -> minecraft.setScreen(new NavigationScreen()))
-                .bounds(8, 8, SIDEBAR - 12, 20).build());
-        navigationOffset = Math.min(navigationOffset, Math.max(0, pages.size() - visible));
-        for (int i = 0; i < visible && i + navigationOffset < pages.size(); i++) {
-            MenuPage entry = pages.get(i + navigationOffset);
-            String name = font.plainSubstrByWidth(entry.title(), SIDEBAR - 20);
-            Button button = addRenderableWidget(Button.builder(Component.literal(name),
-                    ignored -> minecraft.setScreen(new ManagementScreen(entry)))
-                    .bounds(8, 49 + i * 22, SIDEBAR - 12, 20).build());
-            button.active = !entry.id().equals(page.id());
-        }
-        Button previous = addRenderableWidget(Button.builder(Component.literal("^"), ignored -> {
-            navigationOffset = Math.max(0, navigationOffset - visible);
-            rebuildWidgets();
-        }).bounds(8, height - 61, 52, 20).build());
-        previous.active = navigationOffset > 0;
-        Button next = addRenderableWidget(Button.builder(Component.literal("v"), ignored -> {
-            navigationOffset = Math.min(Math.max(0, pages.size() - visible), navigationOffset + visible);
-            rebuildWidgets();
-        }).bounds(64, height - 61, 50, 20).build());
-        next.active = navigationOffset + visible < pages.size();
-        addRenderableWidget(Button.builder(Component.literal("Back"), ignored -> onClose())
-                .bounds(8, height - 28, SIDEBAR - 12, 20).build());
-
-        int contentX = SIDEBAR + 8;
-        int contentWidth = Math.max(100, width - contentX - 12);
-        int toolbarWidth = Math.min(64, (contentWidth - 8) / 3);
-        refresh = addRenderableWidget(Button.builder(Component.literal("Refresh"), ignored -> submit(page.query()))
-                .bounds(contentX, height - 61, toolbarWidth, 20).build());
-        actions = addRenderableWidget(Button.builder(Component.literal("Actions"), ignored ->
+        saveEditors();
+        int full = width - 24;
+        int small = (full - 12) / 4;
+        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.back", "Back"), ignored -> onClose())
+                .bounds(12, 8, small, 20).build());
+        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.sections", "Sections"), ignored -> ClientHooks.sections(null))
+                .bounds(16 + small, 8, small, 20).build());
+        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.dashboard", "My dashboard"),
+                        ignored -> ClientHooks.navigate(UiQuery.page("statecraft:dashboard")))
+                .bounds(20 + small * 2, 8, small, 20).build());
+        operations = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.operations.count", "Operations (%s)",
+                        ClientHooks.pendingCount()), ignored -> ClientHooks.operations(this))
+                .bounds(24 + small * 3, 8, small, 20).build());
+        status = addRenderableWidget(Button.builder(Component.empty(), ignored -> minecraft.setScreen(
+                        new InformationScreen(this, ClientText.tr("gui.statecraft.status", "Status"), statusMessage())))
+                .bounds(12, 46, full, 12).build());
+        search = new RetainedEditBox(font, 12, 62, Math.max(80, full - 76), 20,
+                ClientText.tr("gui.statecraft.search.section", "Search this section"));
+        search.setMaxLength(80);
+        search.setHint(ClientText.tr("gui.statecraft.search.section_hint", "Filter names or IDs..."));
+        search.setValue(state.query().search());
+        search.restore(state.searchSelection());
+        addRenderableWidget(search);
+        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.search", "Search"), ignored -> search())
+                .bounds(width - 84, 62, 72, 20).build());
+        results = addRenderableWidget(new TextPanel(font, 12, 87, full, height - 189,
+                entry -> state.select(entry.entity(), entry.copy()), ClientHooks::openEntity, state::scroll));
+        previous = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.previous", "Previous"), ignored -> page(-UiView.PAGE_SIZE))
+                .bounds(12, height - 97, small, 20).build());
+        next = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.next", "Next"), ignored -> page(UiView.PAGE_SIZE))
+                .bounds(16 + small, height - 97, small, 20).build());
+        open = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.open_details", "Open details"), ignored -> results.openSelected())
+                .bounds(20 + small * 2, height - 97, small, 20).build());
+        copy = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.copy_row", "Copy row"), ignored -> results.copySelected())
+                .bounds(24 + small * 3, height - 97, small, 20).build());
+        int tool = (full - 16) / 5;
+        refresh = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.refresh", "Refresh"), ignored -> refresh())
+                .bounds(12, height - 73, tool, 20).build());
+        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.actions", "Actions"), ignored ->
                         minecraft.setScreen(new ActionPickerScreen(this, page)))
-                .bounds(contentX + toolbarWidth + 4, height - 61, toolbarWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Map"), ignored -> minecraft.setScreen(new TerritoryMapScreen(this)))
-                .bounds(contentX + (toolbarWidth + 4) * 2, height - 61, toolbarWidth, 20).build());
-
-        String oldCommand = command == null ? "" : command.getValue();
-        command = new EditBox(font, contentX, height - 28, contentWidth - 46, 20, Component.literal("Command"));
+                .bounds(16 + tool, height - 73, tool, 20).build());
+        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.map", "Map"), ignored ->
+                        minecraft.setScreen(new TerritoryMapScreen(this)))
+                .bounds(20 + tool * 2, height - 73, tool, 20).build());
+        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.copy_all", "Copy all"), ignored -> results.copyAll())
+                .bounds(24 + tool * 3, height - 73, tool, 20).build());
+        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.copy_id", "Copy ID"), ignored -> results.copyId())
+                .bounds(28 + tool * 4, height - 73, tool, 20).build());
+        command = new RetainedEditBox(font, 12, height - 49, full - 88, 20,
+                ClientText.tr("gui.statecraft.advanced.command", "Advanced command"));
         command.setMaxLength(4096);
-        command.setHint(Component.literal("Command without /sc or /sce"));
-        command.setValue(oldCommand);
+        command.setHint(ClientText.tr("gui.statecraft.advanced.hint", "Advanced command without /sc or /sce"));
+        command.setValue(state.advanced());
+        command.restore(state.advancedSelection());
+        command.setResponder(state::advanced);
         addRenderableWidget(command);
-        run = addRenderableWidget(Button.builder(Component.literal("Run"), ignored -> submit(command.getValue()))
-                .bounds(width - 54, height - 28, 42, 20).build());
-        layoutOutput();
-        updateButtons();
-        if (!loaded) {
-            loaded = true;
-            submit(page.query());
-        }
+        run = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.advanced.run", "Review / run"),
+                        ignored -> submit(command.getValue())).bounds(width - 96, height - 49, 84, 20).build());
+        rebuildContent();
+        if (state.advancedSelection().focused()) setInitialFocus(command);
+        else if (state.searchSelection().focused()) setInitialFocus(search);
+        else setInitialFocus(results);
+        if (state.automaticRefresh()) ClientHooks.refresh(state);
+        controls();
     }
 
-    MenuPage page() { return page; }
-
+    private void saveEditors() {
+        if (search != null) state.searchSelection(search.selection());
+        if (command != null) {
+            state.advanced(command.getValue());
+            state.advancedSelection(command.selection());
+        }
+    }
+    private void search() {
+        state.searchSelection(search.selection());
+        state.query(new UiQuery(state.query().page(), state.query().entity(), search.getValue(), 0));
+        ClientHooks.requestView(state);
+        rebuildContent();
+    }
+    private void page(int step) {
+        state.query(new UiQuery(state.query().page(), state.query().entity(), state.query().search(),
+                Math.max(0, Math.min(100_000, state.query().offset() + step))));
+        ClientHooks.requestView(state);
+        rebuildContent();
+    }
+    private void refresh() {
+        if (state.content() == ViewState.Content.RAW && state.explicit() != null) {
+            minecraft.setScreen(new TransactionReviewScreen(this, this, state.explicit(), ActionIntent.RAW, null));
+        } else {
+            ClientHooks.refresh(state);
+        }
+    }
     public void submit(String line) {
-        if (line.isBlank() || pending >= 0) {
-            return;
+        if (!ClientHooks.current(scope) || line.isBlank() || state.pending() >= 0 || rawPending() != null) return;
+        try {
+            ActionSelection selection = ActionSelection.raw(page.id(), line);
+            if (selection.intent() == ActionIntent.QUERY) ClientHooks.query(state, selection);
+            else minecraft.setScreen(new TransactionReviewScreen(this, this, selection, ActionIntent.RAW, null));
+        } catch (UserError failure) {
+            state.feedback(ActionOutcome.REJECTED, UiText.literal(failure.getMessage()));
         }
-
-        pending = ClientHooks.nextRequest();
-        ClientHooks.watch(pending, this);
-        sentAt = System.currentTimeMillis();
-        output = "Waiting for server...";
-        success = true;
-        scroll = 0;
-        layoutOutput();
-        updateButtons();
-        SuiteNetwork.request(pending, page.id(), line);
     }
-
     public void reply(SuiteNetwork.ActionResponse response) {
-        if (!response.page().equals(page.id()) || response.id() != pending) {
-            return;
-        }
-        pending = -1;
-        displayResult(response.success(), response.text());
-    }
-
-    void displayResult(boolean successful, String text) {
-        output = text;
-        success = successful;
-        scroll = 0;
-        layoutOutput();
-        updateButtons();
-    }
-
-    private void updateButtons() {
-        if (run != null) {
-            run.active = pending < 0;
-            refresh.active = pending < 0;
-            actions.active = pending < 0;
+        if (ClientHooks.current(scope) && scope.world().equals(response.world()) && response.id() == state.pending()
+                && page.id().equals(response.page())) {
+            state.accept(response.id(), state.revision());
+            displayResult(response.success(), response.text());
         }
     }
+    void displayResult(boolean success, String text) {
+        state.feedback(success ? ActionOutcome.COMPLETED : ActionOutcome.REJECTED, UiText.literal(text));
+    }
+    private PendingOperations.Entry rawPending() {
+        if (!ClientHooks.current(scope)) return null;
+        return ClientHooks.workspace().operations().entries().stream()
+                .filter(entry -> !entry.terminal() && entry.selection() != null && entry.intent() == ActionIntent.RAW
+                        && entry.selection().page().equals(page.id())).findFirst().orElse(null);
+    }
 
-    private void layoutOutput() {
-        if (font != null) {
-            List<FormattedCharSequence> wrapped = new ArrayList<>();
-            List<String> sources = new ArrayList<>();
-            for (String row : output.split("\\R", -1)) {
-                List<FormattedCharSequence> parts = font.split(Component.literal(row), Math.max(90, width - SIDEBAR - 28));
-                if (parts.isEmpty()) {
-                    wrapped.add(FormattedCharSequence.EMPTY);
-                    sources.add(row);
-                } else {
-                    wrapped.addAll(parts);
-                    for (int i = 0; i < parts.size(); i++) {
-                        sources.add(row);
-                    }
-                }
+    private Component statusMessage() {
+        if (!ClientHooks.recoveryError().fallback().isEmpty()) return ClientText.of(ClientHooks.recoveryError());
+        PendingOperations.Entry raw = rawPending();
+        if (raw != null) return ClientText.outcome(raw.outcome()).copy().append(" ").append(raw.text());
+        if (state.pending() >= 0) return ClientText.tr("gui.statecraft.loading", "Loading from server...");
+        if (!state.banner().fallback().isEmpty()) return ClientText.outcome(state.outcome()).copy().append(": ")
+                .append(ClientText.of(state.banner()));
+        if (state.content() == ViewState.Content.RAW) return ClientText.tr("gui.statecraft.advanced.retained",
+                "Advanced result retained. Refresh requests a new review; it never repeats the command automatically.");
+        return ClientText.tr("gui.statecraft.results.hint", "Select a row, then Open details; right-click copies the full row.");
+    }
+
+    private void rebuildContent() {
+        var entries = new ArrayList<TextPanel.Entry>();
+        results.legacyCopy(state.content() != ViewState.Content.TYPED);
+        if (state.content() != ViewState.Content.TYPED) {
+            for (String line : state.output().split("\\R", -1)) entries.add(TextPanel.Entry.text(Component.literal(line)));
+        } else if (state.view() == null) {
+            entries.add(TextPanel.Entry.text(ClientText.of(state.placeholder())));
+        } else {
+            UiView view = state.view();
+            if (!view.body().fallback().isEmpty() || !view.body().key().isEmpty()) {
+                entries.add(TextPanel.Entry.text(ClientText.of(view.body())));
             }
-            lines = List.copyOf(wrapped);
-            rowSources = List.copyOf(sources);
-            scroll = Math.min(scroll, Math.max(0, lines.size() - visibleLines()));
+            for (var row : view.rows()) {
+                Component caption = ClientText.of(row.title()).copy().append("\n").append(ClientText.of(row.detail()));
+                String text = caption.getString() + (row.entity().present() ? "\n" + row.entity().id() : "");
+                entries.add(new TextPanel.Entry(caption, text, row.entity()));
+            }
+            if (view.rows().isEmpty() && !view.emptyHint().fallback().isEmpty()) {
+                entries.add(TextPanel.Entry.text(ClientText.of(view.emptyHint())));
+            }
+            for (var action : view.actions()) {
+                if (!action.enabled()) entries.add(TextPanel.Entry.text(ClientText.tr("gui.statecraft.action.unavailable",
+                        "Unavailable: %s — %s", ClientText.of(action.label()).getString(),
+                        ClientText.of(action.disabledReason()).getString())));
+            }
+            if (entries.isEmpty()) entries.add(TextPanel.Entry.text(ClientText.tr("gui.statecraft.results.empty", "No matching entries.")));
         }
+        results.content(List.copyOf(entries), state.scroll(), state.selected(), state.selectedText());
+        shownView = state.view();
+        shownOutput = state.output();
+        shownContent = state.content();
+        shownPlaceholder = state.placeholder();
     }
-
-    private int visibleLines() {
-        return Math.max(1, (height - 113) / 11);
+    private void controls() {
+        status.setMessage(statusMessage());
+        operations.setMessage(ClientText.tr("gui.statecraft.operations.count", "Operations (%s)", ClientHooks.pendingCount()));
+        previous.active = state.content() == ViewState.Content.TYPED && state.pending() < 0 && state.query().offset() > 0;
+        next.active = state.content() == ViewState.Content.TYPED && state.pending() < 0 && state.view() != null && state.view().more()
+                && state.query().offset() < 100_000;
+        open.active = results.selection() != null && results.selection().entity().present();
+        copy.active = results.selection() != null;
+        refresh.active = state.pending() < 0 && rawPending() == null;
+        refresh.setMessage(state.content() == ViewState.Content.RAW
+                ? ClientText.tr("gui.statecraft.review.again", "Review again") : ClientText.tr("gui.statecraft.refresh", "Refresh"));
+        PendingOperations.Entry raw = rawPending();
+        command.setEditable(raw == null);
+        if (raw != null && !command.getValue().equals(raw.selection().command())) command.setValue(raw.selection().command());
+        run.active = raw == null && state.pending() < 0 && !command.getValue().isBlank();
     }
-
     @Override
     public void tick() {
+        if (!ClientHooks.current(scope)) { minecraft.setScreen(null); return; }
+        search.tick();
         command.tick();
-        if (pending >= 0 && System.currentTimeMillis() - sentAt > 15_000) {
-            ClientHooks.forget(pending);
-            pending = -1;
-            output = "The server has not replied. The action may have completed; refresh before retrying a payment or purchase.";
-            success = false;
-            layoutOutput();
-            updateButtons();
-        }
+        if (shownView != state.view() || !java.util.Objects.equals(shownOutput, state.output()) || shownContent != state.content()
+                || state.view() == null && !java.util.Objects.equals(shownPlaceholder, state.placeholder())) rebuildContent();
+        controls();
     }
-
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
         renderBackground(graphics);
-        graphics.fill(0, 0, width, height, 0xE8121923);
-        graphics.fill(0, 0, SIDEBAR, height, 0xEA1A2836);
-        graphics.fill(SIDEBAR + 4, 31, width - 8, height - 69, 0xB5091018);
-        graphics.drawString(font, font.plainSubstrByWidth(category.title(), SIDEBAR - 14),
-                8, 35, 0x71D6C1, false);
-        graphics.drawString(font, font.plainSubstrByWidth(page.title(), width - SIDEBAR - 20),
-                SIDEBAR + 8, 13, 0xF1F5FB, false);
-        graphics.enableScissor(SIDEBAR + 6, 33, width - 10, height - 72);
-        for (int i = 0; i < visibleLines() && i + scroll < lines.size(); i++) {
-            if (!selectedRow.isEmpty() && rowSources.get(i + scroll).equals(selectedRow)) {
-                graphics.fill(SIDEBAR + 7, 37 + i * 11, width - 12, 48 + i * 11, 0x554D819A);
-            }
-            graphics.drawString(font, lines.get(i + scroll), SIDEBAR + 10, 38 + i * 11,
-                    success ? 0xDFE9F2 : 0xFF9292, false);
-        }
-        graphics.disableScissor();
-        if (!copied.isEmpty()) {
-            graphics.drawString(font, font.plainSubstrByWidth("Copied. Ctrl+V to paste.", width - SIDEBAR - 80),
-                    SIDEBAR + 8, height - 80, 0x71D6C1, false);
-        }
-        if (lines.size() > visibleLines()) {
-            graphics.drawString(font, (scroll + 1) + "/" + lines.size(), width - 54, height - 81, 0x8398AB, false);
-        }
-        super.render(graphics, mouseX, mouseY, partialTick);
+        graphics.fill(0, 0, width, height, 0xEC121923);
+        Component heading = state.content() == ViewState.Content.TYPED && state.view() != null
+                ? ClientText.of(state.view().title()) : title;
+        graphics.drawString(font, font.plainSubstrByWidth(heading.getString(), width - 24), 12, 33, 0x71D6C1, false);
+        Component hint = results.copied() ? ClientText.tr("gui.statecraft.copied", "Copied. Control+V to paste.")
+                : ClientText.tr("gui.statecraft.advanced.review_hint", "Advanced mutations require server review. Back never cancels a submitted operation.");
+        graphics.drawString(font, font.plainSubstrByWidth(hint.getString(), width - 24), 12, height - 20, 0xA8BECE, false);
+        super.render(graphics, mouseX, mouseY, delta);
     }
-
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        if (mouseX >= SIDEBAR && mouseY < height - 66) {
-            scroll = Math.max(0, Math.min(Math.max(0, lines.size() - visibleLines()), scroll - (int) Math.signum(delta) * 3));
-            return true;
-        }
-        return super.mouseScrolled(mouseX, mouseY, delta);
-    }
-
+    public Component getNarrationMessage() { return title.copy().append(". ").append(statusMessage()); }
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if ((button == 0 || button == 1) && mouseX >= SIDEBAR + 6 && mouseX < width - 10
-                && mouseY >= 38 && mouseY < Math.min(height - 81, 38 + visibleLines() * 11)) {
-            int row = scroll + (int) ((mouseY - 38) / 11);
-            if (row < rowSources.size() && !rowSources.get(row).isBlank()) {
-                selectedRow = rowSources.get(row);
-                copied = button == 0 ? ResultSelection.identifier(selectedRow) : selectedRow;
-                minecraft.keyboardHandler.setClipboard(copied);
-                return true;
-            }
+    public boolean keyPressed(int key, int scan, int modifiers) {
+        if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
+            if (search.isFocused()) { search(); return true; }
+            if (command.isFocused()) { submit(command.getValue()); return true; }
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.keyPressed(key, scan, modifiers);
     }
-
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if ((keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) && command.isFocused()) {
-            submit(command.getValue());
-            return true;
-        }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+    public void removed() {
+        saveEditors();
+        ClientHooks.cancelView(state);
     }
-
+    @Override
+    public void onClose() { ClientHooks.back(); }
     @Override
     public boolean isPauseScreen() { return false; }
-
-    @Override
-    public void onClose() { minecraft.setScreen(new NavigationScreen(category)); }
 }

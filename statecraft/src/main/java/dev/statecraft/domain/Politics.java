@@ -53,6 +53,7 @@ final class Politics {
         election.nextStartAt = deadline(e.now(), e.config.electionIntervalMillis);
         election.scheduleExhausted = election.nextStartAt <= e.now();
         e.data.elections.put(nation.id, election);
+        e.changed();
     }
 
     String electionCommand(Actor actor, Arguments args) {
@@ -93,8 +94,7 @@ final class Politics {
                 check(!election.voting && !election.scheduleExhausted, "Candidate registration is closed.");
                 check(!election.candidates.contains(actor.id().toString()), "You are already registered.");
                 check(election.candidates.size() < e.config.maxMembersPerNation, "Candidate limit reached.");
-                e.pay(List.of(new EconomyAccess.Transfer(actor.account(), e.account(nation),
-                        e.config.electionCandidateFee, "Election candidate registration")));
+                e.pay(List.of(candidateFee(actor, nation)));
                 election.candidates.add(actor.id().toString());
                 electionHistory(election, e.now(), "Candidate registered: " + actor.id());
                 return "Candidate registered. Registration fees are non-refundable.";
@@ -117,6 +117,7 @@ final class Politics {
                 check(election.candidates.contains(candidate.id) && e.member(candidate.id, nation),
                         "That player is not an eligible candidate.");
                 election.votes.put(voter, candidate.id);
+                e.changed();
                 return "Your ballot has been recorded.";
             }
             case "history" -> {
@@ -142,6 +143,7 @@ final class Politics {
             case "cancel" -> {
                 args.exactly(3, "election cancel <nation>");
                 e.admin(actor);
+                e.changed();
                 election.voting = false;
                 election.candidates.clear();
                 election.electorate.clear();
@@ -157,6 +159,7 @@ final class Politics {
     }
 
     private void openElection(Government nation, Election election, long at) {
+        e.changed();
         election.voting = true;
         election.startedAt = at;
         election.endsAt = deadline(at, e.config.electionVotingMillis);
@@ -210,10 +213,15 @@ final class Politics {
         e.history("election", election.nationId, text);
     }
 
+    EconomyAccess.Transfer candidateFee(Actor actor, Government nation) {
+        return new EconomyAccess.Transfer(actor.account(), e.account(nation),
+                e.config.electionCandidateFee, "Election candidate registration");
+    }
+
     void membershipChanged(String playerId) {
         for (Election election : e.data.elections.values()) {
-            if (election != null && !e.member(playerId, e.data.governments.get(election.nationId)))
-                election.candidates.remove(playerId);
+            if (election != null && !e.member(playerId, e.data.governments.get(election.nationId))
+                    && election.candidates.remove(playerId)) e.changed();
         }
         // Cast ballots are retained: expelling a voter must not erase an already cast vote.
     }
@@ -246,6 +254,7 @@ final class Politics {
             Bill bill = newBill(nation.id, actor.id().toString(), policy, value, title, text);
             bill.amendment = "amend".equals(action);
             e.data.bills.put(bill.id, bill);
+            e.changed();
             billHistory(bill, "Introduced by " + actor.id() + (bill.amendment ? " as constitutional amendment" : ""));
             notifyGovernment(nation.id, "Bill introduced", title + " [" + bill.id + "]. Debate ends at " + bill.debateEndsAt + ".");
             return "Introduced bill " + bill.id + ". " + ("roleplay".equals(policy) ? "This law is roleplay-only." : "This policy is mechanically enforced after enactment.");
@@ -284,6 +293,7 @@ final class Politics {
                 e.executive(actor, nation);
                 check("PASSED".equals(bill.status), "Only a passed bill awaiting signature can be vetoed.");
                 String reason = GovernanceEngine.prose(args.tail(3), e.config.maxDescriptionLength, "Veto reason");
+                e.changed();
                 bill.status = "VETOED";
                 bill.decisionEndsAt = deadline(e.now(), e.config.signatureDurationMillis);
                 billHistory(bill, "Vetoed by " + actor.id() + ": " + reason);
@@ -294,6 +304,7 @@ final class Politics {
                 args.exactly(3, "bill override <billId>");
                 check(legislator(actor.id().toString(), nation), "Only current legislators may move an override.");
                 check("VETOED".equals(bill.status), "Only a vetoed bill can enter override voting.");
+                e.changed();
                 bill.status = "OVERRIDE_VOTING";
                 bill.electorate = electorate(nation);
                 bill.votes.clear();
@@ -308,6 +319,7 @@ final class Politics {
                 String value = billValue(bill.policy, args.get(3));
                 String title = GovernanceEngine.text(args.get(4), 100, "Bill title");
                 String text = GovernanceEngine.prose(args.tail(5), e.config.maxDescriptionLength, "Bill text");
+                e.changed();
                 bill.value = value;
                 bill.title = title;
                 bill.text = text;
@@ -321,6 +333,7 @@ final class Politics {
                 check(actor.admin() || ("DEBATE".equals(bill.status) && actor.id().toString().equals(bill.author)
                                 && bill.treatyId == null),
                         "Only the author during debate, or an operator, may cancel a bill.");
+                e.changed();
                 bill.status = "CANCELLED";
                 billHistory(bill, "Cancelled by " + actor.id());
                 if (bill.treatyId != null) failTreaty(bill.treatyId, "A ratification bill was cancelled.");
@@ -402,6 +415,7 @@ final class Politics {
                 order.reason = reason;
                 order.author = actor.id().toString();
                 order.expiresAt = expires;
+                e.changed();
                 nation.lastEmergencyAt = e.now();
                 e.data.emergencies.put(nation.id, order);
                 e.history("emergency", nation.id, order.policy + "=" + value + " by " + actor.id() + ": " + reason);
@@ -410,7 +424,10 @@ final class Politics {
             }
             case "rescind" -> {
                 args.exactly(3, "executive rescind <nation>");
-                check(e.data.emergencies.remove(nation.id) != null, "No emergency order is active.");
+                boolean existed = e.data.emergencies.containsKey(nation.id);
+                Emergency removed = e.data.emergencies.remove(nation.id);
+                if (existed) e.changed();
+                check(removed != null, "No emergency order is active.");
                 e.history("emergency", nation.id, "Rescinded by " + actor.id());
                 return "Emergency order rescinded; cooldown remains in force.";
             }
@@ -428,6 +445,7 @@ final class Politics {
                 "Only current legislators on this ballot's eligibility roll may vote.");
         check(!bill.votes.containsKey(voter), "You already voted on this ballot.");
         bill.votes.put(voter, choice);
+        e.changed();
     }
 
     private Bill newBill(String nation, String author, String policy, String value, String title, String text) {
@@ -444,7 +462,7 @@ final class Politics {
         return bill;
     }
 
-    private String billValue(String policy, String value) {
+    String billValue(String policy, String value) {
         if ("roleplay".equals(policy)) {
             check("-".equals(value), "Roleplay bills use '-' as their value.");
             return "-";
@@ -452,7 +470,7 @@ final class Politics {
         return GovernanceSettings.validate(policy, value);
     }
 
-    private void billCapacity(String nation) {
+    void billCapacity(String nation) {
         check(e.data.bills.values().stream().filter(Objects::nonNull)
                         .filter(b -> nation.equals(b.nationId) && LIVE_BILLS.contains(b.status)).count()
                         < e.config.maxActiveBillsPerNation, "This nation has too many active bills.");
@@ -487,6 +505,7 @@ final class Politics {
                     "This ratification bill has invalid treaty references.");
         } else billValue(bill.policy, bill.value);
         if ("DEBATE".equals(bill.status) && now >= bill.debateEndsAt) {
+            e.changed();
             bill.electorate = electorate(nation);
             bill.status = "VOTING";
             bill.voteEndsAt = deadline(bill.debateEndsAt, e.config.legislativeVotingMillis);
@@ -537,9 +556,10 @@ final class Politics {
         law.roleplayOnly = "roleplay".equals(bill.policy);
         law.enactedAt = e.now();
         if (!law.roleplayOnly) e.setPolicy(nation, bill.policy, bill.value);
+        e.changed();
         List<Law> laws = e.data.laws.computeIfAbsent(nation.id, ignored -> new ArrayList<>());
         laws.add(law);
-        GovernanceEngine.trim(laws, e.config.maxLawsPerNation);
+        e.trim(laws, e.config.maxLawsPerNation);
         bill.status = "ENACTED";
         billHistory(bill, "Enacted: " + reason);
         notifyGovernment(nation.id, "Law enacted", bill.title + (law.roleplayOnly ? " (roleplay only)." : " (" + bill.policy + "=" + bill.value + ")."));
@@ -594,6 +614,7 @@ final class Politics {
                 check(!"ALLIED".equals(relationStatus(from.id, to.id)), "Break the alliance before declaring war.");
                 check(!truce(from.id, to.id, e.now()), "A binding post-war truce is still in effect.");
                 Relation relation = relation(from.id, to.id);
+                e.changed();
                 relation.status = "WAR";
                 relation.warStartedAt = e.now();
                 closeAllianceProposals(from.id, to.id);
@@ -608,6 +629,7 @@ final class Politics {
                 e.executive(actor, from);
                 different(from, to);
                 check("ALLIED".equals(relationStatus(from.id, to.id)), "These nations are not allied.");
+                e.changed();
                 relation(from.id, to.id).status = "NEUTRAL";
                 notifyPair(from.id, to.id, "Alliance ended", from.name + " ended the alliance with " + to.name + ".");
                 e.history("diplomacy", pair(from.id, to.id), "Alliance ended by " + actor.id());
@@ -626,6 +648,7 @@ final class Politics {
                 DiplomaticProposal proposal = proposal("ALLIANCE", from, to, message);
                 proposal.expiresAt = deadline(e.now(), e.config.allianceProposalDurationMillis);
                 e.data.diplomacy.put(proposal.id, proposal);
+                e.changed();
                 notifyPair(from.id, to.id, "Alliance proposal", from.name + " proposes an alliance. Proposal " + proposal.id + ". " + message);
                 e.history("diplomacy", proposal.id, "Alliance proposed by " + actor.id());
                 return "Alliance proposal " + proposal.id + ".";
@@ -653,6 +676,7 @@ final class Politics {
                 }
                 validateTreaty(proposal);
                 e.data.diplomacy.put(proposal.id, proposal);
+                e.changed();
                 notifyPair(from.id, to.id, "Peace proposal", from.name + " proposes peace: " + proposal.id
                         + ". Offered " + Money.format(proposal.offeredCents) + ", demanded " + Money.format(proposal.demandedCents)
                         + ", chunks=" + proposal.chunks.size() + ". " + proposal.message);
@@ -670,7 +694,8 @@ final class Politics {
                 rows.add(proposal.message);
                 if (!proposal.lastError.isEmpty()) rows.add("Execution blocked: " + proposal.lastError);
                 for (ChunkTerm term : proposal.chunks)
-                    rows.add(term.key + ": " + e.governmentName(term.fromCity) + " -> " + e.governmentName(term.toCity));
+                    rows.add(term == null ? "Invalid chunk term: operator repair required."
+                            : term.key + ": " + e.governmentName(term.fromCity) + " -> " + e.governmentName(term.toCity));
                 e.data.bills.values().stream().filter(Objects::nonNull).filter(b -> proposal.id.equals(b.treatyId))
                         .forEach(b -> rows.add("Ratification bill: " + e.governmentName(b.nationId) + " " + b.id + " " + b.status));
                 return e.page("Diplomatic terms", rows, args.page(3));
@@ -680,8 +705,10 @@ final class Politics {
                 DiplomaticProposal proposal = diplomaticProposal(args.get(2));
                 e.executive(actor, nation(proposal.toNation));
                 check("PROPOSED".equals(proposal.status) && e.now() < proposal.expiresAt, "This proposal is no longer awaiting acceptance.");
+                validateTreatyReferences(proposal);
                 if ("ALLIANCE".equals(proposal.type)) {
                     check("NEUTRAL".equals(relationStatus(proposal.fromNation, proposal.toNation)), "Relations changed; this alliance cannot be accepted.");
+                    e.changed();
                     relation(proposal.fromNation, proposal.toNation).status = "ALLIED";
                     proposal.status = "ENACTED";
                     closeAllianceProposals(proposal.fromNation, proposal.toNation);
@@ -701,6 +728,7 @@ final class Politics {
                         bill.treatyId = proposal.id;
                         bills.add(bill);
                     }
+                    e.changed();
                     proposal.status = "AWAITING_RATIFICATION";
                     bills.forEach(b -> { e.data.bills.put(b.id, b); billHistory(b, "Peace ratification introduced."); });
                     notifyPair(proposal.fromNation, proposal.toNation, "Peace awaits ratification",
@@ -725,8 +753,6 @@ final class Politics {
                 DiplomaticProposal proposal = diplomaticProposal(args.get(2));
                 diplomaticExecutive(actor, proposal);
                 check("READY".equals(proposal.status), "This treaty is not ready for a settlement retry.");
-                check(proposal.ratified.containsAll(List.of(proposal.fromNation, proposal.toNation)),
-                        "Both legislatures must ratify first.");
                 executeTreaty(proposal);
                 return "Treaty settled; peace and truce are in effect.";
             }
@@ -753,7 +779,7 @@ final class Politics {
         return proposal;
     }
 
-    private void parseTerms(DiplomaticProposal proposal, String text) {
+    void parseTerms(DiplomaticProposal proposal, String text) {
         if ("-".equals(text)) return;
         Set<String> seen = new HashSet<>();
         String[] terms = text.split(",", -1);
@@ -774,7 +800,45 @@ final class Politics {
         }
     }
 
-    private void validateTreaty(DiplomaticProposal proposal) {
+    void validateTreatyReferences(DiplomaticProposal proposal) {
+        String repair = "Treaty " + proposal.id + " requires operator repair: ";
+        Government from = e.data.governments.get(proposal.fromNation);
+        Government to = e.data.governments.get(proposal.toNation);
+        check(e.validHierarchy(from) && from.kind == Kind.NATION, repair + "fromNation must reference a valid nation.");
+        check(e.validHierarchy(to) && to.kind == Kind.NATION, repair + "toNation must reference a valid nation.");
+        check(!from.id.equals(to.id), repair + "signatories must be different nations.");
+        check(proposal.ratified != null, repair + "ratified nation set is missing.");
+        check(proposal.chunks != null, repair + "chunk terms are missing.");
+        Set<String> seen = new HashSet<>();
+        for (int index = 0; index < proposal.chunks.size(); index++) {
+            ChunkTerm term = proposal.chunks.get(index);
+            String field = repair + "chunk term " + (index + 1) + " ";
+            check(term != null, field + "is null.");
+            check(term.key != null, field + "key is missing.");
+            try {
+                check(term.key.equals(ChunkKey.parse(term.key).toString()), field + "key is noncanonical.");
+            } catch (UserError error) {
+                throw new UserError(field + "key must be canonical dimension|x|z coordinates: " + term.key);
+            }
+            check(seen.add(term.key), field + "duplicates chunk " + term.key + ".");
+            Government oldCity = e.data.governments.get(term.fromCity);
+            Government newCity = e.data.governments.get(term.toCity);
+            check(e.validHierarchy(oldCity) && oldCity.kind == Kind.CITY,
+                    field + "fromCity must reference a valid source city.");
+            check(e.validHierarchy(newCity) && newCity.kind == Kind.CITY,
+                    field + "toCity must reference a valid destination city.");
+            String donorNation = e.nationId(oldCity);
+            String receivingNation = e.nationId(newCity);
+            check((from.id.equals(donorNation) && to.id.equals(receivingNation))
+                            || (to.id.equals(donorNation) && from.id.equals(receivingNation)),
+                    field + "cities must belong to opposite signatories.");
+            Claim claim = e.data.claims.get(term.key);
+            check(claim != null && term.key.equals(claim.key), field + "references a missing or invalid claimed chunk.");
+        }
+    }
+
+    void validateTreaty(DiplomaticProposal proposal) {
+        validateTreatyReferences(proposal);
         Government from = nation(proposal.fromNation);
         Government to = nation(proposal.toNation);
         different(from, to);
@@ -783,21 +847,13 @@ final class Politics {
         e.requireEconomy(proposal.offeredCents);
         e.requireEconomy(proposal.demandedCents);
         check(proposal.chunks.size() <= e.config.maxTreatyChunks, "Treaty chunk limit exceeded.");
-        Set<String> seen = new HashSet<>();
         Set<String> recipients = new HashSet<>();
         Map<String, Set<String>> after = new LinkedHashMap<>();
         for (ChunkTerm term : proposal.chunks) {
-            check(term != null && seen.add(term.key), "Treaty contains invalid or duplicate chunk terms.");
             Claim claim = e.requiredClaim(term.key);
-            check(term.fromCity.equals(claim.cityId), "A treaty chunk has changed political ownership.");
+            check(Objects.equals(term.fromCity, claim.cityId), "A treaty chunk has changed political ownership.");
             Government oldCity = e.gov(term.fromCity);
             Government newCity = e.gov(term.toCity);
-            check(oldCity.kind == Kind.CITY && newCity.kind == Kind.CITY, "Treaty chunks must move between cities.");
-            String donorNation = e.nationId(oldCity);
-            String receivingNation = e.nationId(newCity);
-            check((from.id.equals(donorNation) && to.id.equals(receivingNation))
-                            || (to.id.equals(donorNation) && from.id.equals(receivingNation)),
-                    "Every treaty chunk must move from one signatory to the other.");
             check(e.account(oldCity).equals(claim.ownerAccount), "Treaties cannot confiscate privately owned property.");
             e.assertClaimFree(term.key, proposal.id);
             after.computeIfAbsent(oldCity.id, e::cityClaims).remove(term.key);
@@ -815,13 +871,9 @@ final class Politics {
         validateTreaty(proposal);
         if ("READY".equals(proposal.status) || "AWAITING_RATIFICATION".equals(proposal.status))
             check(proposal.ratified.containsAll(List.of(proposal.fromNation, proposal.toNation)), "Both ratifications are required.");
-        String from = e.account(nation(proposal.fromNation));
-        String to = e.account(nation(proposal.toNation));
-        List<EconomyAccess.Transfer> transfers = List.of(
-                new EconomyAccess.Transfer(from, to, proposal.offeredCents, "Peace treaty " + proposal.id),
-                new EconomyAccess.Transfer(to, from, proposal.demandedCents, "Peace treaty " + proposal.id));
-        e.pay(transfers);
+        e.pay(treatyTransfers(proposal));
         // No validation or external payment remains after this point.
+        e.changed();
         for (ChunkTerm term : proposal.chunks) {
             Claim claim = e.data.claims.get(term.key);
             claim.cityId = term.toCity;
@@ -839,7 +891,14 @@ final class Politics {
                 + " is settled. A binding truce lasts until " + relation.truceUntil + ".");
     }
 
-    private boolean requiresRatification(DiplomaticProposal proposal) {
+    List<EconomyAccess.Transfer> treatyTransfers(DiplomaticProposal proposal) {
+        String from = e.account(nation(proposal.fromNation));
+        String to = e.account(nation(proposal.toNation));
+        return List.of(new EconomyAccess.Transfer(from, to, proposal.offeredCents, "Peace treaty " + proposal.id),
+                new EconomyAccess.Transfer(to, from, proposal.demandedCents, "Peace treaty " + proposal.id));
+    }
+
+    boolean requiresRatification(DiplomaticProposal proposal) {
         return e.config.requirePeaceRatification || e.flag(nation(proposal.fromNation), "peaceRatification")
                 || e.flag(nation(proposal.toNation), "peaceRatification");
     }
@@ -847,10 +906,13 @@ final class Politics {
     private void ratificationPassed(Bill bill) {
         DiplomaticProposal proposal = e.data.diplomacy.get(bill.treatyId);
         if (proposal == null || !"AWAITING_RATIFICATION".equals(proposal.status)) return;
+        check(proposal.ratified != null, "Treaty " + proposal.id + " requires operator repair: ratified nation set is missing.");
+        e.changed();
         proposal.ratified.add(bill.nationId);
         notifyPair(proposal.fromNation, proposal.toNation, "Treaty ratification",
                 e.governmentName(bill.nationId) + " ratified treaty " + proposal.id + ".");
-        if (proposal.ratified.containsAll(List.of(proposal.fromNation, proposal.toNation))) {
+        if (proposal.fromNation != null && proposal.toNation != null
+                && proposal.ratified.contains(proposal.fromNation) && proposal.ratified.contains(proposal.toNation)) {
             proposal.status = "READY";
             try {
                 executeTreaty(proposal);
@@ -869,6 +931,7 @@ final class Politics {
     }
 
     private void finishProposal(DiplomaticProposal proposal, String status, String reason) {
+        e.changed();
         proposal.status = status;
         for (Bill bill : e.data.bills.values()) {
             if (bill != null && proposal.id.equals(bill.treatyId) && LIVE_BILLS.contains(bill.status)) {
@@ -887,7 +950,7 @@ final class Politics {
         return proposal;
     }
 
-    private void proposalCapacity(String from, String to) {
+    void proposalCapacity(String from, String to) {
         for (String nation : List.of(from, to)) {
             check(e.data.diplomacy.values().stream().filter(Objects::nonNull)
                             .filter(p -> LIVE_PROPOSALS.contains(p.status) && (nation.equals(p.fromNation) || nation.equals(p.toNation))).count()
@@ -895,7 +958,7 @@ final class Politics {
         }
     }
 
-    private void noDuplicateProposal(String from, String to, String type) {
+    void noDuplicateProposal(String from, String to, String type) {
         check(e.data.diplomacy.values().stream().filter(Objects::nonNull).noneMatch(p -> type.equals(p.type)
                         && LIVE_PROPOSALS.contains(p.status) && pair(from, to).equals(pair(p.fromNation, p.toNation))),
                 "A proposal of this type already exists between these nations.");
@@ -904,12 +967,14 @@ final class Politics {
     private void closeAllianceProposals(String from, String to) {
         for (DiplomaticProposal proposal : e.data.diplomacy.values()) {
             if (proposal != null && "ALLIANCE".equals(proposal.type) && "PROPOSED".equals(proposal.status)
-                    && pair(from, to).equals(pair(proposal.fromNation, proposal.toNation)))
+                    && pair(from, to).equals(pair(proposal.fromNation, proposal.toNation))) {
                 proposal.status = "SUPERSEDED";
+                e.changed();
+            }
         }
     }
 
-    private void diplomaticExecutive(Actor actor, DiplomaticProposal proposal) {
+    void diplomaticExecutive(Actor actor, DiplomaticProposal proposal) {
         if (actor.admin()) return;
         Government from = nation(proposal.fromNation);
         Government to = nation(proposal.toNation);
@@ -921,7 +986,8 @@ final class Politics {
     boolean claimLocked(String key, String ignoredProposal) {
         return e.data.diplomacy.values().stream().filter(Objects::nonNull)
                 .filter(p -> holdsProposalObligations(p) && !Objects.equals(p.id, ignoredProposal))
-                .anyMatch(p -> p.chunks.stream().filter(Objects::nonNull).anyMatch(term -> key.equals(term.key)));
+                .anyMatch(p -> p.chunks == null || p.chunks.stream().filter(Objects::nonNull)
+                        .anyMatch(term -> Objects.equals(key, term.key)));
     }
 
     boolean governmentLocked(String governmentId) {
@@ -931,7 +997,7 @@ final class Politics {
                 .anyMatch(b -> governmentId.equals(b.nationId) && (b.status == null || !CLOSED_BILLS.contains(b.status)))
                 || e.data.diplomacy.values().stream().filter(Objects::nonNull)
                 .anyMatch(p -> holdsProposalObligations(p) && (governmentId.equals(p.fromNation) || governmentId.equals(p.toNation)
-                        || p.chunks.stream().filter(Objects::nonNull)
+                        || p.chunks == null || p.chunks.stream().filter(Objects::nonNull)
                         .anyMatch(term -> governmentId.equals(term.fromCity) || governmentId.equals(term.toCity))))
                 || e.data.relations.values().stream().filter(Objects::nonNull)
                 .anyMatch(r -> (governmentId.equals(r.first) || governmentId.equals(r.second))
@@ -960,6 +1026,7 @@ final class Politics {
             Relation relation = new Relation();
             relation.first = first.compareTo(second) < 0 ? first : second;
             relation.second = first.compareTo(second) < 0 ? second : first;
+            e.changed();
             return relation;
         });
     }
@@ -969,7 +1036,7 @@ final class Politics {
         return first.compareTo(second) < 0 ? first + "|" + second : second + "|" + first;
     }
 
-    private Government nation(String reference) {
+    Government nation(String reference) {
         Government nation = e.gov(reference);
         check(nation.kind == Kind.NATION, "Diplomacy, national elections and legislation require a nation.");
         return nation;
@@ -1020,7 +1087,8 @@ final class Politics {
                 if (bill.treatyId != null) failTreaty(bill.treatyId, "Ratification could not be processed.");
             }
         }
-        e.data.relations.values().removeIf(r -> r != null && "NEUTRAL".equals(r.status) && r.truceUntil <= now);
+        if (e.data.relations.values().removeIf(r -> r != null && "NEUTRAL".equals(r.status) && r.truceUntil <= now))
+            e.changed();
         pruneHistory();
     }
 
@@ -1031,7 +1099,10 @@ final class Politics {
                 .sorted(Comparator.comparingLong((Bill b) -> b.createdAt).reversed().thenComparing(b -> b.id))
                 .toList().forEach(b -> {
                     int count = retainedBills.merge(b.nationId, 1, Integer::sum);
-                    if (count > e.config.maxHistory) e.data.bills.remove(b.id);
+                    if (count > e.config.maxHistory) {
+                        e.data.bills.remove(b.id);
+                        e.changed();
+                    }
                 });
         Map<String, Integer> retainedProposals = new HashMap<>();
         e.data.diplomacy.values().stream().filter(Objects::nonNull)
@@ -1039,7 +1110,10 @@ final class Politics {
                 .sorted(Comparator.comparingLong((DiplomaticProposal p) -> p.createdAt).reversed()
                         .thenComparing(p -> p.id)).toList().forEach(p -> {
                     int count = retainedProposals.merge(p.fromNation, 1, Integer::sum);
-                    if (count > e.config.maxHistory) e.data.diplomacy.remove(p.id);
+                    if (count > e.config.maxHistory) {
+                        e.data.diplomacy.remove(p.id);
+                        e.changed();
+                    }
                 });
     }
 

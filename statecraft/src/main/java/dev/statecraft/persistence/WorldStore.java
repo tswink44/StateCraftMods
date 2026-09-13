@@ -36,12 +36,18 @@ public final class WorldStore {
     private final Path directory;
     private final Path snapshot;
     private final Path previous;
+    private final Runnable prepareSnapshot;
     private final Map<String, Object> live = new LinkedHashMap<>();
     private JsonObject sections = new JsonObject();
     private long revision;
     private boolean migrated;
 
     public WorldStore(Path worldDirectory) throws IOException {
+        this(worldDirectory, () -> {});
+    }
+
+    public WorldStore(Path worldDirectory, Runnable prepareSnapshot) throws IOException {
+        this.prepareSnapshot = java.util.Objects.requireNonNull(prepareSnapshot);
         directory = worldDirectory.resolve("statecraft");
         snapshot = directory.resolve("world.json");
         previous = directory.resolve("world.previous.json");
@@ -125,7 +131,10 @@ public final class WorldStore {
     }
 
     public synchronized boolean save() throws IOException {
-        JsonObject nextSections = sections.deepCopy();
+        prepareSnapshot.run();
+        JsonObject nextSections = new JsonObject();
+        // Stored JSON sections are immutable; live models replace their entries below.
+        sections.entrySet().forEach(entry -> nextSections.add(entry.getKey(), entry.getValue()));
         live.forEach((key, value) -> nextSections.add(key, GSON.toJsonTree(value)));
         if (!migrated && Files.exists(snapshot) && nextSections.equals(sections)) {
             return false;

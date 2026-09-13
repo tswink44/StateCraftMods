@@ -40,6 +40,7 @@ final class Communications {
                 boolean removed = player.inbox.removeIf(m -> m != null && args.get(2).equals(m.id));
                 removed |= player.sent.removeIf(m -> m != null && args.get(2).equals(m.id));
                 check(removed, "No message with that ID exists in your mailbox.");
+                e.changed();
                 return "Message deleted from your mailbox only.";
             }
             case "send", "compose" -> {
@@ -92,6 +93,7 @@ final class Communications {
                 boolean removed = government.inbox.removeIf(m -> m != null && args.get(4).equals(m.id));
                 removed |= government.sent.removeIf(m -> m != null && args.get(4).equals(m.id));
                 check(removed, "That message is not in this official mailbox.");
+                e.changed();
                 return "Official mailbox copy deleted.";
             }
             case "send", "compose" -> {
@@ -154,8 +156,9 @@ final class Communications {
         mail.body = body;
         mail.sentAt = e.now();
         List<Mail> inbox = box(recipient, false);
+        e.changed();
         inbox.add(mail);
-        GovernanceEngine.trim(inbox, e.config.maxMail);
+        e.trim(inbox, e.config.maxMail);
         if (sentCopy) {
             Mail copy = new Mail();
             copy.id = mail.id;
@@ -167,16 +170,16 @@ final class Communications {
             copy.read = true;
             List<Mail> sent = box(sender, true);
             sent.add(copy);
-            GovernanceEngine.trim(sent, e.config.maxMail);
+            e.trim(sent, e.config.maxMail);
         }
     }
 
-    private String recipient(String reference) {
+    String recipient(String reference) {
         if (reference.startsWith("government:")) return e.account(e.gov(reference.substring("government:".length())));
         return "player:" + e.resolvePlayer(reference).id;
     }
 
-    private void validateRecipientAccount(String account) {
+    void validateRecipientAccount(String account) {
         check(account != null, "No recipient was specified.");
         String[] parts = account.split(":", 2);
         check(parts.length == 2, "Invalid mail recipient.");
@@ -211,9 +214,16 @@ final class Communications {
         Mail message = find(inbox, id, owner, false);
         if (message == null) message = find(sent, id, owner, true);
         check(message != null, "That message is not in this mailbox.");
-        message.read = true;
+        markRead(message);
         return message.subject + "\nFrom: " + message.sender + "\nTo: " + message.recipient
                 + "\nSent: " + message.sentAt + "\n" + message.body;
+    }
+
+    void markRead(Mail message) {
+        if (!message.read) {
+            message.read = true;
+            e.changed();
+        }
     }
 
     private Mail find(List<Mail> messages, String id, String owner, boolean sent) {
@@ -221,7 +231,7 @@ final class Communications {
                 .filter(mail -> owner.equals(sent ? mail.sender : mail.recipient) && id.equals(mail.id)).findFirst().orElse(null);
     }
 
-    private String userMessage(String subject, String body) {
+    String userMessage(String subject, String body) {
         GovernanceEngine.text(subject, 100, "Subject");
         return GovernanceEngine.prose(body, e.config.maxMailBodyLength, "Message body");
     }

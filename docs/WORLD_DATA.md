@@ -1,12 +1,44 @@
 # World data and recovery
 
-StateCraft uses `<world>\statecraft\world.json`, a human-readable JSON snapshot with `schemaVersion`, `revision`, `savedAt`, and named `sections`. The current snapshot schema is **1**, independently of the mod version **2.1.0**. The UI changes in 2.1 do not migrate or rewrite the domain schema.
+StateCraft uses `<world>\statecraft\world.json`, a human-readable JSON snapshot with `schemaVersion`, `revision`, `savedAt`, and named `sections`. The snapshot schema remains **1** in mod version **2.2.0**. Existing governance/economy models remain readable. The core now also owns a versioned `ui_operations` section with a stable world UUID and bounded operation receipts.
 
-Both mods register their mutable models with the core world store. Governance, economy, share reservations, and integration locks are serialized into **one snapshot**, so a save cannot update the stock ledger in one mod file while retaining a different government/share state in another. Sections belonging to an absent optional module are retained unchanged.
+Both mods register their mutable models with the core world store. Governance, economy, share reservations, integration locks, and UI operation results are serialized into **one snapshot**, so a save cannot update the stock ledger in one mod file while retaining a different government/share state in another. Sections belonging to an absent optional module are retained unchanged.
 
 Writes are serialized on the server thread, written to a new temporary file, flushed, and then atomically replaced where the filesystem supports atomic replacement. The prior complete snapshot is kept as `world.previous.json`. A platform that does not support atomic moves uses a replacement move after the temporary file has been fully written.
 
-Successful player command and GUI actions flush their state before replying. Periodic processing is flushed every 30 seconds, at world save, and on server stop. The store skips identical snapshots. Minecraft player inventories are still saved by Minecraft, so back up the entire world rather than only this JSON file.
+Player, GUI, and console commands share one execution gateway. Mutating actions flush their state before replying, including persistent side effects that precede a rejected action. Genuinely read-only requests do not trigger full-world serialization. Domain mutation callbacks also cover scheduled changes, public integration operations, and queries that accrue interest or mark mail read; this is not a command-name whitelist.
+
+Activity timestamps such as last-seen and the last governance tick remain current in memory and are included in the forced snapshots every 30 seconds, at world save, and on server stop. Explicit saves and backups also include them. The store skips identical snapshots. Minecraft player inventories are still saved by Minecraft, so back up the entire world rather than only this JSON file.
+
+## Reviewed UI operations
+
+GUI mutations and advanced GUI commands first obtain a server review. The server issues an operation UUID scoped to this world's UUID, binds it to the precise inputs, and expires the review after 30 seconds. A fresh review must agree on material costs, counterparties, items and terms at submission. Informational balances do not by themselves invalidate a quote; authorization and affordability are still enforced at execution.
+
+Before starting an operation, the server persists a `PREPARED` receipt. The final outcome is then saved with the operation's domain effects in the same snapshot. A repeated matching ID returns its receipt instead of repeating the command. The final review and execution use a shared decision instant so an interest-period boundary cannot silently change a quoted amount between those steps.
+
+After a timeout or disk failure, use the operation's **Check status** flow. A completed result is only confirmed when its snapshot revision has been saved. A `PREPARED` or uncertain result after a crash is not automatically replayed. Unknown/expired history IDs cannot start actions: execution requires their original live server-issued review or an existing receipt.
+
+Receipts are bounded to 10,000 records, with a seven-day terminal-receipt retention target and earlier compaction under capacity pressure. Unresolved receipts are not pruned automatically; each player can have at most 128 unresolved operations. Retention is not a promise of permanent financial history. Use the ordinary account/history views and whole-world backups for longer-term investigation.
+
+Operators can reconcile a retained uncertain operation **after independently inspecting account, world and inventory state**:
+
+```text
+/sc admin operation resolve <operationUUID> completed <reason>
+/sc admin operation resolve <operationUUID> not_executed <reason>
+```
+
+This records a visible audit reason and outcome. It never replays, refunds, or undoes the original command. Restore disk writes with `/sc admin save` first when persistence is paused. Operation administration is also available through the UI; ordinary players can inspect only their own receipts.
+
+If a client's retained reference outlived the server's bounded receipt history, operators can audit the account/world/inventory evidence and record a terminal recovery receipt:
+
+```text
+/sc admin operation recover <playerUUID> <operationUUID> completed <reason>
+/sc admin operation recover <playerUUID> <operationUUID> not_executed <reason>
+```
+
+Use the affected player's UUID and the exact operation UUID from their recovery screen. A live original review must expire first; another player's receipt or an already final result cannot be overwritten. This creates an owner-scoped audit tombstone, never reconstructs or executes the old inputs, and lets the client use **Check status** to unlock its workspace. Do not guess an outcome just to dismiss a warning.
+
+These guarantees cover duplicate reviewed UI submissions, not an atomic transaction across Minecraft player inventory saves and the suite snapshot. Cash/item operations interrupted across that boundary may require manual reconciliation. Native chat and console commands keep their normal execution behavior; their explicit repeated invocation is a new command, not a replay of a GUI operation ID.
 
 ## Backups
 
@@ -24,6 +56,8 @@ To restore a backup:
 4. Restart with matching mod versions and use `/sc admin audit` to inspect consistency.
 
 Automatic financial integration locks are saved with the snapshot. If Economy is temporarily removed, funded government/company accounts and economically encumbered claims remain protected from destructive governance actions. Reinstall Economy to resolve their balances or obligations.
+
+Integration locks are refreshed by snapshot preparation inside the world store itself. Direct saves, manual backups, and periodic backups therefore capture the same financial protections as their accompanying economy data, even when scheduled processing changed an obligation since the last regular save.
 
 ## Compatible legacy import
 

@@ -812,6 +812,33 @@ def economy_emblem() -> Canvas:
     return c
 
 
+def ui_translations() -> dict[str, str]:
+    def unique(pairs):
+        values = {}
+        for key, value in pairs:
+            if key in values:
+                raise ValueError(f"Duplicate translation key: {key}")
+            values[key] = value
+        return values
+
+    directory = ROOT / "tools" / "translations"
+    if not directory.is_dir():
+        raise ValueError(f"Missing UI translation catalog: {directory}")
+    result = {}
+    for path in sorted(directory.glob("*.json")):
+        with path.open(encoding="utf-8") as source:
+            fragment = json.load(source, object_pairs_hook=unique)
+        if not isinstance(fragment, dict):
+            raise ValueError(f"Translation fragment must be an object: {path}")
+        for key, value in fragment.items():
+            if not isinstance(key, str) or not key or not isinstance(value, str) or not value:
+                raise ValueError(f"Invalid translation entry in {path}: {key}")
+            if key in result and result[key] != value:
+                raise ValueError(f"Conflicting UI translation: {key}")
+            result[key] = value
+    return result
+
+
 def generate() -> dict[Path, bytes]:
     outputs: dict[Path, bytes] = {}
 
@@ -825,6 +852,7 @@ def generate() -> dict[Path, bytes]:
         "key.statecraft.menu": "Open StateCraft Menu",
         "key.statecraft.borders": "Cycle Territory Borders",
         "key.categories.statecraft": "StateCraft",
+        **ui_translations(),
     })
     add_texture(CORE_ASSETS / "textures" / "gui" / "statecraft_emblem.png", core_emblem())
     language = {

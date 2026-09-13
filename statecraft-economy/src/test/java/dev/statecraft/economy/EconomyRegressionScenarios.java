@@ -823,6 +823,494 @@ public final class EconomyRegressionScenarios {
         eq(metadata, inventory.held().snbt());
     }
 
+    public static void elapsedDepositInterestProtectsOrdinaryBankOutflowsWithoutMutation() {
+        TestWorld w = new TestWorld();
+        String bank = w.bank(1000, 100, 0);
+        w.set(BUYER, 10_000);
+        w.engine.banking.deposit(BUYER, bank, 10_000);
+        w.engine.taxes.assess("bank:co", "nation:n1", "n1", "propertyTaxBps", 100, CLAIM);
+        EconomyData.Deposit deposit = w.data.banks.get(bank).deposits.get(BUYER.id().toString());
+        long lastAccrued = deposit.lastAccruedAt;
+        int history = w.data.transactions.size();
+        w.advance(10_000);
+        w.dirty = 0;
+        eq(BigInteger.valueOf(11_000), w.engine.banking.liabilities(w.data.banks.get(bank)));
+        eq(0, w.engine.spendable("bank:co"));
+        expect(UserError.class, () -> w.engine.pay(OWNER, "bank:co", OWNER.account(), 1000, "elapsed depositor interest"));
+        expect(UserError.class, () -> w.engine.banking.capital(OWNER, bank, true, 1));
+        expect(UserError.class, () -> w.engine.withdrawCash(OWNER, "bank:co", 100, new Inventory()));
+        expect(UserError.class, () -> w.engine.adminAdjust(ADMIN, "bank:co", "take", 1));
+        expect(UserError.class, () -> w.engine.transferBatch(List.of(new Transfer("bank:co", OWNER.account(), 1, "trusted outflow"))));
+        eq(0, w.engine.taxes.pay("bank:co", Money.MAX, true));
+        eq(11_000, w.engine.balance("bank:co")); eq(0, w.engine.balance(OWNER.account()));
+        eq(10_000, deposit.balance); eq("0", deposit.pendingInterest); eq("0", deposit.interestRemainder);
+        eq(lastAccrued, deposit.lastAccruedAt); eq(history, w.data.transactions.size()); eq(0, w.dirty);
+        w.engine.banking.tickDeposit(bank + "|" + BUYER.id());
+        eq(11_000, deposit.balance);
+        expect(UserError.class, () -> w.engine.pay(OWNER, "bank:co", OWNER.account(), 1, "same decision after maintenance"));
+        w.engine.adminAdjust(ADMIN, "bank:co", "mint", 100);
+        w.engine.pay(OWNER, "bank:co", OWNER.account(), 100, "only actual surplus");
+        eq(11_000, w.engine.balance("bank:co"));
+    }
+
+    public static void depositReserveQuotesPreserveSavedRatesFractionsAndLargeInterest() {
+        TestWorld w = new TestWorld();
+        String bank = w.bank(1, 100, 0);
+        w.set(BUYER, 100);
+        w.engine.banking.deposit(BUYER, bank, 100);
+        w.advance(333);
+        w.engine.banking.tickDeposit(bank + "|" + BUYER.id());
+        EconomyData.Deposit deposit = w.data.banks.get(bank).deposits.get(BUYER.id().toString());
+        eq("3330000", deposit.interestRemainder);
+        w.engine.banking.rates(OWNER, bank, 0, 0, 0, 0, 0);
+        w.config.financialPeriodMillis = 2000;
+        w.advance(667);
+        w.dirty = 0;
+        eq(BigInteger.valueOf(101), w.engine.banking.liabilities(w.data.banks.get(bank)));
+        expect(UserError.class, () -> w.engine.pay(OWNER, "bank:co", OWNER.account(), 1, "saved fractional interest"));
+        eq("3330000", deposit.interestRemainder); eq("0", deposit.pendingInterest); eq(0, w.dirty);
+        w.engine.banking.tickDeposit(bank + "|" + BUYER.id());
+        eq(101, deposit.balance); eq("0", deposit.interestRemainder);
+        w.clock.now -= 500;
+        eq(BigInteger.valueOf(101), w.engine.banking.liabilities(w.data.banks.get(bank)));
+
+        TestWorld huge = new TestWorld();
+        String hugeBank = huge.bank(Money.MAX - 1000, 100, 0);
+        huge.set(BUYER, 1000);
+        huge.engine.banking.deposit(BUYER, hugeBank, 1000);
+        huge.clock.now = Long.MAX_VALUE;
+        huge.dirty = 0;
+        check(huge.engine.banking.liabilities(huge.data.banks.get(hugeBank)).compareTo(BigInteger.valueOf(Money.MAX)) > 0,
+                "long elapsed interest was truncated");
+        eq(Money.MAX, huge.engine.banking.requiredReserve(huge.data.banks.get(hugeBank)));
+        eq(Money.MAX, huge.engine.banking.protectedBalance(huge.data.banks.get(hugeBank)));
+        expect(UserError.class, () -> huge.engine.pay(OWNER, "bank:co", OWNER.account(), 1, "overflow-safe reserve"));
+        eq(Money.MAX, huge.engine.balance("bank:co")); eq(0, huge.dirty);
+    }
+
+    public static void lendingAndWithdrawalsIncludeOtherDepositorsElapsedInterest() {
+        TestWorld w = new TestWorld(c -> c.minimumBankReserveBps = 10_000);
+        String bank = w.bank(1000, 100, 0);
+        w.set(BUYER, 10_000); w.set(FOREIGN, 1000);
+        w.engine.banking.deposit(BUYER, bank, 10_000);
+        w.engine.banking.deposit(FOREIGN, bank, 1000);
+        w.advance(10_000);
+        w.engine.banking.associate(OWNER, bank);
+        String application = w.engine.banking.requestLoan(OWNER, bank, 100, 4, null, false, false, false);
+        eq(12_100, w.engine.banking.requiredReserve(w.data.banks.get(bank)));
+        w.dirty = 0;
+        expect(UserError.class, () -> w.engine.banking.approve(OWNER, application));
+        eq("REQUESTED", w.data.loans.get(application).status); eq(0, w.dirty);
+        expect(UserError.class, () -> w.engine.banking.withdraw(BUYER, bank, 1000));
+        eq(12_000, w.engine.balance("bank:co")); eq(0, w.engine.balance(BUYER.account()));
+        eq(11_000, w.engine.banking.balance(BUYER, bank, null).balance());
+        eq("0", w.data.banks.get(bank).deposits.get(FOREIGN.id().toString()).pendingInterest);
+        check(w.dirty > 0, "withdrawal failure lost the customer's separately accrued/funded interest");
+        w.engine.adminAdjust(ADMIN, "bank:co", "mint", 100);
+        w.engine.banking.withdraw(BUYER, bank, 1000);
+        eq(11_100, w.engine.balance("bank:co")); eq(10_000, w.engine.banking.balance(BUYER, bank, null).balance());
+    }
+
+    public static void loanApplicationsUseCurrentContractualExposureWithoutBookingInterest() {
+        TestWorld w = new TestWorld(c -> { c.maximumBorrowerDebtCents = 1000; c.loanApplicationLifetimeMillis = 10_000; });
+        String bank = w.bank(10_000, 0, 500);
+        String active = w.loan(BUYER, bank, 800, null, false, false, false);
+        long lastAccrued = w.data.loans.get(active).lastAccruedAt;
+        w.advance(1000);
+        w.engine.banking.rates(OWNER, bank, 0, 0, 0, 0, 0);
+        w.config.financialPeriodMillis = 2000;
+        w.dirty = 0;
+        expect(UserError.class, () -> w.engine.banking.requestLoan(BUYER, bank, 200, 4, null, false, false, false));
+        eq(1, w.data.loans.size()); eq(0, w.data.loans.get(active).interest);
+        eq(lastAccrued, w.data.loans.get(active).lastAccruedAt); eq(0, w.dirty);
+        String application = w.engine.banking.requestLoan(BUYER, bank, 160, 4, null, false, false, false);
+        w.engine.banking.approve(OWNER, application);
+        eq(840, w.engine.banking.loanSummary(BUYER, active).total());
+        eq(160, w.engine.banking.loanSummary(BUYER, application).total());
+    }
+
+    public static void repossessionSurplusPreservesElapsedDepositReserves() {
+        TestWorld w = new TestWorld(c -> c.minimumBankReserveBps = 10_000);
+        String bank = w.bank(10_000, 100, 0);
+        w.set(FOREIGN, 10_000);
+        w.engine.banking.deposit(FOREIGN, bank, 10_000);
+        String loan = w.loan(BUYER, bank, 5000, BUYER_CLAIM, false, true, false);
+        w.engine.pay(BUYER, "me", OWNER.account(), 5000, "spend loan");
+        w.advance(2000);
+        expect(UserError.class, () -> w.engine.banking.tickLoan(loan));
+        eq("DEFAULTED", w.data.loans.get(loan).status);
+        eq(BUYER.account(), w.governance.claims.get(BUYER_CLAIM).ownerAccount());
+        eq(15_000, w.engine.balance("bank:co"));
+        eq("0", w.data.banks.get(bank).deposits.get(FOREIGN.id().toString()).pendingInterest);
+        w.engine.adminAdjust(ADMIN, "bank:co", "mint", 200);
+        w.engine.banking.recover(OWNER, loan);
+        eq("REPAID", w.data.loans.get(loan).status);
+        eq("company:co", w.governance.claims.get(BUYER_CLAIM).ownerAccount());
+        eq(10_200, w.engine.balance("bank:co")); eq(5000, w.engine.balance(BUYER.account()));
+    }
+
+    public static void loanFundingRechecksAggregateExposureBeforeAndAfterInterestRefresh() {
+        TestWorld w = new TestWorld(c -> { c.maximumBorrowerDebtCents = 1000; c.loanApplicationLifetimeMillis = 10_000; });
+        String bank = w.bank(10_000, 0, 500);
+        String active = w.loan(BUYER, bank, 800, null, false, false, false);
+        String application = w.engine.banking.requestLoan(BUYER, bank, 200, 4, null, false, false, false);
+        w.advance(1000);
+        w.dirty = 0;
+        expect(UserError.class, () -> w.engine.banking.approve(OWNER, application));
+        eq("REQUESTED", w.data.loans.get(application).status); eq(0, w.data.loans.get(active).interest);
+        eq(9200, w.engine.balance("bank:co")); eq(800, w.engine.balance(BUYER.account())); eq(0, w.dirty);
+        eq(40, w.engine.banking.loanSummary(BUYER, active).interest());
+        w.dirty = 0;
+        expect(UserError.class, () -> w.engine.banking.approve(OWNER, application));
+        eq(0, w.dirty); eq("REQUESTED", w.data.loans.get(application).status);
+        w.engine.banking.repay(BUYER, active, 40);
+        w.engine.banking.approve(OWNER, application);
+        eq(1000, w.engine.banking.loanSummary(BUYER, active).total()
+                + w.engine.banking.loanSummary(BUYER, application).total());
+    }
+
+    public static void borrowerLimitsIncludeOtherApplicationsButNotExpiredOnesOrDuplicatePrincipal() {
+        TestWorld w = new TestWorld(c -> c.maximumBorrowerDebtCents = 1000);
+        String bank = w.bank(10_000, 0, 0);
+        w.loan(BUYER, bank, 600, null, false, false, false);
+        String first = w.engine.banking.requestLoan(BUYER, bank, 200, 4, null, false, false, false);
+        String second = w.engine.banking.requestLoan(BUYER, bank, 200, 4, null, false, false, false);
+        expect(UserError.class, () -> w.engine.banking.requestLoan(BUYER, bank, 1, 4, null, false, false, false));
+        w.config.maximumBorrowerDebtCents = 900;
+        expect(UserError.class, () -> w.engine.banking.approve(OWNER, first));
+        w.engine.banking.reject(BUYER, second);
+        w.engine.banking.approve(OWNER, first);
+        eq("ACTIVE", w.data.loans.get(first).status);
+        eq(800, w.engine.balance(BUYER.account()));
+
+        TestWorld expired = new TestWorld(c -> c.maximumBorrowerDebtCents = 1000);
+        String expiredBank = expired.bank(10_000, 0, 500);
+        expired.engine.banking.associate(BUYER, expiredBank);
+        String old = expired.engine.banking.requestLoan(BUYER, expiredBank, 1000, 4, null, false, false, false);
+        expired.advance(1000);
+        String current = expired.engine.banking.requestLoan(BUYER, expiredBank, 1000, 4, null, false, false, false);
+        expect(UserError.class, () -> expired.engine.banking.approve(OWNER, old));
+        expired.engine.banking.approve(OWNER, current);
+        eq(1000, expired.engine.balance(BUYER.account()));
+        eq(0, expired.data.loans.get(current).interest);
+    }
+
+    public static void borrowerExposureUsesCarriedFractionsLifetimeCapsAndAllBanks() {
+        TestWorld w = new TestWorld(c -> { c.maximumBorrowerDebtCents = 1000; c.loanApplicationLifetimeMillis = 10_000; });
+        String bank = w.bank(10_000, 0, 500);
+        String active = w.loan(BUYER, bank, 800, null, false, false, false);
+        w.advance(333);
+        eq(13, w.engine.banking.loanSummary(BUYER, active).interest());
+        w.governance.companies.put("other", new Government.Company());
+        w.set("company:other", 1000);
+        String other = w.engine.banking.create(OWNER, "other", "Other bank", 1000, 0, 0);
+        w.engine.banking.associate(BUYER, other);
+        String application = w.engine.banking.requestLoan(BUYER, other, 187, 4, null, false, false, false);
+        w.advance(25);
+        expect(UserError.class, () -> w.engine.banking.approve(OWNER, application));
+        eq(13, w.data.loans.get(active).interest); eq("3200000", w.data.loans.get(active).interestRemainder);
+        eq(14, w.engine.banking.loanSummary(BUYER, active).interest());
+
+        TestWorld capped = new TestWorld(c -> { c.maximumBorrowerDebtCents = 1000; c.loanLifetimeInterestCapBps = 500; });
+        String cappedBank = capped.bank(10_000, 0, 1000);
+        String cappedLoan = capped.loan(BUYER, cappedBank, 800, null, false, false, false);
+        capped.advance(1_000_000_000_000L);
+        String atLimit = capped.engine.banking.requestLoan(BUYER, cappedBank, 160, 4, null, false, false, false);
+        capped.engine.banking.approve(OWNER, atLimit);
+        eq(840, capped.engine.banking.loanSummary(BUYER, cappedLoan).total());
+        capped.dirty = 0;
+        capped.advance(1);
+        eq(840, capped.engine.banking.loanSummary(BUYER, cappedLoan).total());
+        eq(0, capped.dirty);
+    }
+
+    public static void borrowerDefaultStillBlocksNewApplicationsAndPendingFunding() {
+        TestWorld w = new TestWorld(c -> c.loanApplicationLifetimeMillis = 10_000);
+        String bank = w.bank(10_000, 0, 0);
+        String active = w.loan(BUYER, bank, 800, null, false, false, false);
+        String application = w.engine.banking.requestLoan(BUYER, bank, 200, 4, null, false, false, false);
+        w.advance(2000);
+        w.engine.banking.tickLoan(active);
+        eq("DEFAULTED", w.data.loans.get(active).status);
+        expect(UserError.class, () -> w.engine.banking.approve(OWNER, application));
+        expect(UserError.class, () -> w.engine.banking.requestLoan(BUYER, bank, 1, 4, null, false, false, false));
+        eq("REQUESTED", w.data.loans.get(application).status); eq(800, w.engine.balance(BUYER.account()));
+    }
+
+    public static void mandatoryPropertyArrearsFollowTheSellerAfterTheirFinalSaleAndRestart() {
+        TestWorld w = new TestWorld(c -> { c.mandatoryPropertyTaxes = true; c.propertyListingLifetimeMillis = 10_000; });
+        w.governance.setting("n1", "propertyTaxBps", "1000");
+        w.engine.valueOf(CLAIM);
+        w.engine.property.list(OWNER, CLAIM, 1000);
+        w.set(BUYER, 1000);
+        w.engine.ledger.spendingLimit(OWNER.account(), 0);
+        w.advance(1000);
+        w.engine.property.buy(BUYER, CLAIM, false, InventoryPort.NONE);
+        eq(BigInteger.valueOf(900), w.engine.taxes.arrears(OWNER.account()));
+        eq(1000, w.engine.balance(OWNER.account()));
+        check(w.governance.claims.values().stream().noneMatch(c -> c.ownerAccount().equals(OWNER.account())),
+                "seller still owns a claim");
+        w.restart();
+        w.dirty = 0;
+        w.tick();
+        eq(BigInteger.ZERO, w.engine.taxes.arrears(OWNER.account()));
+        eq(100, w.engine.balance(OWNER.account())); eq(900, w.engine.balance("nation:n1"));
+        eq(BigInteger.ZERO, w.engine.taxes.arrears(BUYER.account()));
+        check(w.dirty > 0, "former-owner collection was not marked dirty");
+    }
+
+    public static void mandatoryPropertyArrearsSurviveRepossession() {
+        TestWorld w = new TestWorld(c -> c.mandatoryPropertyTaxes = true);
+        w.governance.setting("n1", "propertyTaxBps", "1000");
+        String bank = w.bank(20_000, 0, 0);
+        String loan = w.loan(BUYER, bank, 5000, BUYER_CLAIM, false, true, false);
+        w.engine.pay(BUYER, "me", OWNER.account(), 5000, "spend loan");
+        w.advance(2000);
+        w.engine.banking.tickLoan(loan);
+        eq("company:co", w.governance.claims.get(BUYER_CLAIM).ownerAccount());
+        eq(BigInteger.valueOf(1800), w.engine.taxes.arrears(BUYER.account()));
+        eq(4000, w.engine.balance(BUYER.account()));
+        w.restart();
+        w.tick();
+        eq(BigInteger.ZERO, w.engine.taxes.arrears(BUYER.account()));
+        eq(2200, w.engine.balance(BUYER.account()));
+        check(w.data.taxHistory.stream().anyMatch(t -> t.payer().equals(BUYER.account())
+                && t.kind().equals("propertyTaxBps") && t.status().equals("ARREARS PAID") && t.cents() == 1800),
+                "repossessed owner's assessment was not collected from that owner");
+    }
+
+    public static void mandatoryPropertyCollectionIsBoundedFairAndDoesNotCollectOptionalTaxes() {
+        TestWorld w = new TestWorld(c -> { c.mandatoryPropertyTaxes = true; c.workPerTick = 1; });
+        w.governance.claims.clear();
+        w.governance.companies.clear();
+        w.set(OWNER, 100); w.set(BUYER, 100);
+        w.set("nation:n1", Money.MAX);
+        w.engine.taxes.assess(OWNER.account(), "nation:n1", "n1", "propertyTaxBps", 100, "old property");
+        w.engine.taxes.assess(BUYER.account(), "nation:n2", "n2", "incomeTaxBps", 50, "optional income");
+        w.engine.taxes.assess(BUYER.account(), "nation:n2", "n2", "companyFee", 50, "optional fee");
+        w.engine.taxes.assess(BUYER.account(), "nation:n2", "n2", "propertyTaxBps", 100, "another old property");
+        w.restart();
+        w.dirty = 0;
+        w.tick();
+        eq(100, w.engine.balance(OWNER.account())); eq(100, w.engine.balance(BUYER.account())); eq(0, w.dirty);
+        w.tick();
+        eq(100, w.engine.balance("nation:n2")); eq(0, w.engine.balance(BUYER.account()));
+        eq(BigInteger.valueOf(100), w.engine.taxes.arrears(BUYER.account()));
+        eq(1, w.data.taxHistory.stream().filter(t -> t.status().equals("ARREARS PAID")).count());
+        w.set("nation:n1", Money.MAX - 100);
+        w.tick();
+        eq(0, w.engine.balance(OWNER.account())); eq(BigInteger.ZERO, w.engine.taxes.arrears(OWNER.account()));
+        w.set(BUYER, 100);
+        for (int i = 0; i < 4; i++) w.tick();
+        eq(100, w.engine.balance(BUYER.account())); eq(BigInteger.valueOf(100), w.engine.taxes.arrears(BUYER.account()));
+        eq(100, w.engine.taxes.pay(BUYER.account(), Money.MAX, false));
+        eq(BigInteger.ZERO, w.engine.taxes.arrears(BUYER.account()));
+    }
+
+    public static void canonicalRawAndPrefixedPlayerRecipientsUseTheSameValidation() {
+        TestWorld w = new TestWorld();
+        w.set(OWNER, 1000);
+        String full = "abcdef12-abcd-abcd-abcd-abcdefabcdef";
+        int accounts = w.data.accounts.size(), history = w.data.transactions.size();
+        w.dirty = 0;
+        for (String invalid : List.of("1-1-1-1-1", "player:1-1-1-1-1", full.toUpperCase(java.util.Locale.ROOT),
+                "player:" + full.toUpperCase(java.util.Locale.ROOT), "abcdef12-abcd-abcd-abcd-abcdefabcde", "no-such-player")) {
+            expect(UserError.class, () -> w.engine.execute(OWNER, "pay " + invalid + " 1.00", InventoryPort.NONE));
+        }
+        eq(1000, w.engine.balance(OWNER.account())); eq(accounts, w.data.accounts.size());
+        eq(history, w.data.transactions.size()); eq(0, w.dirty);
+        check(!w.data.accounts.containsKey("player:00000001-0001-0001-0001-000000000001"), "short UUID created a padded account");
+        for (String valid : List.of("bUyEr", BUYER.id().toString(), BUYER.account(), full, "player:" + full)) {
+            w.engine.execute(OWNER, "pay " + valid + " 1.00", InventoryPort.NONE);
+        }
+        eq(300, w.engine.balance(BUYER.account())); eq(200, w.engine.balance("player:" + full));
+        eq(500, w.engine.balance(OWNER.account()));
+        Actor named = actor(44, "Quoted Friend", false, 0);
+        w.engine.ensurePlayer(named);
+        w.engine.execute(OWNER, "pay \"Quoted Friend\" 1.00", InventoryPort.NONE);
+        eq(100, w.engine.balance(named.account()));
+        w.engine.ensurePlayer(actor(45, "Buyer", false, 0));
+        expect(UserError.class, () -> w.engine.execute(OWNER, "pay Buyer 1.00", InventoryPort.NONE));
+    }
+
+    public static void establishedPlayerReadQueriesDoNotMarkEconomyDirty() {
+        TestWorld w = new TestWorld();
+        String bank = w.bank(10_000, 100, 500);
+        w.loan(BUYER, bank, 800, null, false, false, false);
+        w.set(OWNER, 1000);
+        w.engine.banking.deposit(OWNER, bank, 100);
+        w.engine.property.value(CLAIM);
+        String listing = w.engine.commerce.listMarket(OWNER, 1, 100, new Inventory().item(0, "minecraft:wheat", 1));
+        w.advance(500);
+        w.dirty = 0;
+        for (String query : List.of("help", "balance me", "accounts", "account list", "history", "limits", "hub settings",
+                "hub prices", "prices", "price get minecraft:wheat", "market search", "market own", "market inspect " + listing,
+                "market deliveries", "property value here", "property listings", "property own", "company balance co",
+                "company fees co", "stock search", "stock own", "bank list", "bank balance co", "bank report co",
+                "bank loans", "bank loans co", "tax rates", "tax quote 1.00", "tax arrears", "tax report", "top player", "guide")) {
+            w.engine.execute(OWNER, query, InventoryPort.NONE);
+            eq(0, w.dirty);
+        }
+        w.engine.execute(ADMIN, "admin audit", InventoryPort.NONE);
+        w.engine.execute(ADMIN, "admin notices", InventoryPort.NONE);
+        w.engine.execute(ADMIN, "admin suggestions", InventoryPort.NONE);
+        eq(0, w.dirty);
+        expect(UserError.class, () -> w.engine.execute(OWNER, "pay Buyer -1", InventoryPort.NONE));
+        expect(UserError.class, () -> w.engine.execute(OWNER, "not-a-command", InventoryPort.NONE));
+        eq(0, w.dirty);
+    }
+
+    public static void ordinaryEconomyMutationsAndNewPlayersMarkDirtyWithoutGatewayHelp() {
+        TestWorld w = new TestWorld();
+        w.bank(10_000, 0, 0);
+        w.set(OWNER, 10_000);
+        Inventory inventory = new Inventory().item(0, "minecraft:wheat", 10);
+        for (String command : List.of("pay Buyer 1.00", "account select company:co", "hub sell 1", "market list 1 1.00",
+                "bank associate co", "bank deposit 1.00 co", "bank withdraw 0.50 co", "property list here 1.00",
+                "property delist here", "stock list co 1 1.00", "hub suggest 1.00 review")) {
+            w.dirty = 0;
+            w.engine.execute(OWNER, command, inventory);
+            check(w.dirty > 0, "mutation did not invoke the dirty callback: " + command);
+        }
+        w.dirty = 0;
+        w.engine.ledger.spendingLimit(OWNER.account(), 10_000);
+        check(w.dirty > 0, "spending-limit mutation was not persistent");
+        w.dirty = 0;
+        w.engine.taxes.assess(OWNER.account(), "nation:n1", "n1", "incomeTaxBps", 10, "test");
+        check(w.dirty > 0, "assessment was not persistent");
+        w.dirty = 0;
+        w.engine.taxes.pay(OWNER.account(), Money.MAX, false);
+        check(w.dirty > 0, "tax payment was not persistent");
+        w.config.initialPlayerBalanceCents = 100;
+        Actor newcomer = actor(600, "Newcomer", false, 0);
+        w.dirty = 0;
+        expect(UserError.class, () -> w.engine.execute(newcomer, "not-a-command", InventoryPort.NONE));
+        eq(100, w.engine.balance(newcomer.account()));
+        check(w.dirty > 0, "failed first command lost the initial grant/player record");
+        w.dirty = 0;
+        w.engine.execute(newcomer, "help", InventoryPort.NONE);
+        eq(0, w.dirty);
+        w.engine.ensurePlayer(actor(600, "Renamed", false, 0));
+        check(w.dirty > 0, "remembered name change was not persistent");
+    }
+
+    public static void readAccrualTracksWholeAndFractionalInterestButNotIdleClocks() {
+        TestWorld w = new TestWorld();
+        String bank = w.bank(10_000, 0, 500);
+        String loan = w.loan(BUYER, bank, 800, null, false, false, false);
+        w.advance(25);
+        w.dirty = 0;
+        w.engine.execute(BUYER, "loan show " + loan, InventoryPort.NONE);
+        eq(1, w.data.loans.get(loan).interest);
+        check(w.dirty > 0, "read-triggered interest was not persistent");
+        w.dirty = 0;
+        w.engine.banking.loanSummary(BUYER, loan);
+        eq(0, w.dirty);
+        w.advance(1);
+        w.engine.banking.loanSummary(BUYER, loan);
+        eq(1, w.data.loans.get(loan).interest);
+        check(w.dirty > 0, "carried fractional interest was not persistent");
+
+        TestWorld idle = new TestWorld(c -> c.loanLifetimeInterestCapBps = 0);
+        String idleBank = idle.bank(10_000, 0, 500);
+        idle.set(BUYER, 100);
+        idle.engine.banking.deposit(BUYER, idleBank, 100);
+        String cappedLoan = idle.loan(BUYER, idleBank, 800, null, false, false, false);
+        idle.advance(10);
+        idle.dirty = 0;
+        idle.engine.banking.tickDeposit(idleBank + "|" + BUYER.id());
+        idle.engine.banking.loanSummary(BUYER, cappedLoan);
+        idle.engine.banking.tickLoan(cappedLoan);
+        eq(0, idle.dirty);
+        eq(idle.clock.millis(), idle.data.loans.get(cappedLoan).lastAccruedAt);
+    }
+
+    public static void partialFailuresPreserveAccrualAssessmentsAndEscrowMutationCallbacks() {
+        TestWorld w = new TestWorld();
+        String bank = w.bank(10_000, 100, 500);
+        w.set(BUYER, 10_000);
+        w.engine.banking.deposit(BUYER, bank, 10_000);
+        String loan = w.loan(FOREIGN, bank, 800, null, false, false, false);
+        w.advance(1000);
+        int history = w.data.transactions.size();
+        w.dirty = 0;
+        expect(UserError.class, () -> w.engine.banking.deposit(BUYER, bank, 1));
+        eq("100", w.data.banks.get(bank).deposits.get(BUYER.id().toString()).pendingInterest);
+        check(w.dirty > 0, "failed deposit lost independently accrued interest");
+        w.dirty = 0;
+        expect(UserError.class, () -> w.engine.banking.repay(FOREIGN, loan, Money.MAX));
+        eq(40, w.data.loans.get(loan).interest);
+        eq(history, w.data.transactions.size());
+        check(w.dirty > 0, "failed repayment lost independently accrued interest");
+
+        TestWorld property = new TestWorld(c -> c.propertyListingLifetimeMillis = 10_000);
+        property.governance.setting("n1", "propertyTaxBps", "1000");
+        property.engine.valueOf(CLAIM);
+        property.engine.property.list(OWNER, CLAIM, 1000);
+        property.advance(1000);
+        property.dirty = 0;
+        expect(UserError.class, () -> property.engine.property.buy(BUYER, CLAIM, false, InventoryPort.NONE));
+        eq(BigInteger.valueOf(900), property.engine.taxes.arrears(OWNER.account()));
+        eq(OWNER.account(), property.governance.claims.get(CLAIM).ownerAccount());
+        check(property.dirty > 0, "failed property purchase lost due assessments");
+
+        TestWorld expired = new TestWorld();
+        String listing = expired.engine.commerce.listMarket(OWNER, 1, 100, new Inventory().item(0, "minecraft:wheat", 1));
+        expired.advance(1000);
+        expired.dirty = 0;
+        expect(UserError.class, () -> expired.engine.execute(OWNER, "market inspect " + listing, InventoryPort.NONE));
+        eq(0, expired.data.market.size()); eq(1, expired.data.deliveries.get(OWNER.id().toString()).size());
+        check(expired.dirty > 0, "expired-listing read lost its escrow refund");
+    }
+
+    public static void scheduledRemovalsAndMissedPaymentCorrectionsMarkDirty() {
+        TestWorld w = new TestWorld();
+        w.engine.commerce.tickCompany("co");
+        w.governance.companies.remove("co");
+        w.dirty = 0;
+        check(!w.engine.commerce.tickCompany("co"), "missing company remained scheduled");
+        check(w.data.companyFinance.isEmpty(), "missing company retained its fee schedule");
+        check(w.dirty > 0, "company-finance removal was not persistent");
+        w.dirty = 0;
+        w.engine.commerce.tickCompany("co");
+        eq(0, w.dirty);
+
+        TestWorld loans = new TestWorld();
+        String bank = loans.bank(10_000, 0, 0);
+        String loan = loans.loan(BUYER, bank, 800, null, false, false, false);
+        loans.advance(1000);
+        loans.engine.banking.tickLoan(loan);
+        eq(1, loans.data.loans.get(loan).missedPayments);
+        loans.engine.banking.repay(BUYER, loan, 200);
+        loans.dirty = 0;
+        loans.engine.banking.tickLoan(loan);
+        eq(0, loans.data.loans.get(loan).missedPayments);
+        check(loans.dirty > 0, "cleared missed-payment count was not persistent");
+    }
+
+    public static void noOpLedgerAndPreferencesStayCleanWhileHistoryTrimsRemainPersistent() {
+        TestWorld w = new TestWorld();
+        w.set(OWNER, 1000);
+        w.engine.selectAccount(OWNER, "me");
+        w.dirty = 0;
+        w.engine.transferBatch(List.of());
+        w.engine.transferBatch(List.of(new Transfer(OWNER.account(), OWNER.account(), 100, "no-op")));
+        w.engine.adminAdjust(ADMIN, OWNER.account(), "set", 1000);
+        w.engine.ledger.spendingLimit(OWNER.account(), Money.MAX);
+        w.engine.selectAccount(OWNER, "me");
+        w.engine.reconfigure(w.config, w.values);
+        eq(0, w.dirty);
+        expect(UserError.class, () -> w.engine.ledger.prepare(List.of(new Transfer(OWNER.account(), BUYER.account(), 100, "rollback")))
+                .commitWith(() -> { throw new UserError("Participant refused."); }));
+        eq(0, w.dirty); eq(1000, w.engine.balance(OWNER.account()));
+        for (int i = 0; i < 12; i++) w.engine.pay(OWNER, "me", BUYER.account(), 1, "history");
+        w.config.historyLimit = 10;
+        w.dirty = 0;
+        w.engine.reconfigure(w.config, w.values);
+        eq(10, w.data.transactions.size());
+        check(w.dirty > 0, "history trimming was not persistent");
+    }
+
     private static long totalLedger(TestWorld w) {
         return w.data.accounts.values().stream().mapToLong(account -> account.balance).sum();
     }

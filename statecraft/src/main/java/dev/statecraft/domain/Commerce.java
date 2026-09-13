@@ -52,11 +52,7 @@ final class Commerce {
         }
         if ("create".equals(action)) {
             args.exactly(3, "company create <name>");
-            String name = companyName(args.get(2), null);
-            check(e.data.companies.size() < e.config.maxCompanies, "World company limit reached.");
-            check(e.data.companies.values().stream().filter(Objects::nonNull)
-                            .filter(c -> actor.id().toString().equals(c.owner)).count() < e.config.maxCompaniesPerPlayer,
-                    "Your company ownership limit has been reached.");
+            String name = companyCreationName(actor, args.get(2));
             Company company = new Company();
             company.id = GovernanceEngine.newId();
             company.name = name;
@@ -65,8 +61,7 @@ final class Commerce {
             company.totalShares = e.config.totalCompanyShares;
             company.shares.put(company.owner, company.totalShares);
             company.members.add(company.owner);
-            e.pay(List.of(new EconomyAccess.Transfer(actor.account(), e.config.feeAccount,
-                    e.config.companyCreationFee, "Company creation")));
+            e.pay(List.of(creationFee(actor)));
             e.data.companies.put(company.id, company);
             e.history("company", company.id, "Created by " + actor.id());
             return "Created company " + name + " [" + company.id + "] with " + company.totalShares + " shares.";
@@ -120,6 +115,7 @@ final class Commerce {
                     invitation.companyId = company.id;
                     invitation.playerId = player.id;
                 }
+                e.changed();
                 invitation.invitedBy = actor.id().toString();
                 invitation.expiresAt = deadline(e.now(), e.config.invitationDurationMillis);
                 e.data.invitations.put(invitation.id, invitation);
@@ -147,6 +143,7 @@ final class Commerce {
                 Invitation invitation = e.invitation(null, company.id, player);
                 check(invitation != null, "No active company invitation exists.");
                 e.data.invitations.remove(invitation.id);
+                e.changed();
                 return "Company invitation removed.";
             }
             case "leave", "kick" -> {
@@ -279,6 +276,7 @@ final class Commerce {
                 check(proposal.electorate.getOrDefault(actor.id().toString(), 0L) > 0, "You were not a shareholder when this ballot opened.");
                 check(!proposal.votes.containsKey(actor.id().toString()), "You already voted on this proposal.");
                 proposal.votes.put(actor.id().toString(), args.get(3));
+                e.changed();
                 return "Share-weighted vote recorded.";
             }
             case "execute" -> {
@@ -337,6 +335,7 @@ final class Commerce {
         switch (proposal.type) {
             case "owner" -> {
                 validateNewOwner(company, proposal.value);
+                e.changed();
                 company.owner = proposal.value;
                 company.officers.remove(proposal.value);
             }
@@ -360,7 +359,7 @@ final class Commerce {
                 + ("roleplay".equals(proposal.type) ? " (roleplay only)" : ""));
     }
 
-    private List<EconomyAccess.Transfer> dividends(Company company, long total, String reference) {
+    List<EconomyAccess.Transfer> dividends(Company company, long total, String reference) {
         Map<String, Long> allocations = new LinkedHashMap<>();
         Map<String, BigInteger> remainders = new HashMap<>();
         BigInteger denominator = BigInteger.valueOf(company.totalShares);
@@ -383,12 +382,12 @@ final class Commerce {
                         "Shareholder dividend " + reference)).toList();
     }
 
-    private long weightedVotes(CompanyProposal proposal, String choice) {
+    long weightedVotes(CompanyProposal proposal, String choice) {
         return proposal.votes.entrySet().stream().filter(v -> choice.equals(v.getValue()))
                 .mapToLong(v -> proposal.electorate.getOrDefault(v.getKey(), 0L)).sum();
     }
 
-    private long validateBallot(CompanyProposal proposal) {
+    long validateBallot(CompanyProposal proposal) {
         check(proposal.type != null && Set.of("owner", "dividend", "roleplay", "dissolve").contains(proposal.type),
                 "Unknown shareholder proposal policy; operator audit required.");
         long electorate = 0;
@@ -414,8 +413,10 @@ final class Commerce {
     }
 
     private long settlementDeadline(CompanyProposal proposal) {
-        if (proposal.executionEndsAt == 0)
+        if (proposal.executionEndsAt == 0) {
             proposal.executionEndsAt = deadline(proposal.endsAt, e.config.companyVotingMillis);
+            e.changed();
+        }
         return proposal.executionEndsAt;
     }
 
@@ -467,13 +468,18 @@ final class Commerce {
         reservation.owner = owner.toString();
         reservation.quantity = quantity;
         e.data.shareReservations.put(reference, reservation);
+        e.changed();
         e.history("shares", company.id, "Reserved " + quantity + " from " + owner + " as " + reference);
     }
 
     void releaseShares(String reference) {
         reference(reference);
+        boolean existed = e.data.shareReservations.containsKey(reference);
         ShareReservation reservation = e.data.shareReservations.remove(reference);
-        if (reservation != null) e.history("shares", reservation.companyId, "Released reservation " + reference);
+        if (existed) e.changed();
+        if (reservation != null) {
+            e.history("shares", reservation.companyId, "Released reservation " + reference);
+        }
     }
 
     void settleShares(String reference, UUID buyer, long quantity) {
@@ -495,12 +501,13 @@ final class Commerce {
 
     private void moveShares(Company company, String from, String to, long quantity) {
         long remaining = company.shares.getOrDefault(from, 0L) - quantity;
+        e.changed();
         if (remaining == 0) company.shares.remove(from);
         else company.shares.put(from, remaining);
         company.shares.put(to, company.shares.getOrDefault(to, 0L) + quantity);
     }
 
-    private void validateShareRecipient(Company company, String from, String to, long quantity) {
+    void validateShareRecipient(Company company, String from, String to, long quantity) {
         check(company.shares.containsKey(to) || company.shares.size() < e.config.maxCompanyShareholders
                         || company.shares.getOrDefault(from, 0L) == quantity,
                 "Company shareholder limit reached.");
@@ -563,7 +570,7 @@ final class Commerce {
         deleteCompany(company);
     }
 
-    private void assertDisposable(Company company, String ignoredProposal) {
+    void assertDisposable(Company company, String ignoredProposal) {
         assertShareIntegrity(company);
         check(e.data.shareReservations.values().stream().filter(Objects::nonNull)
                 .noneMatch(r -> company.id.equals(r.companyId)), "Cancel all reserved stock listings before dissolving the company.");
@@ -577,6 +584,7 @@ final class Commerce {
     }
 
     private void deleteCompany(Company company) {
+        e.changed();
         e.data.companies.remove(company.id);
         e.data.invitations.values().removeIf(i -> i != null && company.id.equals(i.companyId));
         e.history("company", company.id, "Dissolved " + company.name);
@@ -590,7 +598,20 @@ final class Commerce {
         check(actor.admin() || actor.id().toString().equals(company.owner), "Only the company owner may perform that action.");
     }
 
-    private String companyName(String name, String id) {
+    String companyCreationName(Actor actor, String name) {
+        String valid = companyName(name, null);
+        check(e.data.companies.size() < e.config.maxCompanies, "World company limit reached.");
+        check(e.data.companies.values().stream().filter(Objects::nonNull)
+                        .filter(c -> actor.id().toString().equals(c.owner)).count() < e.config.maxCompaniesPerPlayer,
+                "Your company ownership limit has been reached.");
+        return valid;
+    }
+
+    EconomyAccess.Transfer creationFee(Actor actor) {
+        return new EconomyAccess.Transfer(actor.account(), e.config.feeAccount, e.config.companyCreationFee, "Company creation");
+    }
+
+    String companyName(String name, String id) {
         String valid = e.organizationName(name);
         check(e.data.companies.values().stream().filter(Objects::nonNull)
                         .noneMatch(c -> !Objects.equals(id, c.id) && valid.equalsIgnoreCase(c.name)), "That company name is already in use.");
@@ -657,35 +678,18 @@ final class Commerce {
                 return e.page("Contract details", rows, args.page(3));
             }
             case "bid" -> {
-                args.between(5, 6, "contract bid <contractId> <amount> <description> [company:nameOrId]");
-                check("OPEN".equals(contract.status) && e.now() < contract.bidEndsAt, "This contract is not accepting bids.");
-                check(contract.bids.containsKey(actor.id().toString()) || contract.bids.size() < e.config.maxContractBids,
-                        "Contract bid limit reached.");
-                long amount = Money.parse(args.get(3));
-                e.requireEconomy(amount);
-                String text = GovernanceEngine.prose(args.get(4), e.config.maxDescriptionLength, "Bid description");
-                String account = actor.account();
-                if (args.size() == 6) {
-                    check(args.get(5).startsWith("company:"), "Optional bid destination must be company:<name or UUID>.");
-                    Company company = e.companyRequired(args.get(5).substring("company:".length()));
-                    check(e.mayManageCompany(actor.id(), company.id), "You cannot bid on behalf of that company.");
-                    account = "company:" + company.id;
-                }
-                Bid bid = new Bid();
-                bid.bidder = actor.id().toString();
-                bid.account = account;
-                bid.cents = amount;
-                bid.text = text;
-                bid.createdAt = e.now();
-                validateBidDestination(bid, true);
+                Bid bid = bidPlan(actor, contract, args);
                 contract.bids.put(bid.bidder, bid);
-                e.history("contract", contract.id, "Bid submitted by " + actor.id() + " for " + amount);
-                return "Bid submitted. Its payee is fixed to " + account + ".";
+                e.history("contract", contract.id, "Bid submitted by " + actor.id() + " for " + bid.cents);
+                return "Bid submitted. Its payee is fixed to " + bid.account + ".";
             }
             case "withdraw" -> {
                 args.exactly(3, "contract withdraw <contractId>");
                 check(Set.of("OPEN", "REVIEW").contains(contract.status), "Only unawarded bids may be withdrawn.");
-                check(contract.bids.remove(actor.id().toString()) != null, "You do not have a bid on this contract.");
+                boolean existed = contract.bids.containsKey(actor.id().toString());
+                Bid removed = contract.bids.remove(actor.id().toString());
+                if (existed) e.changed();
+                check(removed != null, "You do not have a bid on this contract.");
                 return "Bid withdrawn.";
             }
             case "bids" -> {
@@ -708,21 +712,11 @@ final class Commerce {
             }
             case "award" -> {
                 args.exactly(4, "contract award <contractId> <bidder>");
-                Government government = e.gov(contract.governmentId);
-                e.manage(actor, government);
-                check("REVIEW".equals(contract.status), "Move the contract into review before awarding it.");
-                Player winner = e.resolvePlayer(args.get(3));
-                Bid bid = contract.bids.get(winner.id);
-                check(bid != null, "That player has not bid on this contract.");
-                validateBidDestination(bid, true);
-                validateContractChunks(contract);
-                check(bid.cents == 0 || !conflicted(actor.id().toString(), bid.bidder, bid.account),
-                        "A paid bidder, company participant, or beneficiary cannot award their own contract.");
-                e.requireEconomy(bid.cents);
-                check(!e.economy.available() || e.economy.balance(escrow(contract)) == 0,
-                        "The contract escrow already contains funds; operator audit is required.");
-                e.pay(List.of(new EconomyAccess.Transfer(e.account(government), escrow(contract), bid.cents,
-                        "Award government contract " + contract.id)));
+                AwardPlan plan = awardPlan(actor, contract, args.get(3));
+                Government government = plan.government();
+                Player winner = plan.winner();
+                Bid bid = plan.bid();
+                e.pay(List.of(plan.transfer()));
                 contract.winner = bid.bidder;
                 contract.payeeAccount = bid.account;
                 contract.escrowCents = bid.cents;
@@ -759,17 +753,10 @@ final class Commerce {
             }
             case "complete" -> {
                 args.exactly(3, "contract complete <contractId>");
+                EconomyAccess.Transfer payment = completionPlan(actor, contract);
                 Government government = e.gov(contract.governmentId);
-                e.manage(actor, government);
-                check("SUBMITTED".equals(contract.status), "Only submitted work may be approved for completion.");
-                validateContractChunks(contract);
-                validateAward(contract);
-                check(contract.escrowCents == 0 || (!actor.id().toString().equals(contract.submittedBy)
-                                && !conflicted(actor.id().toString(), contract.winner, contract.payeeAccount)),
-                        "You cannot approve or pay your own paid contract, even as an operator.");
-                long paid = contract.escrowCents;
-                e.pay(List.of(new EconomyAccess.Transfer(escrow(contract), contract.payeeAccount, paid,
-                        "Complete government contract " + contract.id)));
+                long paid = payment.cents();
+                e.pay(List.of(payment));
                 contract.escrowCents = 0;
                 contract.status = "COMPLETED";
                 e.history("contract", contract.id, "Completed by " + actor.id() + "; paid " + paid);
@@ -778,14 +765,11 @@ final class Commerce {
             }
             case "cancel" -> {
                 args.between(4, 64, "contract cancel <contractId> <reason>");
-                Government government = e.gov(contract.governmentId);
-                check(e.canManage(actor, government) || contractor(actor, contract), "Only the issuer or selected contractor may cancel.");
-                check(ACTIVE_CONTRACTS.contains(contract.status), "This contract has already concluded.");
                 String reason = GovernanceEngine.prose(args.tail(3), e.config.maxDescriptionLength, "Cancellation reason");
-                long refund = Money.nonNegative(contract.escrowCents);
-                if (refund > 0) validateAward(contract);
-                e.pay(List.of(new EconomyAccess.Transfer(escrow(contract), e.account(government), refund,
-                        "Cancel government contract " + contract.id)));
+                EconomyAccess.Transfer payment = cancellationPlan(actor, contract);
+                Government government = e.gov(contract.governmentId);
+                long refund = payment.cents();
+                e.pay(List.of(payment));
                 contract.escrowCents = 0;
                 contract.status = "CANCELLED";
                 e.history("contract", contract.id, "Cancelled by " + actor.id() + "; refunded " + refund + ": " + reason);
@@ -816,11 +800,78 @@ final class Commerce {
                 "Contract award and escrow do not match the accepted bid; operator audit required.");
     }
 
-    private void validateContractChunks(Contract contract) {
+    Bid bidPlan(Actor actor, Contract contract, Arguments args) {
+        args.between(5, 6, "contract bid <contractId> <amount> <description> [company:nameOrId]");
+        check("OPEN".equals(contract.status) && e.now() < contract.bidEndsAt, "This contract is not accepting bids.");
+        check(contract.bids.containsKey(actor.id().toString()) || contract.bids.size() < e.config.maxContractBids,
+                "Contract bid limit reached.");
+        Bid bid = new Bid();
+        bid.bidder = actor.id().toString();
+        bid.cents = Money.parse(args.get(3));
+        e.requireEconomy(bid.cents);
+        bid.text = GovernanceEngine.prose(args.get(4), e.config.maxDescriptionLength, "Bid description");
+        bid.account = actor.account();
+        if (args.size() == 6) {
+            check(args.get(5).startsWith("company:"), "Optional bid destination must be company:<name or UUID>.");
+            Company company = e.companyRequired(args.get(5).substring("company:".length()));
+            check(e.mayManageCompany(actor.id(), company.id), "You cannot bid on behalf of that company.");
+            bid.account = "company:" + company.id;
+        }
+        bid.createdAt = e.now();
+        validateBidDestination(bid, true);
+        return bid;
+    }
+
+    record AwardPlan(Government government, Player winner, Bid bid, EconomyAccess.Transfer transfer) {}
+
+    AwardPlan awardPlan(Actor actor, Contract contract, String bidder) {
+        Government government = e.gov(contract.governmentId);
+        e.manage(actor, government);
+        check("REVIEW".equals(contract.status) && e.now() < contract.reviewEndsAt,
+                "Move the contract into an unexpired review before awarding it.");
+        Player winner = e.resolvePlayer(bidder);
+        Bid bid = contract.bids.get(winner.id);
+        check(bid != null, "That player has not bid on this contract.");
+        validateBidDestination(bid, true);
+        validateContractChunks(contract);
+        check(bid.cents == 0 || !conflicted(actor.id().toString(), bid.bidder, bid.account),
+                "A paid bidder, company participant, or beneficiary cannot award their own contract.");
+        e.requireEconomy(bid.cents);
+        check(!e.economy.available() || e.economy.balance(escrow(contract)) == 0,
+                "The contract escrow already contains funds; operator audit is required.");
+        return new AwardPlan(government, winner, bid, new EconomyAccess.Transfer(e.account(government),
+                escrow(contract), bid.cents, "Award government contract " + contract.id));
+    }
+
+    EconomyAccess.Transfer completionPlan(Actor actor, Contract contract) {
+        e.manage(actor, e.gov(contract.governmentId));
+        check("SUBMITTED".equals(contract.status), "Only submitted work may be approved for completion.");
+        validateContractChunks(contract);
+        validateAward(contract);
+        check(contract.escrowCents == 0 || (!actor.id().toString().equals(contract.submittedBy)
+                        && !conflicted(actor.id().toString(), contract.winner, contract.payeeAccount)),
+                "You cannot approve or pay your own paid contract, even as an operator.");
+        e.requireEconomy(contract.escrowCents);
+        return new EconomyAccess.Transfer(escrow(contract), contract.payeeAccount, contract.escrowCents,
+                "Complete government contract " + contract.id);
+    }
+
+    EconomyAccess.Transfer cancellationPlan(Actor actor, Contract contract) {
+        Government government = e.gov(contract.governmentId);
+        check(e.canManage(actor, government) || contractor(actor, contract), "Only the issuer or selected contractor may cancel.");
+        check(ACTIVE_CONTRACTS.contains(contract.status), "This contract has already concluded.");
+        long refund = Money.nonNegative(contract.escrowCents);
+        if (refund > 0) validateAward(contract);
+        e.requireEconomy(refund);
+        return new EconomyAccess.Transfer(escrow(contract), e.account(government), refund,
+                "Cancel government contract " + contract.id);
+    }
+
+    void validateContractChunks(Contract contract) {
         Government government = e.gov(contract.governmentId);
         Set<String> scope = e.subtree(government).stream().map(g -> g.id).collect(Collectors.toSet());
         Set<String> governmentAccounts = e.subtree(government).stream().map(e::account).collect(Collectors.toSet());
-        check(!contract.chunks.isEmpty() && contract.chunks.size() <= e.config.maxContractChunks, "Invalid contract chunk selection.");
+        check(!contract.chunks.isEmpty(), "Invalid contract chunk selection.");
         check(new HashSet<>(contract.chunks).size() == contract.chunks.size(), "Contract chunk selection contains duplicates.");
         for (String key : contract.chunks) {
             Claim claim = e.requiredClaim(key);
@@ -910,8 +961,10 @@ final class Commerce {
                 .filter(p -> GovernanceEngine.validUuid(p.id) && p.status != null && CLOSED_PROPOSALS.contains(p.status))
                 .sorted(Comparator.comparingLong((CompanyProposal p) -> p.createdAt).reversed().thenComparing(p -> p.id)).toList()
                 .forEach(p -> {
-                    if (retainedProposals.merge(p.companyId, 1, Integer::sum) > e.config.maxHistory)
+                    if (retainedProposals.merge(p.companyId, 1, Integer::sum) > e.config.maxHistory) {
                         e.data.companyProposals.remove(p.id);
+                        e.changed();
+                    }
                 });
         Map<String, Integer> retainedContracts = new HashMap<>();
         e.data.contracts.values().stream().filter(Objects::nonNull)
@@ -919,8 +972,10 @@ final class Commerce {
                         && CLOSED_CONTRACTS.contains(c.status))
                 .sorted(Comparator.comparingLong((Contract c) -> c.createdAt).reversed().thenComparing(c -> c.id)).toList()
                 .forEach(c -> {
-                    if (retainedContracts.merge(c.governmentId, 1, Integer::sum) > e.config.maxHistory)
+                    if (retainedContracts.merge(c.governmentId, 1, Integer::sum) > e.config.maxHistory) {
                         e.data.contracts.remove(c.id);
+                        e.changed();
+                    }
                 });
     }
 

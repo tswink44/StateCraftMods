@@ -22,6 +22,17 @@ final class EconomyEngineTest {
     }
 
     @TestFactory
+    Stream<DynamicTest> presentationRegressionScenarios() {
+        return Arrays.stream(EconomyPresentationScenarios.class.getDeclaredMethods())
+                .filter(method -> Modifier.isPublic(method.getModifiers()) && method.getParameterCount() == 0)
+                .sorted(Comparator.comparing(java.lang.reflect.Method::getName))
+                .map(method -> DynamicTest.dynamicTest(method.getName(), () -> {
+                    try { method.invoke(null); }
+                    catch (InvocationTargetException failure) { throw failure.getCause(); }
+                }));
+    }
+
+    @TestFactory
     Stream<DynamicTest> jsonAndPersistenceScenarios() {
         return Arrays.stream(EconomyDataScenarios.class.getDeclaredMethods())
                 .filter(method -> Modifier.isPublic(method.getModifiers()) && method.getParameterCount() == 0)

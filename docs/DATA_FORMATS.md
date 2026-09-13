@@ -43,6 +43,19 @@ item**: `$1 = 100`, `$10 = 1000`, `$1,000,000 = 100000000`. The example is
 abbreviated; bundled defaults register all seven physical denominations.
 Do not use floating-point dollar values or put currency items in `prices`.
 
+The root helper accepts an explicit path and never edits it:
+
+```powershell
+python verify_config.py statecraft-economy\run\config\statecraft_economy\item_values.json
+python verify_config.py statecraft-economy\run\config\statecraft_economy\item_values.json --item minecraft:wheat
+```
+
+It rejects duplicate keys, malformed maps/IDs, non-integer or out-of-range cents,
+and currency/sale-price overlap. It checks structure, not whether another mod
+actually registered an item; the server remains authoritative. Old category-price
+and Numismatics registry scripts are separated under `tools\legacy` and must not
+be used to convert current cent-denominated prices implicitly.
+
 `prices` defines Trading Hub sale proceeds before applicable policy deductions.
 Unlisted items have no default Hub sale value. `currencyItems` defines physical
 money, not an additional goods-sale table. Defaults are deliberately modest,

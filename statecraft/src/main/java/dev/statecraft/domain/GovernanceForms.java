@@ -2,11 +2,13 @@ package dev.statecraft.domain;
 
 import dev.statecraft.api.Actor;
 import dev.statecraft.api.ChunkKey;
+import dev.statecraft.api.Money;
 import dev.statecraft.api.GovernanceAccess.Kind;
 import dev.statecraft.api.UserError;
 import dev.statecraft.api.form.FormBuilder;
 import dev.statecraft.api.form.FormChoice;
 import dev.statecraft.api.form.FormContext;
+import dev.statecraft.api.form.FormConstraints;
 import dev.statecraft.api.form.FormProvider;
 import dev.statecraft.domain.GovernanceData.Bill;
 import dev.statecraft.domain.GovernanceData.Claim;
@@ -97,6 +99,58 @@ public final class GovernanceForms implements FormProvider {
                 case "help" -> enumChoices("section", "Help section", "governments", "chunks", "elections",
                         "legislature", "executive", "diplomacy", "companies", "contracts", "mail", "profiles", "admin");
                 default -> { }
+            }
+            constraints();
+        }
+
+        private void constraints() {
+            for (String key : form.keys()) {
+                FormConstraints constraint = switch (key) {
+                    case "name" -> FormConstraints.text(engine.config.maxNameLength);
+                    case "title", "subject" -> FormConstraints.text(100);
+                    case "tag" -> FormConstraints.text(12);
+                    case "flag" -> FormConstraints.text(128);
+                    case "body" -> FormConstraints.text(Math.min(2048, engine.config.maxMailBodyLength));
+                    case "description", "text", "reason", "message", "completion_note" ->
+                            FormConstraints.text("message".equals(key) && "mail".equals(family)
+                                    ? 36 : engine.config.maxDescriptionLength);
+                    case "page" -> FormConstraints.integer(1, 1_000_000);
+                    case "radius" -> FormConstraints.integer(1, 5);
+                    case "shares" -> FormConstraints.integer(1, 1_000_000_000);
+                    case "amount", "offer_amount", "demand_amount" -> FormConstraints.money(0, Money.MAX);
+                    case "chunk_terms_or_dash" -> FormConstraints.text(2048).or("-");
+                    default -> FormConstraints.text(2048);
+                };
+                form.constraints(key, constraint);
+            }
+            if (form.has("shares")) {
+                Company company = selectedCompany("company");
+                long available = company == null ? 0 : availableShares(company);
+                if (available > 0) form.constraints("shares", FormConstraints.integer(1, available));
+            }
+            if (!form.has("value")) return;
+            if ("company".equals(family) && "propose".equals(action)) {
+                switch (form.value("type")) {
+                    case "dividend" -> form.constraints("value", FormConstraints.money(1, Money.MAX));
+                    case "owner" -> form.constraints("value", FormConstraints.text(36));
+                    case "roleplay", "dissolve" -> form.constraints("value", FormConstraints.text(1).or("-"));
+                    default -> { }
+                }
+                return;
+            }
+            String policy = form.has("key") ? form.value("key") : form.value("policy");
+            if ("bill".equals(family) && "revise".equals(action)) {
+                Bill bill = engine.data.bills.get(form.value("bill"));
+                if (bill != null) policy = bill.policy;
+            }
+            FormConstraints constraint = null;
+            if (has(GovernanceSettings.RATES, policy)) constraint = FormConstraints.integer(0, 10_000);
+            else if ("baseChunkValue".equals(policy)) constraint = FormConstraints.integer(0, Money.MAX);
+            else if (has(GovernanceSettings.BOOLEANS, policy)) constraint = FormConstraints.text(7);
+            else if ("roleplay".equals(policy)) constraint = FormConstraints.text(1).or("-");
+            if (constraint != null) {
+                if ("setting".equals(action)) constraint = constraint.or("inherit");
+                form.constraints("value", constraint);
             }
         }
 
@@ -195,7 +249,7 @@ public final class GovernanceForms implements FormProvider {
                         && ("remove".equals(word(4)) ? government.officers.contains(player.id)
                         : !government.officers.contains(player.id) && government.officers.size() < engine.config.maxOfficers);
                 case "kick" -> !playerId.equals(player.id) && engine.member(player.id, government)
-                        && (actor.admin() || !engine.superior(player.id, government)) && canLeave(player.id, government);
+                        && engine.mayRemoveMembership(actor, player.id, government) && canLeave(player.id, government);
                 case "invite" -> !engine.member(player.id, government) && engine.eligibleInvitation(player, government)
                         && (engine.invitation(government.id, null, player.id) != null
                         || passes(() -> engine.checkInvitationCapacity(government.id, null, player.id)));
@@ -342,12 +396,19 @@ public final class GovernanceForms implements FormProvider {
         private void policyFields(Government government, String key, boolean roleplay, boolean editing, String... dependencies) {
             List<FormChoice> policies = new ArrayList<>();
             GovernanceSettings.defaults(engine.config).keySet().stream()
-                    .filter(name -> !editing || actor.admin() || !engine.config.requireLegislationForPolicy || "open".equals(name))
+                    .filter(name -> !editing || government != null
+                            && !engine.requiresNationalLegislation(actor, government, name))
                     .forEach(name -> policies.add(option(name, FormBuilder.label(name),
                             GovernanceSettings.RATES.contains(name) ? "0-10000 basis points"
                                     : "baseChunkValue".equals(name) ? "Integer cents" : "true / false")));
             if (roleplay) policies.add(option("roleplay", "Roleplay only", "Records text without changing game mechanics."));
-            choices(key, policies, "", false, "Choose a supported typed policy.", dependencies);
+            String hint = "Choose a supported typed policy.";
+            if (editing && engine.config.requireLegislationForPolicy) {
+                hint = government != null && engine.requiresNationalLegislation(actor, government, "incomeTaxBps")
+                        ? "National mechanical policies require bills; only open membership can be changed directly."
+                        : "Legislation is required only nationally; authorized local leaders can edit their state/city policies.";
+            }
+            choices(key, policies, "", false, hint, dependencies);
             String policy = form.value(key);
             String current = editing && government != null ? engine.settings(government).getOrDefault(policy, "") : "";
             policyValue(policy, current, concat(dependencies, key));
@@ -368,6 +429,12 @@ public final class GovernanceForms implements FormProvider {
         }
 
         private void diplomacyForm() {
+            if ("peace".equals(action)) {
+                text("chunk_terms_or_dash", "Territorial terms",
+                        "Use chunkKey=destinationCity UUID, separated by commas; at most " + engine.config.maxTreatyChunks
+                                + " chunks. Use - for no territory. The form field is limited to 2048 characters.",
+                        "-", false, "from_nation", "to_nation");
+            }
             boolean publicQuery = has(Set.of("status", "proposals"), action);
             govChoices("nation", g -> g.kind == Kind.NATION && (publicQuery || operational() && executive(g)),
                     own(Kind.NATION), publicQuery);
@@ -544,10 +611,11 @@ public final class GovernanceForms implements FormProvider {
 
         private boolean contractEligible(Contract contract) {
             if ("info".equals(action)) return true;
-            if (!operational()) return false;
-            if (!knownCompanyDestination(contract.payeeAccount)) return false;
             Government government = engine.data.governments.get(contract.governmentId);
             boolean official = manage(government);
+            if ("bids".equals(action)) return official;
+            if (!operational()) return false;
+            if (!knownCompanyDestination(contract.payeeAccount)) return false;
             boolean contractor = engine.commerce.contractor(actor, contract);
             boolean independent = contract.escrowCents == 0
                     || !engine.commerce.conflicted(playerId, contract.winner, contract.payeeAccount);
@@ -555,7 +623,6 @@ public final class GovernanceForms implements FormProvider {
                 case "bid" -> "OPEN".equals(contract.status) && engine.now() < contract.bidEndsAt
                         && (contract.bids.containsKey(playerId) || contract.bids.size() < engine.config.maxContractBids);
                 case "withdraw" -> has(Set.of("OPEN", "REVIEW"), contract.status) && contract.bids.containsKey(playerId);
-                case "bids" -> official;
                 case "review" -> official && "OPEN".equals(contract.status) && !contract.bids.isEmpty();
                 case "award" -> official && "REVIEW".equals(contract.status) && engine.now() < contract.reviewEndsAt;
                 case "submit" -> contractor && "AWARDED".equals(contract.status);
@@ -710,7 +777,8 @@ public final class GovernanceForms implements FormProvider {
             if (has(Set.of("info", "protection"), action) && options.stream().noneMatch(c -> "here".equals(c.value())))
                 options.add(option("here", "Current chunk", actor.chunkKey()));
             choices(key, options, "here", custom || has(Set.of("info", "protection"), action),
-                    custom ? "Choose an owned chunk or enter comma-separated owned chunk keys. Execution revalidates all commitments."
+                    custom ? "Choose owned chunk keys, separated by commas; at most " + engine.config.maxContractChunks
+                            + " chunks and 2048 characters. Execution revalidates all commitments."
                             : "Only eligible claims are shown; financial encumbrances and connectivity are checked on execution.", dependencies);
         }
 

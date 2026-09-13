@@ -19,7 +19,8 @@ public final class Banking {
     private static final Set<String> OPEN_LOANS = Set.of("REQUESTED", "ACTIVE", "DEFAULTED");
     public record DepositSummary(long balance, long interestPrincipal, BigInteger unpaidInterest) {}
     public record LoanSummary(long principal, long interest, long total, long currentlyDue, String status,
-                              int missedPayments, String terms) {}
+                              int missedPayments, String terms, boolean autoPay, long nextDueAt) {}
+    private record Interest(BigInteger earned, String remainder) {}
     private final EconomyEngine e;
 
     Banking(EconomyEngine engine) { e = engine; }
@@ -35,12 +36,22 @@ public final class Banking {
         return bank;
     }
 
-    private void requireManager(Actor actor, EconomyData.Bank bank) {
+    void requireManager(Actor actor, EconomyData.Bank bank) {
         e.requireAccount(actor, "company:" + bank.company);
     }
 
     public String create(Actor actor, String companyId, String name, long capital,
                          int depositRate, int loanRate) {
+        EconomyData.Bank bank = quoteCreate(actor, companyId, name, capital, depositRate, loanRate);
+        e.ledger.prepare(creationTransfers(bank, capital)).commit();
+        e.data.banks.put(bank.id, bank);
+        event(bank.id, actor.id().toString(), "OPENED", capital, name);
+        e.dirty.run();
+        return bank.id;
+    }
+
+    EconomyData.Bank quoteCreate(Actor actor, String companyId, String name, long capital,
+                                int depositRate, int loanRate) {
         e.ledger.thread();
         GovernanceAccess.CompanyView company = e.governance.company(companyId).orElseThrow(() -> new UserError("Unknown company."));
         e.requireAccount(actor, company.account());
@@ -59,15 +70,15 @@ public final class Banking {
         bank.loanInterestBps = loanRate;
         bank.interestPeriodMillis = e.config.financialPeriodMillis;
         bank.openedAt = e.clock.millis();
-        e.ledger.prepare(List.of(new Transfer(company.account(), bank.account(), capital, "Bank seed capital"),
-                new Transfer(company.account(), "system:fees", e.config.bankCreationFeeCents, "Bank creation fee"))).commit();
-        e.data.banks.put(bank.id, bank);
-        event(bank.id, actor.id().toString(), "OPENED", capital, name);
-        e.dirty.run();
-        return bank.id;
+        return bank;
     }
 
-    private static void branding(String text) {
+    List<Transfer> creationTransfers(EconomyData.Bank bank, long capital) {
+        return List.of(new Transfer("company:" + bank.company, bank.account(), capital, "Bank seed capital"),
+                new Transfer("company:" + bank.company, "system:fees", e.config.bankCreationFeeCents, "Bank creation fee"));
+    }
+
+    static void branding(String text) {
         if (text == null || text.isBlank() || text.length() > 64 || text.chars().anyMatch(Character::isISOControl)) {
             throw new UserError("Bank names and branding must contain 1-64 printable characters.");
         }
@@ -87,7 +98,7 @@ public final class Banking {
         e.dirty.run();
     }
 
-    private void checkRates(int deposit, int loan, int fee) {
+    void checkRates(int deposit, int loan, int fee) {
         Money.tax(0, deposit);
         Money.tax(0, loan);
         Money.tax(0, fee);
@@ -155,30 +166,43 @@ public final class Banking {
         String player = actor.id().toString();
         EconomyData.Deposit deposit = bank.deposits.get(player);
         if (deposit == null && bank.deposits.size() >= e.config.maximumBankCustomers) throw new UserError("This bank has reached its customer limit.");
-        if (deposit != null) accrueDeposit(bank, player, deposit);
-        long net = amount - bank.depositFeeCents;
-        long newBalance = Money.add(deposit == null ? 0 : deposit.balance, net);
-        Money.add(depositBalances(bank), net);
-        long newPrincipal = Money.add(deposit == null ? 0 : deposit.principal, net);
-        e.ledger.prepare(List.of(new Transfer(actor.account(), bank.account(), amount, "Bank deposit at " + bank.id))).commit();
+        long now = e.clock.millis();
+        if (deposit != null) accrueDeposit(deposit, now);
+        DepositQuote quote = quoteDeposit(actor, id, amount);
+        e.ledger.prepare(List.of(quote.transfer())).commit();
         if (deposit == null) {
             deposit = new EconomyData.Deposit();
-            deposit.lastAccruedAt = e.clock.millis();
+            deposit.lastAccruedAt = now;
             deposit.periodMillis = bank.interestPeriodMillis;
             deposit.rateBps = bank.depositInterestBps;
             bank.deposits.put(player, deposit);
         } else if (deposit.principal == 0) {
             deposit.periodMillis = bank.interestPeriodMillis;
             deposit.rateBps = bank.depositInterestBps;
-            deposit.lastAccruedAt = e.clock.millis();
+            deposit.lastAccruedAt = now;
         }
-        deposit.balance = newBalance;
-        deposit.principal = newPrincipal;
+        deposit.balance = quote.newBalance();
+        deposit.principal = quote.newPrincipal();
         e.data.bankAssociations.put(player, bank.id);
         e.schedule("deposit", bank.id + "|" + player);
-        event(bank.id, player, "DEPOSIT", net, "Fee " + Money.format(bank.depositFeeCents));
+        event(bank.id, player, "DEPOSIT", quote.credited(), "Fee " + Money.format(bank.depositFeeCents));
         e.dirty.run();
-        return net;
+        return quote.credited();
+    }
+
+    record DepositQuote(EconomyData.Bank bank, long credited, long newBalance, long newPrincipal, Transfer transfer) {}
+
+    DepositQuote quoteDeposit(Actor actor, String id, long amount) {
+        EconomyData.Bank bank = bank(id, true);
+        Money.positive(amount);
+        if (amount <= bank.depositFeeCents) throw new UserError("The deposit must exceed the bank's deposit fee.");
+        EconomyData.Deposit deposit = bank.deposits.get(actor.id().toString());
+        if (deposit == null && bank.deposits.size() >= e.config.maximumBankCustomers) throw new UserError("This bank has reached its customer limit.");
+        long net = amount - bank.depositFeeCents;
+        Money.add(depositBalances(bank), net);
+        return new DepositQuote(bank, net, Money.add(deposit == null ? 0 : deposit.balance, net),
+                Money.add(deposit == null ? 0 : deposit.principal, net),
+                new Transfer(actor.account(), bank.account(), amount, "Bank deposit at " + bank.id));
     }
 
     public void withdraw(Actor actor, String id, long amount) {
@@ -196,7 +220,7 @@ public final class Banking {
         private final long newPrincipal;
         private final long floor;
 
-        WalletFunding(EconomyData.Bank bank, EconomyData.Deposit deposit, String player, long amount, long debit) {
+        WalletFunding(EconomyData.Bank bank, EconomyData.Deposit deposit, String player, long amount, long debit, long now) {
             this.bank = bank;
             this.deposit = deposit;
             this.player = player;
@@ -204,10 +228,13 @@ public final class Banking {
             this.debit = debit;
             long earned = deposit.balance - deposit.principal;
             newPrincipal = deposit.principal - Math.max(0, debit - earned);
-            floor = reserveFor(liabilities(bank).subtract(BigInteger.valueOf(debit)));
+            floor = reserveFor(liabilities(bank, now).subtract(BigInteger.valueOf(debit)));
         }
         Transfer transfer() { return new Transfer(bank.account(), "player:" + player, amount, "Bank withdrawal at " + bank.id); }
         Map<String, Long> reserveOverrides() { return Map.of(bank.account(), floor); }
+        long fee() { return debit - amount; }
+        long debit() { return debit; }
+        long balanceBefore() { return deposit.balance; }
         void commit() {
             deposit.principal = newPrincipal;
             deposit.balance -= debit;
@@ -220,11 +247,30 @@ public final class Banking {
         Money.positive(amount);
         EconomyData.Deposit deposit = bank.deposits.get(actor.id().toString());
         if (deposit == null) throw new UserError("You have no deposit at this bank.");
-        accrueDeposit(bank, actor.id().toString(), deposit);
+        long now = e.clock.millis();
+        accrueDeposit(deposit, now);
         fundInterest(bank, actor.id().toString(), deposit);
+        return withdrawal(actor, bank, deposit, amount, now);
+    }
+
+    WalletFunding quoteWalletFunding(Actor actor, String id, long amount) {
+        EconomyData.Bank bank = bank(id, true);
+        long now = e.clock.millis();
+        EconomyData.Deposit stored = bank.deposits.get(actor.id().toString());
+        if (stored == null) throw new UserError("You have no deposit at this bank.");
+        EconomyData.Deposit projected = new EconomyData.Deposit();
+        projected.balance = stored.balance;
+        projected.principal = stored.principal;
+        projected.pendingInterest = new BigInteger(stored.pendingInterest).add(depositInterest(stored, now).earned()).toString();
+        projected.balance = Money.add(projected.balance, fundableInterest(bank, projected));
+        return withdrawal(actor, bank, projected, amount, now);
+    }
+
+    private WalletFunding withdrawal(Actor actor, EconomyData.Bank bank, EconomyData.Deposit deposit, long amount, long now) {
+        Money.positive(amount);
         long debit = Money.add(amount, bank.withdrawalFeeCents);
         if (deposit.balance < debit) throw new UserError("Your bank deposit does not cover the withdrawal plus fee.");
-        return new WalletFunding(bank, deposit, actor.id().toString(), amount, debit);
+        return new WalletFunding(bank, deposit, actor.id().toString(), amount, debit, now);
     }
 
     public DepositSummary balance(Actor actor, String bankId, String customer) {
@@ -251,9 +297,14 @@ public final class Banking {
     }
 
     public BigInteger liabilities(EconomyData.Bank bank) {
+        return liabilities(bank, e.clock.millis());
+    }
+
+    private BigInteger liabilities(EconomyData.Bank bank, long now) {
         BigInteger total = BigInteger.ZERO;
         for (EconomyData.Deposit deposit : bank.deposits.values()) {
-            total = total.add(BigInteger.valueOf(deposit.balance)).add(new BigInteger(deposit.pendingInterest));
+            total = total.add(BigInteger.valueOf(deposit.balance)).add(new BigInteger(deposit.pendingInterest))
+                    .add(depositInterest(deposit, now).earned());
         }
         return total;
     }
@@ -265,19 +316,29 @@ public final class Banking {
         return reserve.min(BigInteger.valueOf(Money.MAX)).longValueExact();
     }
 
-    public long requiredReserve(EconomyData.Bank bank) { return bank.closed ? 0 : reserveFor(liabilities(bank)); }
+    public long requiredReserve(EconomyData.Bank bank) { return requiredReserve(bank, e.clock.millis()); }
+
+    private long requiredReserve(EconomyData.Bank bank, long now) {
+        return bank.closed ? 0 : reserveFor(liabilities(bank, now));
+    }
 
     public long protectedBalance(EconomyData.Bank bank) {
+        return protectedBalance(bank, e.clock.millis());
+    }
+
+    private long protectedBalance(EconomyData.Bank bank, long now) {
         if (bank.closed) return 0;
-        return Math.max(requiredReserve(bank), liabilities(bank).min(BigInteger.valueOf(Money.MAX)).longValueExact());
+        BigInteger liabilities = liabilities(bank, now);
+        return Math.max(reserveFor(liabilities), liabilities.min(BigInteger.valueOf(Money.MAX)).longValueExact());
     }
 
     void guardReserves(Map<String, Long> balances, Map<String, Long> overrides) {
+        long now = e.clock.millis();
         for (Map.Entry<String, Long> account : balances.entrySet()) {
             if (!account.getKey().startsWith("bank:")) continue;
             EconomyData.Bank bank = e.data.banks.get(account.getKey().substring(5));
             if (bank == null || bank.closed) continue;
-            long floor = overrides.getOrDefault(account.getKey(), protectedBalance(bank));
+            long floor = overrides.containsKey(account.getKey()) ? overrides.get(account.getKey()) : protectedBalance(bank, now);
             Money.nonNegative(floor);
             if (account.getValue() < e.balance(account.getKey()) && account.getValue() < floor) {
                 throw new UserError("Bank reserves or customer liabilities protect these funds. Use the banking deposit/loan commands.");
@@ -285,29 +346,38 @@ public final class Banking {
         }
     }
 
-    private void accrueDeposit(EconomyData.Bank bank, String player, EconomyData.Deposit deposit) {
-        long now = e.clock.millis();
-        if (now <= deposit.lastAccruedAt) return;
-        BigInteger denominator = TEN_THOUSAND.multiply(BigInteger.valueOf(deposit.periodMillis));
-        BigInteger duration = BigInteger.valueOf(now).subtract(BigInteger.valueOf(deposit.lastAccruedAt));
-        BigInteger numerator = BigInteger.valueOf(deposit.principal).multiply(BigInteger.valueOf(deposit.rateBps))
-                .multiply(duration).add(new BigInteger(deposit.interestRemainder));
+    // Reserve/exposure validation and booked accrual must use the same saved-contract arithmetic.
+    private static Interest interest(long principal, int rateBps, long periodMillis, long lastAccruedAt,
+                                     String remainder, long now) {
+        if (now <= lastAccruedAt) return new Interest(BigInteger.ZERO, remainder);
+        BigInteger denominator = TEN_THOUSAND.multiply(BigInteger.valueOf(periodMillis));
+        BigInteger duration = BigInteger.valueOf(now).subtract(BigInteger.valueOf(lastAccruedAt));
+        BigInteger numerator = BigInteger.valueOf(principal).multiply(BigInteger.valueOf(rateBps))
+                .multiply(duration).add(new BigInteger(remainder));
         BigInteger[] amount = numerator.divideAndRemainder(denominator);
-        deposit.pendingInterest = new BigInteger(deposit.pendingInterest).add(amount[0]).toString();
-        deposit.interestRemainder = amount[1].toString();
+        return new Interest(amount[0], amount[1].toString());
+    }
+
+    private static Interest depositInterest(EconomyData.Deposit deposit, long now) {
+        return interest(deposit.principal, deposit.rateBps, deposit.periodMillis, deposit.lastAccruedAt,
+                deposit.interestRemainder, now);
+    }
+
+    private void accrueDeposit(EconomyData.Deposit deposit, long now) {
+        if (now <= deposit.lastAccruedAt) return;
+        Interest interest = depositInterest(deposit, now);
+        boolean changed = interest.earned().signum() != 0 || !deposit.interestRemainder.equals(interest.remainder());
+        deposit.pendingInterest = new BigInteger(deposit.pendingInterest).add(interest.earned()).toString();
+        deposit.interestRemainder = interest.remainder();
         deposit.lastAccruedAt = now;
-        e.dirty.run();
+        // An idle clock advance alone can wait for the runtime's periodic checkpoint.
+        if (changed) e.dirty.run();
     }
 
     private long fundInterest(EconomyData.Bank bank, String player, EconomyData.Deposit deposit) {
         BigInteger pending = new BigInteger(deposit.pendingInterest);
         if (pending.signum() == 0) return 0;
-        long balances = depositBalances(bank);
-        long equity = Math.max(0, e.balance(bank.account()) - balances);
-        long available = Math.max(0, equity - e.config.minimumBankReserveCents);
-        available = Math.min(available, Money.MAX - balances);
-        available = Math.min(available, Money.MAX - deposit.balance);
-        long funded = pending.min(BigInteger.valueOf(available)).longValueExact();
+        long funded = fundableInterest(bank, deposit);
         if (funded == 0) return 0;
         deposit.balance = Money.add(deposit.balance, funded);
         deposit.pendingInterest = pending.subtract(BigInteger.valueOf(funded)).toString();
@@ -316,19 +386,47 @@ public final class Banking {
         return funded;
     }
 
+    private long fundableInterest(EconomyData.Bank bank, EconomyData.Deposit deposit) {
+        long balances = depositBalances(bank);
+        long equity = Math.max(0, e.balance(bank.account()) - balances);
+        long available = Math.max(0, equity - e.config.minimumBankReserveCents);
+        available = Math.min(available, Money.MAX - balances);
+        available = Math.min(available, Money.MAX - deposit.balance);
+        return new BigInteger(deposit.pendingInterest).min(BigInteger.valueOf(available)).longValueExact();
+    }
+
     boolean tickDeposit(String reference) {
         String[] parts = reference.split("\\|", 2);
         EconomyData.Bank bank = e.data.banks.get(parts[0]);
         if (bank == null || bank.closed) return false;
         EconomyData.Deposit deposit = bank.deposits.get(parts[1]);
         if (deposit == null) return false;
-        accrueDeposit(bank, parts[1], deposit);
+        accrueDeposit(deposit, e.clock.millis());
         fundInterest(bank, parts[1], deposit);
         return true;
     }
 
     public String requestLoan(Actor actor, String bankId, long principal, int periods, String collateral,
                               boolean consentBalance, boolean consentRepossession, boolean autoPay) {
+        EconomyData.Loan loan = prepareLoan(actor, bankId, principal, periods, collateral, consentBalance, consentRepossession, autoPay, true);
+        EconomyData.Bank bank = bank(loan.bank, true);
+        e.data.loans.put(loan.id, loan);
+        e.schedule("loan", loan.id);
+        event(bank.id, loan.borrower, "LOAN_REQUEST", principal, loan.id + ": " + loan.terms);
+        e.mail(loan.borrower, "Loan application recorded", loan.id + "\n" + loan.terms);
+        e.governance.company(bank.company).ifPresent(company ->
+                e.mail(company.owner().toString(), "Loan approval requested", loan.borrower + " requests " + Money.format(principal) + "; ID " + loan.id));
+        e.dirty.run();
+        return loan.id;
+    }
+
+    EconomyData.Loan quoteLoanRequest(Actor actor, String bankId, long principal, int periods, String collateral,
+                                     boolean consentBalance, boolean consentRepossession, boolean autoPay) {
+        return prepareLoan(actor, bankId, principal, periods, collateral, consentBalance, consentRepossession, autoPay, false);
+    }
+
+    private EconomyData.Loan prepareLoan(Actor actor, String bankId, long principal, int periods, String collateral,
+                                        boolean consentBalance, boolean consentRepossession, boolean autoPay, boolean updateValuation) {
         e.ledger.thread();
         EconomyData.Bank bank = bank(bankId, true);
         Money.positive(principal);
@@ -340,13 +438,8 @@ public final class Banking {
                 >= e.config.maximumBankLoans) throw new UserError("This bank's loan limit has been reached.");
         long interestCap = Money.tax(principal, e.config.loanLifetimeInterestCapBps);
         Money.add(principal, interestCap);
-        long exposure = 0;
-        for (EconomyData.Loan loan : e.data.loans.values()) {
-            if (!loan.borrower.equals(actor.id().toString()) || !OPEN_LOANS.contains(loan.status)) continue;
-            if (loan.status.equals("DEFAULTED")) throw new UserError("Resolve existing defaults before taking another loan.");
-            exposure = Money.add(exposure, Money.add(loan.principal, loan.interest));
-        }
-        if (Money.add(exposure, principal) > e.config.maximumBorrowerDebtCents) throw new UserError("The borrower debt limit would be exceeded.");
+        long now = e.clock.millis();
+        checkBorrowerExposure(actor.id().toString(), principal, null, now);
         if (collateral == null || collateral.equalsIgnoreCase("none")) {
             collateral = null;
             if (!e.config.allowUnsecuredLoans || principal > e.config.maximumUnsecuredLoanCents) {
@@ -357,7 +450,7 @@ public final class Banking {
             collateral = ChunkKey.parse(collateral).toString();
             if (!consentRepossession) throw new UserError("A secured application requires explicit collateral-repossession consent.");
             if (!e.config.allowConsentedRepossession) throw new UserError("Secured repossession is disabled by the server.");
-            checkCollateral(actor.id().toString(), collateral, principal, null);
+            checkCollateral(actor.id().toString(), collateral, principal, null, updateValuation);
         }
         EconomyData.Loan loan = new EconomyData.Loan();
         loan.id = EconomyEngine.id();
@@ -371,7 +464,7 @@ public final class Banking {
         loan.rateBps = bank.loanInterestBps;
         loan.originationFee = Money.tax(principal, bank.originationFeeBps);
         if (loan.originationFee >= principal) throw new UserError("Origination fees must be less than the loan principal.");
-        loan.requestedAt = e.clock.millis();
+        loan.requestedAt = now;
         loan.applicationExpiresAt = EconomyEngine.deadline(loan.requestedAt, e.config.loanApplicationLifetimeMillis);
         loan.graceMillis = e.config.loanGraceMillis;
         loan.defaultMissedPayments = e.config.defaultAfterMissedPayments;
@@ -385,17 +478,36 @@ public final class Banking {
                 + "; balance seizure consent=" + consentBalance + "; specific collateral=" + collateral
                 + "; repossession consent=" + consentRepossession + "; automatic payments=" + autoPay
                 + "; default after " + loan.defaultMissedPayments + " missed periods plus " + loan.graceMillis + "ms grace.";
-        e.data.loans.put(loan.id, loan);
-        e.schedule("loan", loan.id);
-        event(bank.id, loan.borrower, "LOAN_REQUEST", principal, loan.id + ": " + loan.terms);
-        e.mail(loan.borrower, "Loan application recorded", loan.id + "\n" + loan.terms);
-        e.governance.company(bank.company).ifPresent(company ->
-                e.mail(company.owner().toString(), "Loan approval requested", loan.borrower + " requests " + Money.format(principal) + "; ID " + loan.id));
-        e.dirty.run();
-        return loan.id;
+        return loan;
     }
 
-    private void checkCollateral(String borrower, String key, long principal, String ignoreLoan) {
+    private void checkBorrowerExposure(String borrower, long principal, String ignoreLoan, long now) {
+        BigInteger exposure = borrowerExposure(borrower, ignoreLoan, now).add(BigInteger.valueOf(principal));
+        if (exposure.compareTo(BigInteger.valueOf(e.config.maximumBorrowerDebtCents)) > 0) {
+            throw new UserError("The borrower debt limit would be exceeded.");
+        }
+    }
+
+    long borrowingCapacity(Actor actor) {
+        try {
+            return BigInteger.valueOf(e.config.maximumBorrowerDebtCents).subtract(borrowerExposure(actor.id().toString(), null, e.clock.millis()))
+                    .max(BigInteger.ZERO).longValueExact();
+        } catch (UserError defaulted) { return 0; }
+    }
+
+    private BigInteger borrowerExposure(String borrower, String ignoreLoan, long now) {
+        BigInteger exposure = BigInteger.ZERO;
+        for (EconomyData.Loan loan : e.data.loans.values()) {
+            if (!loan.borrower.equals(borrower) || loan.id.equals(ignoreLoan) || !OPEN_LOANS.contains(loan.status)) continue;
+            if (loan.status.equals("DEFAULTED")) throw new UserError("Resolve existing defaults before taking another loan.");
+            if (loan.status.equals("REQUESTED") && loan.applicationExpiresAt <= now) continue;
+            exposure = exposure.add(BigInteger.valueOf(loan.principal)).add(BigInteger.valueOf(loan.interest))
+                    .add(loanInterest(loan, now).earned());
+        }
+        return exposure;
+    }
+
+    private void checkCollateral(String borrower, String key, long principal, String ignoreLoan, boolean updateValuation) {
         GovernanceAccess.ClaimView claim = e.governance.claim(key).orElseThrow(() -> new UserError("The collateral is not a claimed chunk."));
         if (!claim.ownerAccount().equals("player:" + borrower) || !e.governance.maySellProperty(UUID.fromString(borrower), key)) {
             throw new UserError("Collateral must be a claim the borrower privately owns and may sell.");
@@ -404,35 +516,44 @@ public final class Banking {
                 !loan.id.equals(ignoreLoan) && OPEN_LOANS.contains(loan.status) && !loan.collateralReleased && key.equals(loan.collateral))) {
             throw new UserError("This claim is already listed or pledged.");
         }
-        long limit = Money.tax(e.valueOf(key), e.config.maximumLoanToValueBps);
+        long limit = Money.tax(updateValuation ? e.valueOf(key) : e.property.previewValue(key).value, e.config.maximumLoanToValueBps);
         if (principal > limit) throw new UserError("The loan exceeds the collateral's permitted loan-to-value amount: " + Money.format(limit));
     }
 
     public void approve(Actor actor, String id) {
+        LoanFunding funding = prepareApproval(actor, id, true);
+        EconomyData.Loan loan = funding.loan();
+        EconomyData.Bank bank = bank(loan.bank, true);
+        e.ledger.prepare(List.of(funding.transfer()), List.of(), true, funding.reserves()).commit();
+        loan.status = "ACTIVE";
+        loan.issuedAt = funding.time();
+        loan.lastAccruedAt = funding.time();
+        event(bank.id, loan.borrower, "LOAN_ISSUED", funding.transfer().cents(), loan.id + "; fee retained " + Money.format(loan.originationFee));
+        e.mail(loan.borrower, "Loan approved", loan.id + "\n" + loan.terms + "\nNet disbursement: " + Money.format(funding.transfer().cents()));
+        e.dirty.run();
+    }
+
+    record LoanFunding(EconomyData.Loan loan, Transfer transfer, Map<String, Long> reserves, long time) {}
+
+    LoanFunding quoteApproval(Actor actor, String id) { return prepareApproval(actor, id, false); }
+
+    private LoanFunding prepareApproval(Actor actor, String id, boolean updateValuation) {
         e.ledger.thread();
         EconomyData.Loan loan = loan(id);
         EconomyData.Bank bank = bank(loan.bank, true);
         requireManager(actor, bank);
+        long now = e.clock.millis();
         if (!loan.status.equals("REQUESTED")) throw new UserError("This application is no longer pending.");
-        if (loan.applicationExpiresAt <= e.clock.millis()) throw new UserError("This loan application has expired.");
-        if (loan.collateral != null) checkCollateral(loan.borrower, loan.collateral, loan.principal, loan.id);
+        if (loan.applicationExpiresAt <= now) throw new UserError("This loan application has expired.");
+        checkBorrowerExposure(loan.borrower, loan.principal, loan.id, now);
+        if (loan.collateral != null) checkCollateral(loan.borrower, loan.collateral, loan.principal, loan.id, updateValuation);
         else if (!e.config.allowUnsecuredLoans || loan.principal > e.config.maximumUnsecuredLoanCents) {
             throw new UserError("This unsecured loan is no longer eligible under server policy.");
         }
-        if (e.data.loans.values().stream().anyMatch(other -> other.borrower.equals(loan.borrower) && other.status.equals("DEFAULTED"))) {
-            throw new UserError("The borrower has defaulted on another loan.");
-        }
         long net = loan.originalPrincipal - loan.originationFee;
-        long now = e.clock.millis();
         EconomyEngine.deadline(now, Math.multiplyExact(loan.periodMillis, (long) loan.periods));
-        e.ledger.prepare(List.of(new Transfer(bank.account(), "player:" + loan.borrower, net, "Loan disbursement " + loan.id)),
-                List.of(), true, Map.of(bank.account(), requiredReserve(bank))).commit();
-        loan.status = "ACTIVE";
-        loan.issuedAt = now;
-        loan.lastAccruedAt = now;
-        event(bank.id, loan.borrower, "LOAN_ISSUED", net, loan.id + "; fee retained " + Money.format(loan.originationFee));
-        e.mail(loan.borrower, "Loan approved", loan.id + "\n" + loan.terms + "\nNet disbursement: " + Money.format(net));
-        e.dirty.run();
+        return new LoanFunding(loan, new Transfer(bank.account(), "player:" + loan.borrower, net, "Loan disbursement " + loan.id),
+                Map.of(bank.account(), requiredReserve(bank, now)), now);
     }
 
     public void reject(Actor actor, String id) {
@@ -461,7 +582,23 @@ public final class Banking {
         EconomyData.Loan loan = loan(id);
         requireLoanViewer(actor, loan);
         if (loan.status.equals("ACTIVE") || loan.status.equals("DEFAULTED")) accrueLoan(loan);
-        return new LoanSummary(loan.principal, loan.interest, debt(loan), due(loan), loan.status, loan.missedPayments, loan.terms);
+        return summary(loan, loan.interest, e.clock.millis());
+    }
+
+    public LoanSummary previewLoan(Actor actor, String id) {
+        e.ledger.thread();
+        EconomyData.Loan loan = loan(id);
+        requireLoanViewer(actor, loan);
+        long now = e.clock.millis();
+        return summary(loan, Money.add(loan.interest, loanInterest(loan, now).earned().longValueExact()), now);
+    }
+
+    private LoanSummary summary(EconomyData.Loan loan, long interest, long now) {
+        boolean outstanding = Set.of("ACTIVE", "DEFAULTED").contains(loan.status);
+        long next = outstanding ? EconomyEngine.deadline(loan.issuedAt,
+                Math.multiplyExact(loan.periodMillis, Math.min(loan.periods, (long) paidPeriods(loan) + 1))) : 0;
+        return new LoanSummary(loan.principal, interest, Money.add(loan.principal, interest), due(loan, interest, now),
+                loan.status, loan.missedPayments, loan.terms, loan.autoPay, next);
     }
 
     public void autoPay(Actor actor, String id, boolean enabled) {
@@ -473,20 +610,31 @@ public final class Banking {
         e.dirty.run();
     }
 
+    private static Interest loanInterest(EconomyData.Loan loan, long now) {
+        if (!(loan.status.equals("ACTIVE") || loan.status.equals("DEFAULTED")) || now <= loan.lastAccruedAt) {
+            return new Interest(BigInteger.ZERO, loan.interestRemainder);
+        }
+        if (loan.interestCap == loan.interestAccrued) return new Interest(BigInteger.ZERO, "0");
+        Interest interest = interest(loan.principal, loan.rateBps, loan.periodMillis, loan.lastAccruedAt,
+                loan.interestRemainder, now);
+        BigInteger remaining = BigInteger.valueOf(loan.interestCap - loan.interestAccrued);
+        BigInteger earned = interest.earned().min(remaining);
+        return new Interest(earned, earned.equals(remaining) ? "0" : interest.remainder());
+    }
+
     private void accrueLoan(EconomyData.Loan loan) {
         long now = e.clock.millis();
         if (now <= loan.lastAccruedAt || !(loan.status.equals("ACTIVE") || loan.status.equals("DEFAULTED"))) return;
-        BigInteger denominator = TEN_THOUSAND.multiply(BigInteger.valueOf(loan.periodMillis));
-        BigInteger duration = BigInteger.valueOf(now).subtract(BigInteger.valueOf(loan.lastAccruedAt));
-        BigInteger numerator = BigInteger.valueOf(loan.principal).multiply(BigInteger.valueOf(loan.rateBps))
-                .multiply(duration).add(new BigInteger(loan.interestRemainder));
-        BigInteger[] amount = numerator.divideAndRemainder(denominator);
-        long earned = amount[0].min(BigInteger.valueOf(loan.interestCap - loan.interestAccrued)).longValueExact();
-        loan.interest = Money.add(loan.interest, earned);
-        loan.interestAccrued = Money.add(loan.interestAccrued, earned);
-        loan.interestRemainder = loan.interestAccrued == loan.interestCap ? "0" : amount[1].toString();
+        Interest interest = loanInterest(loan, now);
+        long earned = interest.earned().longValueExact();
+        long balance = Money.add(loan.interest, earned);
+        long accrued = Money.add(loan.interestAccrued, earned);
+        boolean changed = earned != 0 || !loan.interestRemainder.equals(interest.remainder());
+        loan.interest = balance;
+        loan.interestAccrued = accrued;
+        loan.interestRemainder = interest.remainder();
         loan.lastAccruedAt = now;
-        e.dirty.run();
+        if (changed) e.dirty.run();
     }
 
     private long debt(EconomyData.Loan loan) { return Money.add(loan.principal, loan.interest); }
@@ -533,8 +681,12 @@ public final class Banking {
     }
 
     private int maturedPeriods(EconomyData.Loan loan) {
-        if (loan.status.equals("REQUESTED") || loan.issuedAt > e.clock.millis()) return 0;
-        return (int) Math.min(loan.periods, (e.clock.millis() - loan.issuedAt) / loan.periodMillis);
+        return maturedPeriods(loan, e.clock.millis());
+    }
+
+    private int maturedPeriods(EconomyData.Loan loan, long now) {
+        if (loan.status.equals("REQUESTED") || loan.issuedAt > now) return 0;
+        return (int) Math.min(loan.periods, (now - loan.issuedAt) / loan.periodMillis);
     }
 
     private int paidPeriods(EconomyData.Loan loan) {
@@ -543,14 +695,18 @@ public final class Banking {
     }
 
     private long due(EconomyData.Loan loan) {
+        return due(loan, loan.interest, e.clock.millis());
+    }
+
+    private long due(EconomyData.Loan loan, long interest, long now) {
         if (!loan.status.equals("ACTIVE") && !loan.status.equals("DEFAULTED")) return 0;
-        if (loan.status.equals("DEFAULTED")) return debt(loan);
-        int periods = maturedPeriods(loan);
+        if (loan.status.equals("DEFAULTED")) return Money.add(loan.principal, interest);
+        int periods = maturedPeriods(loan, now);
         if (periods == 0) return 0;
         long scheduled = BigInteger.valueOf(loan.originalPrincipal).multiply(BigInteger.valueOf(periods))
                 .add(BigInteger.valueOf(loan.periods - 1L)).divide(BigInteger.valueOf(loan.periods)).longValueExact();
         long principalDue = Math.max(0, scheduled - (loan.originalPrincipal - loan.principal));
-        return Money.add(principalDue, loan.interest);
+        return Money.add(principalDue, interest);
     }
 
     boolean tickLoan(String id) {
@@ -578,7 +734,11 @@ public final class Banking {
             }
         }
         if (loan.status.equals("REPAID")) return false;
-        loan.missedPayments = Math.max(0, matured - paidPeriods(loan));
+        int missedPayments = Math.max(0, matured - paidPeriods(loan));
+        if (loan.missedPayments != missedPayments) {
+            loan.missedPayments = missedPayments;
+            e.dirty.run();
+        }
         if (loan.missedPayments > 0 && matured > loan.reportedDuePeriod) {
             loan.reportedDuePeriod = matured;
             e.mail(loan.borrower, "Loan installment overdue", id + ": " + Money.format(due(loan)) + " currently due.");

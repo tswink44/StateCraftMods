@@ -1,6 +1,7 @@
 package dev.statecraft.network;
 
 import dev.statecraft.api.form.FormChoice;
+import dev.statecraft.api.form.FormConstraints;
 import dev.statecraft.api.form.FormField;
 import dev.statecraft.api.form.FormSchema;
 import io.netty.handler.codec.DecoderException;
@@ -55,6 +56,13 @@ final class FormCodec {
             }
             buffer.writeVarInt(field.offset());
             buffer.writeBoolean(field.more());
+            FormConstraints constraints = field.constraints();
+            buffer.writeByte(constraints.type().ordinal());
+            buffer.writeVarInt(constraints.maxLength());
+            buffer.writeLong(constraints.minimum());
+            buffer.writeLong(constraints.maximum());
+            buffer.writeVarInt(constraints.alternatives().size());
+            constraints.alternatives().forEach(value -> buffer.writeUtf(value, 32));
         }
     }
 
@@ -83,8 +91,17 @@ final class FormCodec {
                 choices.add(new FormChoice(buffer.readUtf(256), buffer.readUtf(128), buffer.readUtf(256)));
             }
             int offset = count(buffer, 1_000_000);
+            boolean more = buffer.readBoolean();
+            FormConstraints.Type constraintType = UiCodec.enumeration(buffer, FormConstraints.Type.values());
+            int maximumLength = count(buffer, 2048);
+            long minimum = buffer.readLong();
+            long maximum = buffer.readLong();
+            int alternativeCount = count(buffer, 16);
+            var alternatives = new ArrayList<String>(alternativeCount);
+            for (int alternative = 0; alternative < alternativeCount; alternative++) alternatives.add(buffer.readUtf(32));
             fields.add(new FormField(key, label, FormField.Kind.values()[kind], value, selectedLabel,
-                    hint, dependencies, custom, choices, offset, buffer.readBoolean()));
+                    hint, dependencies, custom, choices, offset, more,
+                    new FormConstraints(constraintType, maximumLength, minimum, maximum, alternatives)));
         }
         return new FormSchema(fields);
     }

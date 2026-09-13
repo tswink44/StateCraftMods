@@ -46,13 +46,20 @@ public class GovernanceEngine implements GovernanceAccess {
     final Commerce commerce;
     final Communications communications;
     final Integrity integrity;
+    private final Runnable dirty;
     private final Set<String> observedOperators = new HashSet<>();
     private List<String> validationProblems = List.of();
 
     public GovernanceEngine(GovernanceData data, GovernanceConfig config, EconomyAccess economy,
                             LongSupplier clock) {
+        this(data, config, economy, clock, () -> { });
+    }
+
+    public GovernanceEngine(GovernanceData data, GovernanceConfig config, EconomyAccess economy,
+                            LongSupplier clock, Runnable dirty) {
         this.data = Objects.requireNonNull(data, "data");
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.dirty = Objects.requireNonNull(dirty, "dirty");
         configure(config);
         Integrity.initialize(data);
         setEconomy(economy);
@@ -63,6 +70,10 @@ public class GovernanceEngine implements GovernanceAccess {
         refreshValidation();
     }
 
+    void changed() {
+        dirty.run();
+    }
+
     public synchronized void configure(GovernanceConfig config) {
         Objects.requireNonNull(config, "config").validate();
         this.config = config.copy();
@@ -70,7 +81,14 @@ public class GovernanceEngine implements GovernanceAccess {
 
     public synchronized void setEconomy(EconomyAccess economy) {
         this.economy = economy == null ? EconomyAccess.UNAVAILABLE : economy;
-        if (this.economy.available()) data.economySeen = true;
+        rememberEconomy();
+    }
+
+    private void rememberEconomy() {
+        if (economy.available() && !data.economySeen) {
+            data.economySeen = true;
+            changed();
+        }
     }
 
     public synchronized void login(Actor actor) {
@@ -78,17 +96,28 @@ public class GovernanceEngine implements GovernanceAccess {
         String id = actor.id().toString();
         String name = text(actor.name(), 64, "Player name");
         new ChunkKey(actor.dimension(), actor.chunkX(), actor.chunkZ());
-        Player player = data.players.computeIfAbsent(id, ignored -> {
-            Player created = new Player();
-            created.id = id;
-            return created;
-        });
-        player.id = id;
-        for (Player other : data.players.values()) {
-            if (other != null && other != player && name.equalsIgnoreCase(other.name))
-                other.name = other.id;
+        Player player = data.players.get(id);
+        if (player == null) {
+            player = new Player();
+            player.id = id;
+            data.players.put(id, player);
+            changed();
         }
-        player.name = name;
+        if (!id.equals(player.id)) {
+            player.id = id;
+            changed();
+        }
+        for (Player other : data.players.values()) {
+            if (other != null && other != player && name.equalsIgnoreCase(other.name)
+                    && !Objects.equals(other.name, other.id)) {
+                other.name = other.id;
+                changed();
+            }
+        }
+        if (!name.equals(player.name)) {
+            player.name = name;
+            changed();
+        }
         player.lastSeen = now();
         observeOperator(actor);
     }
@@ -143,8 +172,8 @@ public class GovernanceEngine implements GovernanceAccess {
         if (!validationProblems.isEmpty()) return;
         if (now < data.lastTick) return;
         data.lastTick = now;
-        if (economy.available()) data.economySeen = true;
-        data.invitations.values().removeIf(invite -> invite != null && invite.expiresAt <= now);
+        rememberEconomy();
+        if (data.invitations.values().removeIf(invite -> invite != null && invite.expiresAt <= now)) changed();
         politics.tick(now);
         commerce.tick(now);
         integrity.boundRetention();
@@ -288,6 +317,7 @@ public class GovernanceEngine implements GovernanceAccess {
         assertClaimFree(claim.key, null);
         if (ownerAccount.equals(claim.ownerAccount)) return;
         String previous = claim.ownerAccount;
+        changed();
         claim.ownerAccount = ownerAccount;
         claim.permits.clear();
         history("property", chunkKey, previous + " -> " + ownerAccount);
@@ -384,8 +414,12 @@ public class GovernanceEngine implements GovernanceAccess {
 
     public synchronized void recordImprovement(String chunkKey, int delta) {
         Claim claim = data.claims.get(chunkKey);
-        if (claim != null) claim.improvements = (int) Math.max(0, Math.min(1_000_000_000L,
-                (long) claim.improvements + delta));
+        if (claim == null) return;
+        int improvements = (int) Math.max(0, Math.min(1_000_000_000L, (long) claim.improvements + delta));
+        if (claim.improvements != improvements) {
+            claim.improvements = improvements;
+            changed();
+        }
     }
 
     public synchronized boolean autoClaimEnabled(UUID player) {
@@ -433,7 +467,10 @@ public class GovernanceEngine implements GovernanceAccess {
         else {
             observedOperators.remove(actor.id().toString());
             Player player = data.players.get(actor.id().toString());
-            if (player != null) player.bypass = false;
+            if (player != null && player.bypass) {
+                player.bypass = false;
+                changed();
+            }
         }
     }
 
@@ -508,6 +545,7 @@ public class GovernanceEngine implements GovernanceAccess {
                 Invitation invite = invitation(government.id, null, player);
                 check(invite != null, "No active invitation exists.");
                 data.invitations.remove(invite.id);
+                changed();
                 return "Invitation removed.";
             }
             case "kick" -> {
@@ -516,8 +554,8 @@ public class GovernanceEngine implements GovernanceAccess {
                 Player target = resolvePlayer(args.get(3));
                 check(!actor.id().toString().equals(target.id), "Use leave to remove your own membership.");
                 check(member(target.id, government), "That player is not a citizen of this government.");
-                check(actor.admin() || !superior(target.id, government),
-                        "A subordinate government cannot expel a superior official.");
+                check(mayRemoveMembership(actor, target.id, government),
+                        "Only a superior official may remove an ancestor official's descendant membership.");
                 leaveGovernment(target.id, government);
                 mail(UUID.fromString(target.id), "Citizenship removed", "You were removed from " + government.name + ".");
                 return "Removed " + target.name + " from " + government.name + ".";
@@ -570,8 +608,8 @@ public class GovernanceEngine implements GovernanceAccess {
                 args.exactly(5, family + " setting <government> <key> <value|inherit>");
                 executive(actor, government);
                 String key = args.get(3);
-                check(actor.admin() || !config.requireLegislationForPolicy || "open".equals(key),
-                        "This server requires legislation for mechanical policies.");
+                check(!requiresNationalLegislation(actor, government, key),
+                        "This server requires legislation for national mechanical policies; local policies remain executive actions.");
                 setPolicy(government, key, args.get(4));
                 history("policy", government.id, key + "=" + args.get(4) + " by " + actor.id());
                 return "Updated policy " + key + ".";
@@ -610,18 +648,22 @@ public class GovernanceEngine implements GovernanceAccess {
         government.parentId = parent == null ? null : parent.id;
         government.leader = leader.id;
         government.createdAt = now();
-        long fee = switch (kind) {
-            case NATION -> config.nationCreationFee;
-            case STATE -> config.stateCreationFee;
-            case CITY -> config.cityCreationFee;
-        };
-        pay(List.of(new EconomyAccess.Transfer(actor.account(), parent == null ? config.feeAccount : account(parent),
-                fee, "Create " + kind.name().toLowerCase(Locale.ROOT))));
+        pay(List.of(creationFee(actor, kind, parent)));
         data.governments.put(government.id, government);
         setMembership(leader, government);
         if (kind == Kind.NATION) politics.schedule(government);
         history("government", government.id, "Created " + kind + " " + name + " by " + actor.id());
         return "Created " + kind.name().toLowerCase(Locale.ROOT) + " " + name + " [" + government.id + "].";
+    }
+
+    EconomyAccess.Transfer creationFee(Actor actor, Kind kind, Government parent) {
+        long fee = switch (kind) {
+            case NATION -> config.nationCreationFee;
+            case STATE -> config.stateCreationFee;
+            case CITY -> config.cityCreationFee;
+        };
+        return new EconomyAccess.Transfer(actor.account(), parent == null ? config.feeAccount : account(parent),
+                fee, "Create " + kind.name().toLowerCase(Locale.ROOT));
     }
 
     void checkCreationCapacity(Kind kind, Government parent) {
@@ -665,7 +707,7 @@ public class GovernanceEngine implements GovernanceAccess {
         history("membership", government.id, "Joined " + player.id);
     }
 
-    private void checkJoinPath(Player player, Government government) {
+    void checkJoinPath(Player player, Government government) {
         switch (government.kind) {
             case NATION -> check(player.nationId == null, "Leave your current nation before joining another.");
             case STATE -> {
@@ -680,6 +722,7 @@ public class GovernanceEngine implements GovernanceAccess {
     }
 
     void setMembership(Player player, Government government) {
+        changed();
         switch (government.kind) {
             case NATION -> {
                 if (!government.id.equals(player.nationId)) {
@@ -705,13 +748,19 @@ public class GovernanceEngine implements GovernanceAccess {
         }
     }
 
-    void leaveGovernment(String playerId, Government government) {
+    Set<String> membershipRemovalScope(String playerId, Government government) {
         Set<String> scope = subtree(government).stream().map(g -> g.id).collect(Collectors.toSet());
         for (Government child : data.governments.values()) {
             if (child != null && scope.contains(child.id))
                 check(!playerId.equals(child.leader), "Transfer leadership of " + child.name + " before leaving or expelling its leader.");
         }
+        return scope;
+    }
+
+    void leaveGovernment(String playerId, Government government) {
+        Set<String> scope = membershipRemovalScope(playerId, government);
         Player player = data.players.get(playerId);
+        changed();
         clearMembership(player, scope);
         for (Government child : data.governments.values())
             if (child != null && scope.contains(child.id)) child.officers.remove(playerId);
@@ -732,6 +781,7 @@ public class GovernanceEngine implements GovernanceAccess {
             existing.governmentId = government.id;
             existing.playerId = target.id;
         }
+        changed();
         existing.invitedBy = actor.id().toString();
         existing.expiresAt = deadline(now(), config.invitationDurationMillis);
         data.invitations.put(existing.id, existing);
@@ -769,6 +819,7 @@ public class GovernanceEngine implements GovernanceAccess {
         check(member(playerId, government), "The new leader must be a citizen of this government.");
         check(!playerId.equals(government.leader), "That player is already leader.");
         String previous = government.leader;
+        changed();
         government.leader = playerId;
         government.officers.remove(playerId);
         history("leadership", government.id, previous + " -> " + playerId);
@@ -777,9 +828,10 @@ public class GovernanceEngine implements GovernanceAccess {
 
     void renameGovernment(Government government, String name) {
         government.name = validGovernmentName(name, government.id);
+        changed();
     }
 
-    void disband(Government government, boolean cascade, boolean administrator) {
+    List<Government> disbandPlan(Government government, boolean cascade, boolean administrator) {
         List<Government> removed = subtree(government);
         Set<String> ids = removed.stream().map(g -> g.id).collect(Collectors.toSet());
         List<Claim> claims = data.claims.values().stream().filter(Objects::nonNull)
@@ -801,6 +853,13 @@ public class GovernanceEngine implements GovernanceAccess {
         check(data.claims.values().stream().filter(Objects::nonNull)
                         .noneMatch(c -> !ids.contains(c.cityId) && accounts.contains(c.ownerAccount)),
                 "A treasury owns property outside this subtree; transfer it first.");
+        return removed;
+    }
+
+    void disband(Government government, boolean cascade, boolean administrator) {
+        List<Government> removed = disbandPlan(government, cascade, administrator);
+        Set<String> ids = removed.stream().map(g -> g.id).collect(Collectors.toSet());
+        changed();
         for (Player player : data.players.values()) if (player != null) clearMembership(player, ids);
         for (String id : ids) {
             data.governments.remove(id);
@@ -817,14 +876,22 @@ public class GovernanceEngine implements GovernanceAccess {
     void clearMembership(Player player, Set<String> removed) {
         if (player == null) return;
         if (removed.contains(player.nationId)) {
+            changed();
             player.nationId = null;
             player.stateId = null;
             player.cityId = null;
         } else if (removed.contains(player.stateId)) {
+            changed();
             player.stateId = null;
             player.cityId = null;
-        } else if (removed.contains(player.cityId)) player.cityId = null;
-        if (player.cityId == null) player.autoClaim = false;
+        } else if (removed.contains(player.cityId)) {
+            player.cityId = null;
+            changed();
+        }
+        if (player.cityId == null && player.autoClaim) {
+            player.autoClaim = false;
+            changed();
+        }
     }
 
     private String chunkCommand(Actor actor, Arguments args) {
@@ -848,7 +915,11 @@ public class GovernanceEngine implements GovernanceAccess {
                 check(Set.of("on", "off").contains(args.get(2)), "Use on or off.");
                 boolean enabled = "on".equals(args.get(2));
                 if (enabled) manage(actor, ownGovernment(actor, Kind.CITY));
-                requirePlayer(actor.id()).autoClaim = enabled;
+                Player player = requirePlayer(actor.id());
+                if (player.autoClaim != enabled) {
+                    player.autoClaim = enabled;
+                    changed();
+                }
                 return "Automatic claiming " + (enabled ? "enabled for your resident city." : "disabled.");
             }
             case "info" -> {
@@ -926,6 +997,23 @@ public class GovernanceEngine implements GovernanceAccess {
     }
 
     void claimChunk(Actor actor, Government city, String key) {
+        validateClaim(actor, city, key);
+        Claim claim = new Claim();
+        claim.key = key;
+        claim.cityId = city.id;
+        claim.ownerAccount = account(city);
+        claim.claimedAt = now();
+        pay(List.of(claimFee(actor, city)));
+        data.claims.put(key, claim);
+        changed();
+        history("claim", key, "Claimed by " + city.id + " for " + actor.id());
+    }
+
+    EconomyAccess.Transfer claimFee(Actor actor, Government city) {
+        return new EconomyAccess.Transfer(actor.account(), account(city), config.claimFee, "City claim");
+    }
+
+    void validateClaim(Actor actor, Government city, String key) {
         check(city.kind == Kind.CITY, "Chunks must belong to a city.");
         manage(actor, city);
         check(!data.claims.containsKey(key), "This chunk is already claimed.");
@@ -939,17 +1027,15 @@ public class GovernanceEngine implements GovernanceAccess {
             check(dimension.isEmpty() || dimension.stream().anyMatch(parsed::adjacent),
                     "Claims must share an edge with this city's land in the same dimension.");
         }
-        Claim claim = new Claim();
-        claim.key = key;
-        claim.cityId = city.id;
-        claim.ownerAccount = account(city);
-        claim.claimedAt = now();
-        pay(List.of(new EconomyAccess.Transfer(actor.account(), account(city), config.claimFee, "City claim")));
-        data.claims.put(key, claim);
-        history("claim", key, "Claimed by " + city.id + " for " + actor.id());
     }
 
     void unclaim(Actor actor, String key, boolean force) {
+        unclaimPlan(actor, key, force);
+        data.claims.remove(key);
+        history("claim", key, "Unclaimed by " + actor.id() + (force ? " (forced)" : ""));
+    }
+
+    Claim unclaimPlan(Actor actor, String key, boolean force) {
         Claim claim = requiredClaim(key);
         if (force) admin(actor);
         else {
@@ -963,8 +1049,7 @@ public class GovernanceEngine implements GovernanceAccess {
             remaining.remove(key);
             check(connected(remaining), "Unclaiming this chunk would split the city's territory.");
         }
-        data.claims.remove(key);
-        history("claim", key, "Unclaimed by " + actor.id() + (force ? " (forced)" : ""));
+        return claim;
     }
 
     void assertClaimFree(String key, String ignoredTreaty) {
@@ -1049,7 +1134,12 @@ public class GovernanceEngine implements GovernanceAccess {
             case "bypass" -> {
                 args.exactly(3, "admin bypass <on|off>");
                 check(Set.of("on", "off").contains(args.get(2)), "Use on or off.");
-                requirePlayer(actor.id()).bypass = "on".equals(args.get(2));
+                Player player = requirePlayer(actor.id());
+                boolean enabled = "on".equals(args.get(2));
+                if (player.bypass != enabled) {
+                    player.bypass = enabled;
+                    changed();
+                }
                 return "Protection bypass " + args.get(2) + "; it is valid only while you remain an operator.";
             }
             case "unclaim" -> {
@@ -1314,9 +1404,20 @@ public class GovernanceEngine implements GovernanceAccess {
                 "Only this government's leader or a superior leader may perform that action.");
     }
 
-    boolean superior(String player, Government government) {
+    boolean mayRemoveMembership(Actor actor, String player, Government government) {
+        if (actor.admin()) return true;
+        String caller = actor.id().toString();
         return ancestors(government).stream().skip(1)
-                .anyMatch(g -> member(player, g) && (player.equals(g.leader) || g.officers.contains(player)));
+                .filter(scope -> member(player, scope)
+                        && (player.equals(scope.leader) || scope.officers.contains(player)))
+                .allMatch(scope -> (caller.equals(scope.leader) && member(caller, scope))
+                        || ancestors(scope).stream().skip(1).anyMatch(superior -> member(caller, superior)
+                        && (caller.equals(superior.leader) || superior.officers.contains(caller))));
+    }
+
+    boolean requiresNationalLegislation(Actor actor, Government government, String key) {
+        return config.requireLegislationForPolicy && government.kind == Kind.NATION
+                && !actor.admin() && !"open".equals(key);
     }
 
     void admin(Actor actor) {
@@ -1334,16 +1435,29 @@ public class GovernanceEngine implements GovernanceAccess {
     }
 
     Map<String, String> settings(Government government) {
+        return settings(government, null, null);
+    }
+
+    Map<String, String> previewSettings(Government government, String key, String value) {
+        if ("inherit".equals(value)) check(GovernanceSettings.defaults(config).containsKey(key), "Unknown government policy.");
+        else GovernanceSettings.validate(key, value);
+        return settings(government, key, value);
+    }
+
+    private Map<String, String> settings(Government government, String overrideKey, String overrideValue) {
         Map<String, String> result = GovernanceSettings.defaults(config);
         List<Government> ancestors = ancestors(government);
         java.util.Collections.reverse(ancestors);
         for (Government current : ancestors) {
             for (Map.Entry<String, String> entry : current.settings.entrySet()) {
+                if (current == government && overrideKey != null && overrideKey.equals(entry.getKey())) continue;
                 if (current == government || GovernanceSettings.inherited(entry.getKey())) {
                     try { result.put(entry.getKey(), GovernanceSettings.validate(entry.getKey(), entry.getValue())); }
                     catch (UserError ignored) { /* Corrupt policies remain auditable and never become effective. */ }
                 }
             }
+            if (current == government && overrideKey != null && !"inherit".equals(overrideValue))
+                result.put(overrideKey, GovernanceSettings.validate(overrideKey, overrideValue));
             GovernanceData.Emergency emergency = data.emergencies.get(current.id);
             if (emergency != null && emergency.expiresAt > now()
                     && (current == government || GovernanceSettings.inherited(emergency.policy))) {
@@ -1361,8 +1475,14 @@ public class GovernanceEngine implements GovernanceAccess {
     void setPolicy(Government government, String key, String value) {
         if ("inherit".equals(value)) {
             check(GovernanceSettings.defaults(config).containsKey(key), "Unknown government policy.");
-            government.settings.remove(key);
-        } else government.settings.put(key, GovernanceSettings.validate(key, value));
+            if (government.settings.containsKey(key)) {
+                government.settings.remove(key);
+                changed();
+            }
+        } else {
+            String validated = GovernanceSettings.validate(key, value);
+            if (!Objects.equals(government.settings.put(key, validated), validated)) changed();
+        }
     }
 
     String account(Government government) {
@@ -1418,7 +1538,10 @@ public class GovernanceEngine implements GovernanceAccess {
             requireEconomy(transfer.cents());
             if (transfer.cents() > 0) nonzero.add(transfer);
         }
-        if (!nonzero.isEmpty()) economy.transferBatch(List.copyOf(nonzero));
+        if (!nonzero.isEmpty()) {
+            economy.transferBatch(List.copyOf(nonzero));
+            changed();
+        }
     }
 
     long now() {
@@ -1541,12 +1664,16 @@ public class GovernanceEngine implements GovernanceAccess {
         entry.category = category;
         entry.entityId = entity;
         entry.text = text.length() > 1_000 ? text.substring(0, 1_000) : text;
+        changed();
         list.add(entry);
         trim(list, config.maxHistory);
     }
 
-    static <T> void trim(List<T> list, int limit) {
-        if (list.size() > limit) list.subList(0, list.size() - limit).clear();
+    <T> void trim(List<T> list, int limit) {
+        if (list.size() > limit) {
+            list.subList(0, list.size() - limit).clear();
+            changed();
+        }
     }
 
     static void check(boolean condition, String message) {

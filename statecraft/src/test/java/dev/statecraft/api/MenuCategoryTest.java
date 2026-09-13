@@ -22,13 +22,18 @@ class MenuCategoryTest {
     }
 
     @Test
-    void everyCoreSectionRemainsReachableExactlyOnce() {
+    void everyListedCoreSectionRemainsReachableExactlyOnce() {
         CoreMenus.register();
-        List<MenuPage> pages = MenuRegistry.pages().stream().filter(page -> page.id().startsWith("statecraft:")).toList();
+        List<MenuPage> pages = MenuRegistry.pages().stream().filter(page -> page.id().startsWith("statecraft:"))
+                .filter(MenuPage::listed).toList();
         List<MenuPage> categorized = Arrays.stream(MenuCategory.values()).flatMap(category -> category.pages(pages).stream()).toList();
         assertEquals(pages.size(), categorized.size());
         assertEquals(Set.copyOf(pages), Set.copyOf(categorized));
         assertTrue(MenuCategory.OTHER.pages(pages).isEmpty());
+        assertFalse(MenuRegistry.get("statecraft:detail").listed());
+        assertFalse(categorized.contains(MenuRegistry.get("statecraft:detail")));
+        assertEquals(MenuCategory.ECONOMY, MenuCategory.of("economy:loans"));
+        assertEquals(MenuCategory.ECONOMY, MenuCategory.of("economy:deliveries"));
         assertEquals(MenuCategory.OTHER, MenuCategory.of("addon:section"));
     }
 }

@@ -152,6 +152,8 @@ public final class Ledger {
         if (committing) throw new UserError("Spending limits cannot change during a financial transaction.");
         account(account);
         Money.nonNegative(limit);
+        EconomyData.Account existing = data.accounts.get(account);
+        if (existing != null && existing.dailyLimit == limit) return;
         data.accounts.computeIfAbsent(account, ignored -> new EconomyData.Account()).dailyLimit = limit;
         revision++;
         dirty.run();
@@ -210,7 +212,7 @@ public final class Ledger {
                 participant.run();
                 revision++;
                 committed = true;
-                dirty.run();
+                if (!entries.isEmpty() || newHistory.size() != oldHistory.size()) dirty.run();
             } catch (RuntimeException | Error failure) {
                 previous.forEach((key, value) -> {
                     if (value == null) data.accounts.remove(key);

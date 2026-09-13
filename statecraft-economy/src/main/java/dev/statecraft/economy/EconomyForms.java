@@ -8,6 +8,7 @@ import dev.statecraft.api.UserError;
 import dev.statecraft.api.form.FormBuilder;
 import dev.statecraft.api.form.FormChoice;
 import dev.statecraft.api.form.FormContext;
+import dev.statecraft.api.form.FormConstraints;
 import dev.statecraft.api.form.FormProvider;
 
 import java.util.ArrayList;
@@ -53,6 +54,7 @@ public final class EconomyForms implements FormProvider {
         collateral(actor, form);
         searchChoices(form, family);
         quantitiesAndAmounts(form, family, action);
+        constraints(actor, form, family, action);
     }
 
     private void accounts(Actor actor, FormBuilder form) {
@@ -220,17 +222,22 @@ public final class EconomyForms implements FormProvider {
             if (bank.closed && !history || managed && !managedBank(actor, bank)) continue;
             EconomyData.Deposit own = bank.deposits.get(actor.id().toString());
             if (bank.closed && !managed && own == null && !managedBank(actor, bank)) continue;
-            if (withdrawing && (own == null || own.balance <= bank.withdrawalFeeCents)) continue;
+            long fundedBalance = own == null ? 0 : own.balance;
+            if (withdrawing) {
+                try { fundedBalance = engine.banking.quoteWalletFunding(actor, bank.id, 1).balanceBefore(); }
+                catch (UserError unavailable) { continue; }
+            }
             if (funding && !eligibleSelectedProperty(form)) continue;
             if (family.equals("bank") && action.equals("deposit") && own == null
                     && bank.deposits.size() >= engine.config.maximumBankCustomers) continue;
+            if (family.equals("bank") && action.equals("deposit") && bank.depositFeeCents == Money.MAX) continue;
             if (family.equals("loan") && action.equals("request") && (!bank.id.equals(associated)
                     || hasDefault(actor) || openLoans(bank.id) >= engine.config.maximumBankLoans)) continue;
             if (family.equals("bank") && action.equals("close")
                     && (engine.banking.liabilities(bank).signum() != 0 || openLoans(bank.id) != 0)) continue;
             String detail = bank.id + "; deposit " + bank.depositInterestBps + " bps; loan " + bank.loanInterestBps
                     + " bps per " + bank.interestPeriodMillis + "ms";
-            if (withdrawing) detail = bank.id + "; your deposit " + Money.format(own.balance)
+            if (withdrawing) detail = bank.id + "; your deposit " + Money.format(fundedBalance)
                     + "; withdrawal fee " + Money.format(bank.withdrawalFeeCents);
             if (bank.closed) detail += "; closed";
             choices.add(option(bank.id, bank.name, detail));
@@ -269,7 +276,7 @@ public final class EconomyForms implements FormProvider {
                     ? "EXPIRED APPLICATION" : loan.status;
             choices.add(option(loan.id, (bank == null ? loan.bank : bank.name) + " - " + status,
                     loan.id + "; borrower " + playerName(loan.borrower) + "; principal " + Money.format(loan.principal)
-                            + "; accrued interest " + Money.format(loan.interest)));
+                            + "; accrued interest " + Money.format(loan.interest) + "; current autopay " + (loan.autoPay ? "on" : "off")));
         }
         form.choice("loanId", "Loan", "Only loans you may use for this action. Shown interest is the stored snapshot, not a new accrual.",
                 choices, "", List.of("bank"), false);
@@ -359,7 +366,8 @@ public final class EconomyForms implements FormProvider {
         for (String field : List.of("amount", "price", "unitPrice", "budget", "principal", "seedCapital", "depositFee", "withdrawalFee")) {
             if (!form.has(field)) continue;
             String[] dependencies = field.equals("principal") ? new String[]{"bank"}
-                    : field.equals("unitPrice") || field.equals("seedCapital") || field.equals("budget") ? new String[]{"company"}
+                    : field.equals("unitPrice") ? new String[]{"company", "quantity", "shares"}
+                    : field.equals("seedCapital") || field.equals("budget") ? new String[]{"company"}
                     : field.equals("price") ? new String[]{"chunkKeyOrHere"}
                     : new String[]{"account", "companyAccount", "fromAccount", "toAccount", "recipient", "company", "bank", "loanId", "listingId"};
             form.text(field, FormBuilder.label(field) + " ($)", "Enter dollars with at most two decimal places. No new amount is filled automatically.", "", false, dependencies);
@@ -406,6 +414,85 @@ public final class EconomyForms implements FormProvider {
             form.choice("search", "Marketplace search", "Choose an item/listing, or type part of an item ID or seller name.",
                     choices.values(), "", List.of(), true);
         }
+    }
+
+    private void constraints(Actor actor, FormBuilder form, String family, String action) {
+        for (String key : form.keys()) {
+            int limit = switch (key) {
+                case "name", "branding" -> 64;
+                case "reason" -> 256;
+                case "search", "itemSearch", "companySearch" -> 80;
+                case "bank", "company", "account", "companyAccount", "fromAccount", "toAccount", "recipient" -> 128;
+                case "loanId", "listingId", "chunkKeyOrHere", "collateralOrNone" -> 256;
+                default -> 2048;
+            };
+            form.constraints(key, FormConstraints.text(limit));
+        }
+        form.constraints("page", FormConstraints.integer(1, Integer.MAX_VALUE));
+        form.constraints("quantity", FormConstraints.integer(1, 1_000_000));
+        form.constraints("periods", FormConstraints.integer(1, engine.config.maximumLoanPeriods));
+        form.constraints("depositBps", FormConstraints.integer(0, engine.config.maximumDepositInterestBps));
+        form.constraints("loanBps", FormConstraints.integer(0, engine.config.maximumLoanInterestBps));
+        form.constraints("originationBps", FormConstraints.integer(0, engine.config.maximumOriginationFeeBps));
+        String company = form.value("company");
+        long shares = company.isEmpty() || engine.governance.company(company).isEmpty() ? Money.MAX
+                : engine.governance.availableShares(company, actor.id());
+        form.constraints("shares", FormConstraints.integer(1, Math.max(1, shares)));
+        long remaining = remaining(form, family);
+        form.constraints("quantityOrAll", FormConstraints.integer(1, Math.max(1, Math.min(1_000_000, remaining))).or("all"));
+        form.constraints("sharesOrAll", FormConstraints.integer(1, Math.max(1, remaining)).or("all"));
+        for (String key : List.of("amount", "price", "unitPrice", "budget", "principal", "seedCapital", "depositFee", "withdrawalFee")) {
+            if (!form.has(key)) continue;
+            long minimum = Set.of("depositFee", "withdrawalFee").contains(key)
+                    || key.equals("amount") && family.equals("tax") && action.equals("quote") ? 0 : 1;
+            if (key.equals("seedCapital")) minimum = engine.config.minimumBankReserveCents;
+            long maximum = Money.MAX;
+            if (key.equals("unitPrice") && action.equals("list")) {
+                try {
+                    long quantity = Long.parseLong(form.value(family.equals("stock") ? "shares" : "quantity"));
+                    if (quantity > 0) maximum = Money.MAX / quantity;
+                } catch (NumberFormatException incomplete) { }
+            }
+            if (key.equals("principal")) {
+                maximum = engine.banking.borrowingCapacity(actor);
+                if (form.value("collateralOrNone").equals("none")) maximum = Math.min(maximum, engine.config.maximumUnsecuredLoanCents);
+            }
+            if (key.equals("amount") && family.equals("bank")) {
+                EconomyData.Bank bank = engine.data.banks.get(form.value("bank"));
+                if (bank != null && action.equals("deposit")) {
+                    minimum = Math.min(Money.MAX, bank.depositFeeCents + 1);
+                    maximum = engine.balance(actor.account());
+                } else if (bank != null && action.equals("withdraw")) {
+                    try {
+                        Banking.WalletFunding funding = engine.banking.quoteWalletFunding(actor, bank.id, 1);
+                        maximum = funding.balanceBefore() - funding.fee();
+                    } catch (UserError unavailable) { maximum = 0; }
+                }
+            }
+            if (key.equals("amount") && !family.equals("bank") && !(family.equals("tax") && action.equals("quote"))
+                    || key.equals("budget") || key.equals("seedCapital")) {
+                String source = family.equals("company") || key.equals("seedCapital") ? company.isEmpty() ? "" : "company:" + company
+                        : form.has("fromAccount") ? form.value("fromAccount")
+                        : form.has("companyAccount") ? form.value("companyAccount") : form.value("account");
+                if (!source.isEmpty() && authorized(actor, source)) {
+                    maximum = engine.spendable(source);
+                    if (family.equals("company") && action.equals("pay")) maximum = Math.max(0, maximum - engine.config.companyTransferFeeCents);
+                    if (key.equals("seedCapital")) maximum = Math.max(0, maximum - engine.config.bankCreationFeeCents);
+                }
+            }
+            form.constraints(key, FormConstraints.money(minimum, Math.max(minimum, maximum)));
+        }
+        long debt = Money.MAX;
+        EconomyData.Loan loan = engine.data.loans.get(form.value("loanId"));
+        if (family.equals("loan") && loan != null && loan.periodMillis > 0 && loan.periods > 0) {
+            debt = engine.banking.previewLoan(actor, loan.id).total();
+        } else if (family.equals("tax")) {
+            String account = form.value("account");
+            if (!account.isEmpty() && authorized(actor, account)) {
+                debt = engine.taxes.arrears(account).min(java.math.BigInteger.valueOf(Money.MAX)).longValueExact();
+            }
+        }
+        form.constraints("amountOrAll", FormConstraints.money(1, Math.max(1, debt)).or("all"));
     }
 
     private long remaining(FormBuilder form, String family) {

@@ -213,12 +213,22 @@ The core StateCraft mod can provide non-economic governance features by itself. 
 - Client/server actions are validated and synchronized through dedicated network packets.
 - Government, economy, market, banking, stock, and valuation data persist with the world.
 
+## StateCraft 2.2 UI and Workflow Improvements
+
+- Typed, server-authorized entity lists and detail panels with contextual, prefilled actions.
+- A role-aware dashboard for invitations, political decisions, contracts, loans, arrears, deliveries, mail, and recent operations.
+- Persistent per-world/player navigation context, retained drafts, stable search/caret behavior, and responsive forms with field-specific constraints.
+- Server review cards for mutations, explicit action intent, material-term revalidation, and separate action feedback/read-only section content.
+- Durable reviewed-operation IDs, uncertainty-aware status/retry flows, private local recovery references, and audited operator reconciliation without replaying commands.
+- A loan-management panel with current autopay and repayment state, and clearer completed-purchase/queued-delivery feedback.
+- Keyboard/narration support, translatable UI/presentation metadata, and safe selection at world-coordinate boundaries.
+
+See the UI guide and world-data documentation for controls, bounds, protocol requirements, and recovery semantics.
+
 ## Current Limitations
 
 - Some legislature policy types are intentionally **roleplay-only** and are recorded without mechanical enforcement, including custom laws and certain employment or citizenship policies.
 - State and city invitation handling is not as complete as nation-level invitations.
-- Government mail can display official messages, but its compose navigation is incomplete.
-- The documented StateCraft admin configuration reload remains a placeholder.
-- ATM treasury access has a known UI/authorization gap for some nation, state, and city account-selection paths.
 - Economy-backed StateCraft features do not operate fully unless both mods are installed.
-
+- Minecraft player inventories and the suite snapshot are saved separately; interrupted cash/item operations may require manual reconciliation.
+- Unkeyed server-domain prose remains literal even when framework controls and keyed presentation metadata are localized.

@@ -1,13 +1,27 @@
 package dev.statecraft.gametest;
 
 import com.mojang.authlib.GameProfile;
+import com.google.gson.Gson;
+import com.google.gson.JsonParser;
 import dev.statecraft.StateCraft;
 import dev.statecraft.api.CommandLine;
 import dev.statecraft.api.CommandTemplate;
 import dev.statecraft.api.MenuRegistry;
 import dev.statecraft.api.form.FormField;
 import dev.statecraft.api.form.FormQuery;
+import dev.statecraft.api.ui.ActionIntent;
+import dev.statecraft.api.ui.ActionOutcome;
+import dev.statecraft.api.ui.ActionSelection;
+import dev.statecraft.api.ui.OperationRef;
+import dev.statecraft.api.ui.UiQuery;
+import dev.statecraft.api.ui.UiView;
+import dev.statecraft.domain.GovernanceData;
+import dev.statecraft.persistence.WorldStore;
 import dev.statecraft.runtime.ServerRuntime;
+import dev.statecraft.runtime.UiOperations;
+import dev.statecraft.runtime.UiRuntime;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.UUID;
@@ -233,6 +247,186 @@ public final class SuiteGameTests {
             }
             if (governance.government(foreignNation).isPresent()) {
                 governance.execute(foreignActor, "nation disband " + foreignNation + " cascade");
+            }
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "test_empty", timeoutTicks = 100)
+    public static void readOnlyGatewayDefersActivityWithoutSerializingTheWorld(GameTestHelper helper) throws IOException {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        var player = FakePlayerFactory.get(helper.getLevel(), new GameProfile(UUID.randomUUID(), "Reader" + suffix));
+        var runtime = StateCraft.runtime();
+        runtime.engine().login(ServerRuntime.actor(player));
+        var data = runtime.store().load("governance", GovernanceData.class, GovernanceData::new);
+        data.players.get(player.getUUID().toString()).lastSeen = 1;
+        runtime.saveNow();
+        long revision = runtime.store().revision();
+
+        var reply = runtime.invoke(player, "statecraft", "help");
+
+        helper.assertTrue(reply.success(), "The read-only request succeeds: " + reply.text());
+        helper.assertTrue(data.players.get(player.getUUID().toString()).lastSeen > 1,
+                "Activity is still updated in memory");
+        helper.assertTrue(runtime.store().revision() == revision,
+                "A read-only command must not serialize changed activity timestamps");
+        runtime.saveNow();
+        var saved = new WorldStore(runtime.worldDirectory()).load("governance", GovernanceData.class, GovernanceData::new);
+        helper.assertTrue(saved.players.get(player.getUUID().toString()).lastSeen > 1,
+                "Forced saves still retain deferred activity");
+        helper.succeed();
+    }
+
+    @GameTest(template = "test_empty", timeoutTicks = 100)
+    public static void rejectedActionsPersistTheirActualProfileSideEffects(GameTestHelper helper) throws IOException {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        var player = FakePlayerFactory.get(helper.getLevel(), new GameProfile(UUID.randomUUID(), "Error" + suffix));
+        var runtime = StateCraft.runtime();
+
+        var reply = runtime.invoke(player, "statecraft", "not_a_command");
+
+        helper.assertTrue(!reply.success(), "The unsupported action must be rejected");
+        var saved = new WorldStore(runtime.worldDirectory()).load("governance", GovernanceData.class, GovernanceData::new);
+        helper.assertTrue(saved.players.containsKey(player.getUUID().toString()),
+                "Profile creation before a rejected action is not silently left unpersisted");
+        helper.succeed();
+    }
+
+    @GameTest(template = "test_empty", timeoutTicks = 100)
+    public static void economyConsolePersistsBeforeReturning(GameTestHelper helper) throws IOException {
+        var runtime = StateCraft.runtime();
+        if (runtime.economy().available()) {
+            String recipient = "player:" + UUID.randomUUID();
+            var server = runtime.server();
+            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                    "sce admin mint " + recipient + " 10.00");
+            helper.assertTrue(runtime.economy().balance(recipient) == 1000, "The actual console command credited its recipient");
+            var snapshot = JsonParser.parseString(Files.readString(runtime.store().directory().resolve("world.json")))
+                    .getAsJsonObject().getAsJsonObject("sections");
+            Object live = runtime.store().load("economy", Object.class, Object::new);
+            helper.assertTrue(snapshot.get("economy").equals(new Gson().toJsonTree(live)),
+                    "The complete economy section is persisted before the console command returns");
+            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
+                    "sce admin set " + recipient + " 0");
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "test_empty", timeoutTicks = 100)
+    public static void reviewedActionsReplayReceiptsNotEffects(GameTestHelper helper) throws IOException {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        var owner = FakePlayerFactory.get(helper.getLevel(), new GameProfile(UUID.randomUUID(), "UiA" + suffix));
+        var recipient = FakePlayerFactory.get(helper.getLevel(), new GameProfile(UUID.randomUUID(), "UiB" + suffix));
+        var runtime = StateCraft.runtime();
+        runtime.engine().login(ServerRuntime.actor(owner));
+        runtime.engine().login(ServerRuntime.actor(recipient));
+        var data = runtime.store().load("governance", GovernanceData.class, GovernanceData::new);
+        int before = data.players.get(recipient.getUUID().toString()).inbox.size();
+        ActionSelection selection = ActionSelection.form("statecraft:mail", "mail send <recipient> <subject> <body>",
+                Map.of("recipient", recipient.getUUID().toString(), "subject", "Reviewed mail", "body", "One delivery only."));
+        var quote = runtime.ui().preview(owner, selection);
+        helper.assertTrue(runtime.ui().status(owner, quote.operation()).outcome() == ActionOutcome.READY,
+                "An unsubmitted review can be retried only with its own ID");
+        var first = runtime.ui().execute(owner, selection, quote.operation());
+        helper.assertTrue(first.success(), "The reviewed action succeeds: " + first.text());
+        var again = runtime.ui().execute(owner, selection, quote.operation());
+        helper.assertTrue(again.success(), "A repeated ID returns its stored completion");
+        helper.assertTrue(data.players.get(recipient.getUUID().toString()).inbox.size() == before + 1,
+                "The repeated request did not deliver another message");
+        helper.assertTrue(runtime.ui().status(recipient, quote.operation()).outcome() == ActionOutcome.UNKNOWN,
+                "Another player cannot inspect the owner's receipt");
+        var altered = ActionSelection.form(selection.page(), selection.template(),
+                Map.of("recipient", recipient.getUUID().toString(), "subject", "Changed request", "body", "Different body."));
+        helper.assertTrue(runtime.ui().execute(owner, altered, quote.operation()).outcome().uncertain(),
+                "An ID cannot authorize changed inputs");
+        helper.assertTrue(runtime.ui().execute(owner, selection,
+                new OperationRef(UUID.randomUUID(), quote.operation().id())).outcome() == ActionOutcome.UNKNOWN,
+                "A different world's ID cannot execute locally");
+
+        var operations = runtime.store().load("ui_operations", UiOperations.Data.class, UiOperations.Data::new);
+        operations.receipts.remove(quote.operation().id().toString());
+        runtime.saveNow();
+        helper.assertTrue(runtime.ui().execute(owner, selection, quote.operation()).outcome() == ActionOutcome.UNKNOWN,
+                "Evicting a completed receipt does not revive its consumed review");
+        helper.assertTrue(data.players.get(recipient.getUUID().toString()).inbox.size() == before + 1,
+                "Expired history IDs never repeat effects");
+        helper.succeed();
+    }
+
+    @GameTest(template = "test_empty", timeoutTicks = 100)
+    public static void preparedOperationsRequireReconciliationAfterInterruption(GameTestHelper helper) throws IOException {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        var owner = FakePlayerFactory.get(helper.getLevel(), new GameProfile(UUID.randomUUID(), "UiC" + suffix));
+        var recipient = FakePlayerFactory.get(helper.getLevel(), new GameProfile(UUID.randomUUID(), "UiD" + suffix));
+        var runtime = StateCraft.runtime();
+        var actor = ServerRuntime.actor(owner);
+        runtime.engine().login(actor);
+        runtime.engine().login(ServerRuntime.actor(recipient));
+        var data = runtime.store().load("governance", GovernanceData.class, GovernanceData::new);
+        int before = data.players.get(recipient.getUUID().toString()).inbox.size();
+        var selection = ActionSelection.form("statecraft:mail", "mail send <recipient> <subject> <body>",
+                Map.of("recipient", recipient.getUUID().toString(), "subject", "Interrupted mail", "body", "Not sent."));
+        var quote = runtime.ui().preview(owner, selection);
+        runtime.ui().operations().begin(actor, quote.operation(), UiRuntime.requestHash(selection),
+                selection.page(), "Interrupted mail", ActionIntent.MUTATION);
+        runtime.saveNow();
+        runtime.ui().forget(owner.getUUID());
+
+        helper.assertTrue(runtime.ui().execute(owner, selection, quote.operation()).outcome() == ActionOutcome.UNCERTAIN,
+                "A prepared receipt is never interpreted as permission to retry");
+        helper.assertTrue(data.players.get(recipient.getUUID().toString()).inbox.size() == before,
+                "The interrupted operation was not executed");
+        var administrator = new dev.statecraft.api.Actor(UUID.randomUUID(), "UiOperator", true, actor.dimension(), actor.chunkX(), actor.chunkZ());
+        runtime.executeCore(administrator, "admin operation resolve " + quote.operation().id() + " not_executed \"Verified no message or account effect\"");
+        runtime.saveNow();
+        helper.assertTrue(runtime.ui().status(owner, quote.operation()).outcome() == ActionOutcome.REJECTED,
+                "Explicit operator reconciliation becomes visible after it is persisted");
+        helper.succeed();
+    }
+
+    @GameTest(template = "test_empty", timeoutTicks = 100)
+    public static void reviewedElectronicPaymentsCannotBeRepeated(GameTestHelper helper) {
+        var runtime = StateCraft.runtime();
+        if (runtime.economy().available()) {
+            String suffix = UUID.randomUUID().toString().substring(0, 8);
+            var owner = FakePlayerFactory.get(helper.getLevel(), new GameProfile(UUID.randomUUID(), "UiE" + suffix));
+            var recipient = FakePlayerFactory.get(helper.getLevel(), new GameProfile(UUID.randomUUID(), "UiF" + suffix));
+            runtime.engine().login(ServerRuntime.actor(owner));
+            runtime.engine().login(ServerRuntime.actor(recipient));
+            runtime.invoke(owner, "economy", "balance");
+            runtime.invoke(recipient, "economy", "balance");
+            String from = "player:" + owner.getUUID(), to = "player:" + recipient.getUUID();
+            var server = runtime.server();
+            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "sce admin set " + from + " 10.00");
+            var selection = ActionSelection.form("economy:atm", "transfer <fromAccount> <toAccount> <amount>",
+                    Map.of("fromAccount", from, "toAccount", to, "amount", "1.00"));
+            var quote = runtime.ui().preview(owner, selection);
+            var reply = runtime.ui().execute(owner, selection, quote.operation());
+            helper.assertTrue(reply.success(), "The reviewed payment succeeds: " + reply.text());
+            helper.assertTrue(runtime.ui().execute(owner, selection, quote.operation()).success(), "The receipt can be replayed");
+            helper.assertTrue(runtime.economy().balance(from) == 900 && runtime.economy().balance(to) == 100,
+                    "Only one payment was made");
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "test_empty", timeoutTicks = 100)
+    public static void contextualSectionsUseTheLivePresentationGateway(GameTestHelper helper) {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        var player = FakePlayerFactory.get(helper.getLevel(), new GameProfile(UUID.randomUUID(), "UiView" + suffix));
+        var runtime = StateCraft.runtime();
+        runtime.engine().login(ServerRuntime.actor(player));
+        for (var page : MenuRegistry.pages()) {
+            try {
+                UiView view = runtime.ui().view(player, UiQuery.page(page.id()));
+                helper.assertTrue(view.rows().size() <= UiView.MAX_ROWS, "View rows are bounded: " + page.id());
+                helper.assertTrue(view.actions().size() <= UiView.MAX_ACTIONS, "View actions are bounded: " + page.id());
+                for (var action : view.actions()) action.selection().registeredAction();
+            } catch (dev.statecraft.api.UserError denied) {
+                String message = denied.getMessage().toLowerCase(java.util.Locale.ROOT);
+                helper.assertTrue(!message.contains("has not provided") && !message.contains("not implemented")
+                                && !message.contains("unknown command") && !message.contains("unsupported command"),
+                        "Every section must reach a presentation provider: " + page.id() + " -> " + denied.getMessage());
             }
         }
         helper.succeed();

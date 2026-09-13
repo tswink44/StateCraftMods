@@ -13,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.function.ToLongFunction;
 
@@ -30,9 +31,16 @@ public final class Taxation {
     private final Clock clock;
     private final Runnable dirty;
     private final ToLongFunction<String> spendable;
+    private final Consumer<String> schedulePropertyArrear;
 
     public Taxation(EconomyData data, GovernanceAccess governance, Ledger ledger,
                     Supplier<EconomyConfig> config, Clock clock, Runnable dirty, ToLongFunction<String> spendable) {
+        this(data, governance, ledger, config, clock, dirty, spendable, ignored -> {});
+    }
+
+    Taxation(EconomyData data, GovernanceAccess governance, Ledger ledger,
+             Supplier<EconomyConfig> config, Clock clock, Runnable dirty, ToLongFunction<String> spendable,
+             Consumer<String> schedulePropertyArrear) {
         this.data = data;
         this.governance = governance;
         this.ledger = ledger;
@@ -40,6 +48,7 @@ public final class Taxation {
         this.clock = clock;
         this.dirty = dirty;
         this.spendable = spendable;
+        this.schedulePropertyArrear = Objects.requireNonNull(schedulePropertyArrear);
     }
 
     public List<GovernanceAccess.GovernmentView> tiers(String chunk, String fallbackNation) {
@@ -113,12 +122,14 @@ public final class Taxation {
     }
 
     public void record(String payer, List<Charge> charges, String subject) {
+        ledger.thread();
+        int previousSize = data.taxHistory.size();
         for (Charge charge : charges) {
             data.taxHistory.add(new EconomyData.TaxEntry(clock.millis(), payer, charge.government(),
                     charge.kind(), charge.cents(), subject, "PAID"));
         }
         Ledger.trim(data.taxHistory, config.get().taxHistoryLimit);
-        if (!charges.isEmpty()) dirty.run();
+        if (!charges.isEmpty() || data.taxHistory.size() != previousSize) dirty.run();
     }
 
     public void assess(String payer, Charge charge, String subject) {
@@ -139,6 +150,7 @@ public final class Taxation {
 
     private void assessAmount(String payer, String recipient, String government, String kind,
                               BigInteger cents, String subject, String reportSubject) {
+        ledger.thread();
         if (cents.signum() == 0 || payer.equals(recipient)) return;
         String id = payer + "|" + recipient + "|" + kind + "|" + subject;
         EconomyData.Arrear debt = data.arrears.computeIfAbsent(id, ignored -> {
@@ -158,15 +170,54 @@ public final class Taxation {
         data.taxHistory.add(new EconomyData.TaxEntry(clock.millis(), payer, government, kind, reportAmount, reportSubject, "ASSESSED"));
         Ledger.trim(data.taxHistory, config.get().taxHistoryLimit);
         dirty.run();
+        if (isPropertyArrear(debt)) schedulePropertyArrear.accept(id);
     }
 
     public long pay(String payer, long maximum, boolean mandatory) {
+        return pay(payer, maximum, mandatory, data.arrears.values());
+    }
+
+    static boolean isPropertyArrear(EconomyData.Arrear debt) {
+        return "propertyTaxBps".equals(debt.kind);
+    }
+
+    boolean tickPropertyArrear(String id) {
+        EconomyData.Arrear debt = data.arrears.get(id);
+        if (debt == null || !isPropertyArrear(debt)) return false;
+        if (config.get().mandatoryPropertyTaxes) pay(debt.payer, Money.MAX, true, List.of(debt));
+        return data.arrears.containsKey(id);
+    }
+
+    private long pay(String payer, long maximum, boolean mandatory, Iterable<EconomyData.Arrear> debts) {
+        PaymentQuote quote = quotePayment(payer, maximum, debts);
+        if (quote.payments().isEmpty()) return 0;
+        ledger.prepare(quote.transfers(), List.of(), !mandatory, Map.of()).commit();
+        for (Map.Entry<EconomyData.Arrear, Long> payment : quote.payments().entrySet()) {
+            EconomyData.Arrear debt = payment.getKey();
+            debt.cents = new BigInteger(debt.cents).subtract(BigInteger.valueOf(payment.getValue())).toString();
+            if (debt.cents.equals("0")) data.arrears.remove(debt.id);
+            data.taxHistory.add(new EconomyData.TaxEntry(clock.millis(), payer, debt.government, debt.kind,
+                    payment.getValue(), debt.subject, "ARREARS PAID"));
+        }
+        Ledger.trim(data.taxHistory, config.get().taxHistoryLimit);
+        dirty.run();
+        return quote.paid();
+    }
+
+    record PaymentQuote(List<Transfer> transfers, Map<EconomyData.Arrear, Long> payments, long paid) {}
+
+    PaymentQuote quotePayment(String payer, long maximum) {
+        return quotePayment(payer, maximum, data.arrears.values());
+    }
+
+    private PaymentQuote quotePayment(String payer, long maximum, Iterable<EconomyData.Arrear> debts) {
+        ledger.thread();
         Money.nonNegative(maximum);
         long remaining = Math.min(maximum, spendable.applyAsLong(payer));
         List<Transfer> transfers = new ArrayList<>();
         Map<EconomyData.Arrear, Long> payments = new LinkedHashMap<>();
         Map<String, Long> destinationAmounts = new LinkedHashMap<>();
-        for (EconomyData.Arrear debt : data.arrears.values()) {
+        for (EconomyData.Arrear debt : debts) {
             if (remaining == 0) break;
             if (!debt.payer.equals(payer)) continue;
             long amount = new BigInteger(debt.cents).min(BigInteger.valueOf(remaining)).longValueExact();
@@ -179,20 +230,9 @@ public final class Taxation {
             destinationAmounts.put(debt.recipient, Money.add(already, amount));
             remaining -= amount;
         }
-        if (payments.isEmpty()) return 0;
-        ledger.prepare(transfers, List.of(), !mandatory, Map.of()).commit();
         long paid = 0;
-        for (Map.Entry<EconomyData.Arrear, Long> payment : payments.entrySet()) {
-            EconomyData.Arrear debt = payment.getKey();
-            debt.cents = new BigInteger(debt.cents).subtract(BigInteger.valueOf(payment.getValue())).toString();
-            if (debt.cents.equals("0")) data.arrears.remove(debt.id);
-            data.taxHistory.add(new EconomyData.TaxEntry(clock.millis(), payer, debt.government, debt.kind,
-                    payment.getValue(), debt.subject, "ARREARS PAID"));
-            paid = Money.add(paid, payment.getValue());
-        }
-        Ledger.trim(data.taxHistory, config.get().taxHistoryLimit);
-        dirty.run();
-        return paid;
+        for (long amount : payments.values()) paid = Money.add(paid, amount);
+        return new PaymentQuote(List.copyOf(transfers), java.util.Collections.unmodifiableMap(payments), paid);
     }
 
     public BigInteger arrears(String payer) {

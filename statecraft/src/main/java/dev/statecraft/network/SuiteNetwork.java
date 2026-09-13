@@ -7,8 +7,10 @@ import dev.statecraft.api.TerritorySnapshot;
 import dev.statecraft.api.UserError;
 import dev.statecraft.api.form.FormQuery;
 import dev.statecraft.api.form.FormSchema;
+import dev.statecraft.api.ui.*;
 import dev.statecraft.client.ClientHooks;
 import dev.statecraft.runtime.ServerRuntime;
+import dev.statecraft.runtime.UiRuntime;
 import io.netty.handler.codec.DecoderException;
 import java.util.ArrayList;
 import java.util.List;
@@ -28,7 +30,7 @@ import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class SuiteNetwork {
-    private static final String PROTOCOL = "3";
+    private static final String PROTOCOL = "4";
     private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(StateCraft.MOD_ID, "suite"), () -> PROTOCOL, PROTOCOL::equals, PROTOCOL::equals);
     private static final RequestLimiter LIMITER = new RequestLimiter();
@@ -50,10 +52,38 @@ public final class SuiteNetwork {
                 FormRequest::handle, Optional.of(NetworkDirection.PLAY_TO_SERVER));
         CHANNEL.registerMessage(6, FormResponse.class, FormResponse::encode, FormResponse::decode,
                 FormResponse::handle, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(7, SessionRequest.class, (message, buffer) -> {}, buffer -> new SessionRequest(),
+                SessionRequest::handle, Optional.of(NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(8, SessionMessage.class, SessionMessage::encode, SessionMessage::decode,
+                SessionMessage::handle, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(9, ViewRequest.class, ViewRequest::encode, ViewRequest::decode,
+                ViewRequest::handle, Optional.of(NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(10, ViewResponse.class, ViewResponse::encode, ViewResponse::decode,
+                ViewResponse::handle, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(11, PreviewRequest.class, PreviewRequest::encode, PreviewRequest::decode,
+                PreviewRequest::handle, Optional.of(NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(12, PreviewResponse.class, PreviewResponse::encode, PreviewResponse::decode,
+                PreviewResponse::handle, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(13, OperationStatusRequest.class, OperationStatusRequest::encode, OperationStatusRequest::decode,
+                OperationStatusRequest::handle, Optional.of(NetworkDirection.PLAY_TO_SERVER));
     }
 
-    public static void request(int requestId, String page, String command) {
-        CHANNEL.sendToServer(new ActionRequest(requestId, page, command));
+    public static void request(int requestId, UUID world, ActionSelection selection, OperationRef operation) {
+        CHANNEL.sendToServer(new ActionRequest(requestId, world, selection, operation));
+    }
+
+    public static void requestSession() { CHANNEL.sendToServer(new SessionRequest()); }
+    public static void requestView(int id, UUID world, UiQuery query) { CHANNEL.sendToServer(new ViewRequest(id, world, query)); }
+    public static void requestPreview(int id, UUID world, ActionSelection selection) {
+        CHANNEL.sendToServer(new PreviewRequest(id, world, selection));
+    }
+    public static void requestOperation(int id, OperationRef operation) {
+        CHANNEL.sendToServer(new OperationStatusRequest(id, operation));
+    }
+
+    public static void session(ServerPlayer player) {
+        ServerRuntime runtime = StateCraft.runtime();
+        send(player, new SessionMessage(runtime.ui().world(), runtime.clock().millis()));
     }
 
     public static void requestForm(int requestId, String page, String template, Map<String, String> values, FormQuery query) {
@@ -62,6 +92,7 @@ public final class SuiteNetwork {
 
     public static void open(ServerPlayer player, String page) {
         MenuRegistry.get(page);
+        session(player);
         send(player, new OpenScreen(page));
     }
 
@@ -80,11 +111,19 @@ public final class SuiteNetwork {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), message);
     }
 
-    public record ActionRequest(int id, String page, String command) {
+    public record ActionRequest(int id, UUID world, ActionSelection selection, OperationRef operation) {
+        public ActionRequest(int id, String page, String command) {
+            this(id, new UUID(0, 0), ActionSelection.raw(page, command), OperationRef.NONE);
+        }
+
+        public String page() { return selection.page(); }
+        public String command() { return selection.rendered(); }
+
         void encode(FriendlyByteBuf buffer) {
             buffer.writeVarInt(id);
-            buffer.writeUtf(page, 96);
-            buffer.writeUtf(command, CommandLine.MAX_LENGTH);
+            buffer.writeUUID(world);
+            UiCodec.selection(buffer, selection);
+            UiCodec.operation(buffer, operation);
         }
 
         static ActionRequest decode(FriendlyByteBuf buffer) {
@@ -92,7 +131,7 @@ public final class SuiteNetwork {
             if (id < 0) {
                 throw new DecoderException("Invalid StateCraft request identifier.");
             }
-            return new ActionRequest(id, buffer.readUtf(96), buffer.readUtf(CommandLine.MAX_LENGTH));
+            return new ActionRequest(id, buffer.readUUID(), UiCodec.selection(buffer), UiCodec.operation(buffer));
         }
 
         private static void handle(ActionRequest message, Supplier<NetworkEvent.Context> context) {
@@ -103,32 +142,56 @@ public final class SuiteNetwork {
                     return;
                 }
                 if (!LIMITER.allow(player.getUUID(), System.nanoTime())) {
-                    send(player, new ActionResponse(message.id, message.page, false, "Too many requests. Wait a moment."));
+                    send(player, actionReply(message, message.operation.present() ? ActionOutcome.UNCERTAIN : ActionOutcome.REJECTED,
+                            "Too many requests. Wait a moment, then check the original operation's status."));
                     return;
                 }
                 try {
-                    MenuRegistry.get(message.page);
-                    String namespace = message.page.substring(0, message.page.indexOf(':'));
-                    ServerRuntime.Reply reply = StateCraft.runtime().invoke(player, namespace, message.command);
-                    send(player, new ActionResponse(message.id, message.page, reply.success(), reply.text()));
-                } catch (UserError e) {
-                    send(player, new ActionResponse(message.id, message.page, false, e.getMessage()));
+                    checkWorld(player, message.world);
+                    ServerRuntime runtime = StateCraft.runtime();
+                    ServerRuntime.Reply reply = runtime.ui().execute(player, message.selection, message.operation);
+                    ActionIntent intent = message.operation.present()
+                            ? runtime.ui().operationIntent(player, message.operation) : message.selection.intent();
+                    send(player, new ActionResponse(message.id, runtime.ui().world(), message.selection.page(),
+                            message.operation, intent, reply.outcome(), reply.text()));
+                } catch (UserError | UiRuntime.FormRejected rejected) {
+                    send(player, actionReply(message, message.operation.present() ? ActionOutcome.UNCERTAIN : ActionOutcome.REJECTED,
+                            errorText(rejected.getMessage())));
+                } catch (RuntimeException failure) {
+                    send(player, actionReply(message, ActionOutcome.UNCERTAIN, internalError("action", player, failure).fallback()));
                 }
             });
             ctx.setPacketHandled(true);
         }
     }
 
-    public record ActionResponse(int id, String page, boolean success, String text) {
-        private void encode(FriendlyByteBuf buffer) {
+    private static ActionResponse actionReply(ActionRequest request, ActionOutcome outcome, String text) {
+        return new ActionResponse(request.id, StateCraft.runtime().ui().world(), request.selection.page(),
+                request.operation, request.operation.present() ? ActionIntent.MUTATION : ActionIntent.QUERY, outcome, text);
+    }
+
+    public record ActionResponse(int id, UUID world, String page, OperationRef operation,
+                                 ActionIntent intent, ActionOutcome outcome, String text) {
+        public ActionResponse(int id, String page, boolean success, String text) {
+            this(id, new UUID(0, 0), page, OperationRef.NONE, ActionIntent.QUERY,
+                    success ? ActionOutcome.COMPLETED : ActionOutcome.REJECTED, text);
+        }
+        public boolean success() { return outcome.success(); }
+
+        void encode(FriendlyByteBuf buffer) {
             buffer.writeVarInt(id);
+            buffer.writeUUID(world);
             buffer.writeUtf(page, 96);
-            buffer.writeBoolean(success);
+            UiCodec.operation(buffer, operation);
+            buffer.writeByte(intent.ordinal());
+            buffer.writeByte(outcome.ordinal());
             buffer.writeUtf(text, 30_000);
         }
 
-        private static ActionResponse decode(FriendlyByteBuf buffer) {
-            return new ActionResponse(buffer.readVarInt(), buffer.readUtf(96), buffer.readBoolean(), buffer.readUtf(30_000));
+        static ActionResponse decode(FriendlyByteBuf buffer) {
+            return new ActionResponse(buffer.readVarInt(), buffer.readUUID(), buffer.readUtf(96), UiCodec.operation(buffer),
+                    UiCodec.enumeration(buffer, ActionIntent.values()), UiCodec.enumeration(buffer, ActionOutcome.values()),
+                    buffer.readUtf(30_000));
         }
 
         private static void handle(ActionResponse message, Supplier<NetworkEvent.Context> context) {
@@ -136,6 +199,188 @@ public final class SuiteNetwork {
             ctx.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientHooks.reply(message)));
             ctx.setPacketHandled(true);
         }
+    }
+
+    public static final class SessionRequest {
+        private static void handle(SessionRequest message, Supplier<NetworkEvent.Context> context) {
+            NetworkEvent.Context ctx = context.get();
+            ctx.enqueueWork(() -> {
+                ServerPlayer player = ctx.getSender();
+                if (player != null && LIMITER.allow(player.getUUID(), System.nanoTime())) session(player);
+            });
+            ctx.setPacketHandled(true);
+        }
+    }
+
+    public record SessionMessage(UUID world, long serverTime) {
+        void encode(FriendlyByteBuf buffer) { buffer.writeUUID(world); buffer.writeLong(serverTime); }
+        static SessionMessage decode(FriendlyByteBuf buffer) { return new SessionMessage(buffer.readUUID(), buffer.readLong()); }
+        private static void handle(SessionMessage message, Supplier<NetworkEvent.Context> context) {
+            NetworkEvent.Context ctx = context.get();
+            ctx.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
+                    () -> () -> ClientHooks.session(message.world, message.serverTime)));
+            ctx.setPacketHandled(true);
+        }
+    }
+
+    public record ViewRequest(int id, UUID world, UiQuery query) {
+        void encode(FriendlyByteBuf buffer) { buffer.writeVarInt(id); buffer.writeUUID(world); UiCodec.query(buffer, query); }
+        static ViewRequest decode(FriendlyByteBuf buffer) {
+            return new ViewRequest(UiCodec.count(buffer, Integer.MAX_VALUE), buffer.readUUID(), UiCodec.query(buffer));
+        }
+        private static void handle(ViewRequest message, Supplier<NetworkEvent.Context> context) {
+            NetworkEvent.Context ctx = context.get();
+            ctx.enqueueWork(() -> {
+                ServerPlayer player = ctx.getSender();
+                if (player == null) return;
+                UiView view = UiView.text("StateCraft", "");
+                UiText error = UiText.EMPTY;
+                boolean success = false;
+                try {
+                    limited(player);
+                    checkWorld(player, message.world);
+                    view = StateCraft.runtime().ui().view(player, message.query);
+                    success = true;
+                } catch (UserError rejected) {
+                    error = UiText.literal(errorText(rejected.getMessage()));
+                } catch (RuntimeException failure) {
+                    error = internalError("view", player, failure);
+                }
+                send(player, new ViewResponse(message.id, StateCraft.runtime().ui().world(), message.query, success, error, view));
+            });
+            ctx.setPacketHandled(true);
+        }
+    }
+
+    public record ViewResponse(int id, UUID world, UiQuery query, boolean success, UiText error, UiView view) {
+        void encode(FriendlyByteBuf buffer) {
+            buffer.writeVarInt(id);
+            buffer.writeUUID(world);
+            UiCodec.query(buffer, query);
+            buffer.writeBoolean(success);
+            UiCodec.text(buffer, error);
+            if (success) UiCodec.view(buffer, view);
+        }
+        static ViewResponse decode(FriendlyByteBuf buffer) {
+            int id = buffer.readVarInt();
+            UUID world = buffer.readUUID();
+            UiQuery query = UiCodec.query(buffer);
+            boolean success = buffer.readBoolean();
+            UiText error = UiCodec.text(buffer);
+            return new ViewResponse(id, world, query, success, error, success ? UiCodec.view(buffer) : UiView.text("StateCraft", ""));
+        }
+        private static void handle(ViewResponse message, Supplier<NetworkEvent.Context> context) {
+            NetworkEvent.Context ctx = context.get();
+            ctx.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientHooks.viewReply(message)));
+            ctx.setPacketHandled(true);
+        }
+    }
+
+    public record PreviewRequest(int id, UUID world, ActionSelection selection) {
+        void encode(FriendlyByteBuf buffer) { buffer.writeVarInt(id); buffer.writeUUID(world); UiCodec.selection(buffer, selection); }
+        static PreviewRequest decode(FriendlyByteBuf buffer) {
+            return new PreviewRequest(UiCodec.count(buffer, Integer.MAX_VALUE), buffer.readUUID(), UiCodec.selection(buffer));
+        }
+        private static void handle(PreviewRequest message, Supplier<NetworkEvent.Context> context) {
+            NetworkEvent.Context ctx = context.get();
+            ctx.enqueueWork(() -> {
+                ServerPlayer player = ctx.getSender();
+                if (player == null) return;
+                PreviewQuote quote = null;
+                UiText error = UiText.EMPTY;
+                Map<String, UiText> errors = Map.of();
+                try {
+                    limited(player);
+                    checkWorld(player, message.world);
+                    quote = StateCraft.runtime().ui().preview(player, message.selection);
+                } catch (UiRuntime.FormRejected rejected) {
+                    error = UiText.tr("gui.statecraft.form.invalid", rejected.getMessage());
+                    errors = rejected.errors();
+                } catch (UserError rejected) {
+                    error = UiText.literal(errorText(rejected.getMessage()));
+                } catch (RuntimeException failure) {
+                    error = internalError("review", player, failure);
+                }
+                send(player, new PreviewResponse(message.id, StateCraft.runtime().ui().world(), message.selection,
+                        quote != null, error, quote, errors));
+            });
+            ctx.setPacketHandled(true);
+        }
+    }
+
+    public record PreviewResponse(int id, UUID world, ActionSelection selection, boolean success, UiText error,
+                                  PreviewQuote quote, Map<String, UiText> fieldErrors) {
+        public PreviewResponse {
+            fieldErrors = Map.copyOf(fieldErrors);
+            if (success != (quote != null) || fieldErrors.size() > 16) throw new IllegalArgumentException("Invalid review response.");
+        }
+        void encode(FriendlyByteBuf buffer) {
+            buffer.writeVarInt(id);
+            buffer.writeUUID(world);
+            UiCodec.selection(buffer, selection);
+            buffer.writeBoolean(success);
+            UiCodec.text(buffer, error);
+            if (success) UiCodec.quote(buffer, quote);
+            UiCodec.errors(buffer, fieldErrors);
+        }
+        static PreviewResponse decode(FriendlyByteBuf buffer) {
+            int id = buffer.readVarInt();
+            UUID world = buffer.readUUID();
+            ActionSelection selection = UiCodec.selection(buffer);
+            boolean success = buffer.readBoolean();
+            UiText error = UiCodec.text(buffer);
+            PreviewQuote quote = success ? UiCodec.quote(buffer) : null;
+            return new PreviewResponse(id, world, selection, success, error, quote, UiCodec.errors(buffer));
+        }
+        private static void handle(PreviewResponse message, Supplier<NetworkEvent.Context> context) {
+            NetworkEvent.Context ctx = context.get();
+            ctx.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientHooks.previewReply(message)));
+            ctx.setPacketHandled(true);
+        }
+    }
+
+    public record OperationStatusRequest(int id, OperationRef operation) {
+        void encode(FriendlyByteBuf buffer) { buffer.writeVarInt(id); UiCodec.operation(buffer, operation); }
+        static OperationStatusRequest decode(FriendlyByteBuf buffer) {
+            return new OperationStatusRequest(UiCodec.count(buffer, Integer.MAX_VALUE), UiCodec.operation(buffer));
+        }
+        private static void handle(OperationStatusRequest message, Supplier<NetworkEvent.Context> context) {
+            NetworkEvent.Context ctx = context.get();
+            ctx.enqueueWork(() -> {
+                ServerPlayer player = ctx.getSender();
+                if (player == null) return;
+                ServerRuntime runtime = StateCraft.runtime();
+                ServerRuntime.Reply reply;
+                try {
+                    limited(player);
+                    reply = runtime.ui().status(player, message.operation);
+                } catch (UserError rejected) {
+                    reply = new ServerRuntime.Reply(ActionOutcome.UNCERTAIN, errorText(rejected.getMessage()));
+                } catch (RuntimeException failure) {
+                    reply = new ServerRuntime.Reply(ActionOutcome.UNCERTAIN, internalError("operation status", player, failure).fallback());
+                }
+                send(player, new ActionResponse(message.id, runtime.ui().world(), runtime.ui().operationPage(player, message.operation),
+                        message.operation, runtime.ui().operationIntent(player, message.operation), reply.outcome(), reply.text()));
+            });
+            ctx.setPacketHandled(true);
+        }
+    }
+
+    private static void limited(ServerPlayer player) {
+        if (!LIMITER.allow(player.getUUID(), System.nanoTime())) throw new UserError("Too many requests. Wait a moment before refreshing.");
+    }
+
+    private static void checkWorld(ServerPlayer player, UUID world) {
+        if (!StateCraft.runtime().ui().world().equals(world)) {
+            session(player);
+            throw new UserError("The world session changed. Refresh this screen before continuing.");
+        }
+    }
+
+    private static UiText internalError(String action, ServerPlayer player, RuntimeException failure) {
+        String reference = UUID.randomUUID().toString().substring(0, 8);
+        StateCraft.LOGGER.error("StateCraft {} failed [{}] for {}", action, reference, player.getUUID(), failure);
+        return UiText.tr("ui.statecraft.runtime.error", "Could not complete this request (" + reference + "). See the server log.", reference);
     }
 
     public record OpenScreen(String page) {

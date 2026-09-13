@@ -26,12 +26,13 @@ public enum MenuCategory {
     public String description() { return description; }
 
     public List<MenuPage> pages(Collection<MenuPage> pages) {
-        return pages.stream().filter(page -> of(page.id()) == this).toList();
+        return pages.stream().filter(MenuPage::listed).filter(page -> of(page.id()) == this).toList();
     }
 
     public static MenuCategory of(String page) {
         return switch (page) {
-            case "statecraft:main", "statecraft:profile", "statecraft:help", "economy:guide" -> OVERVIEW;
+            case "statecraft:main", "statecraft:profile", "statecraft:help", "statecraft:dashboard", "economy:guide",
+                 "economy:dashboard", "statecraft:operations" -> OVERVIEW;
             case "statecraft:nations", "statecraft:states", "statecraft:cities", "statecraft:members",
                  "statecraft:officers", "statecraft:invitations" -> GOVERNMENTS;
             case "statecraft:claims", "statecraft:map", "economy:property" -> TERRITORY;
@@ -39,9 +40,10 @@ public enum MenuCategory {
                  "statecraft:executive", "statecraft:diplomacy" -> POLITICS;
             case "statecraft:companies", "statecraft:shareholders", "statecraft:contracts",
                  "economy:company", "economy:stock" -> BUSINESS;
-            case "economy:atm", "economy:bank", "economy:tax", "economy:hub", "economy:market" -> ECONOMY;
+            case "economy:atm", "economy:bank", "economy:loans", "economy:deliveries", "economy:tax",
+                 "economy:hub", "economy:market" -> ECONOMY;
             case "statecraft:mail", "statecraft:official_mail" -> COMMUNICATIONS;
-            case "statecraft:admin" -> ADMINISTRATION;
+            case "statecraft:admin", "statecraft:admin_operations" -> ADMINISTRATION;
             default -> OTHER;
         };
     }

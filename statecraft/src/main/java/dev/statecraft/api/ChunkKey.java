@@ -3,12 +3,14 @@ package dev.statecraft.api;
 import java.util.Objects;
 
 public record ChunkKey(String dimension, int x, int z) {
+    public static final int MAX_COORDINATE = 1_875_000;
+
     public ChunkKey {
         Objects.requireNonNull(dimension);
         if (!dimension.matches("[a-z0-9_.-]+:[a-z0-9_./-]+")) {
             throw new UserError("Invalid dimension identifier.");
         }
-        if (x < -1_875_000 || x > 1_875_000 || z < -1_875_000 || z > 1_875_000) {
+        if (x < -MAX_COORDINATE || x > MAX_COORDINATE || z < -MAX_COORDINATE || z > MAX_COORDINATE) {
             throw new UserError("Chunk coordinates are outside the world border.");
         }
     }

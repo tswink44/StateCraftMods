@@ -314,10 +314,10 @@ final class Integrity {
             identity(result, "Diplomatic proposal", entry.getKey(), proposal.id);
             if (!known(PROPOSAL_STATES, proposal.status) || !known(Set.of("ALLIANCE", "PEACE"), proposal.type))
                 result.add("Invalid diplomatic proposal " + entry.getKey());
-            if (known(Set.of("PROPOSED", "AWAITING_RATIFICATION", "READY"), proposal.status)
-                    && (!e.validHierarchy(e.data.governments.get(proposal.fromNation))
-                    || !e.validHierarchy(e.data.governments.get(proposal.toNation))))
-                result.add("Orphan active diplomatic proposal " + entry.getKey());
+            if (known(Set.of("PROPOSED", "AWAITING_RATIFICATION", "READY"), proposal.status)) {
+                try { e.politics.validateTreatyReferences(proposal); }
+                catch (UserError error) { result.add(error.getMessage()); }
+            }
             try { Money.nonNegative(proposal.offeredCents); Money.nonNegative(proposal.demandedCents); }
             catch (UserError error) { result.add("Invalid treaty monetary terms " + entry.getKey()); }
         }
@@ -332,6 +332,7 @@ final class Integrity {
 
     String repair() {
         GovernanceEngine.check(e.data.schemaVersion == 1, "This schema requires an explicit migration, not orphan repair.");
+        e.changed();
         int changes = 0;
         if (e.data.lastTick < 0) {
             e.data.lastTick = 0;
@@ -499,23 +500,23 @@ final class Integrity {
     }
 
     void boundRetention() {
-        GovernanceEngine.trim(e.data.history, e.config.maxHistory);
+        e.trim(e.data.history, e.config.maxHistory);
         for (Player player : e.data.players.values()) {
             if (player == null) continue;
-            GovernanceEngine.trim(player.inbox, e.config.maxMail);
-            GovernanceEngine.trim(player.sent, e.config.maxMail);
+            e.trim(player.inbox, e.config.maxMail);
+            e.trim(player.sent, e.config.maxMail);
         }
         for (Government government : e.data.governments.values()) {
             if (government == null) continue;
-            GovernanceEngine.trim(government.inbox, e.config.maxMail);
-            GovernanceEngine.trim(government.sent, e.config.maxMail);
+            e.trim(government.inbox, e.config.maxMail);
+            e.trim(government.sent, e.config.maxMail);
         }
         for (Election election : e.data.elections.values())
-            if (election != null) GovernanceEngine.trim(election.history, e.config.maxHistory);
+            if (election != null) e.trim(election.history, e.config.maxHistory);
         for (Bill bill : e.data.bills.values())
-            if (bill != null) GovernanceEngine.trim(bill.history, e.config.maxHistory);
+            if (bill != null) e.trim(bill.history, e.config.maxHistory);
         e.data.laws.values().stream().filter(Objects::nonNull)
-                .forEach(laws -> GovernanceEngine.trim(laws, e.config.maxLawsPerNation));
+                .forEach(laws -> e.trim(laws, e.config.maxLawsPerNation));
     }
 
     private static void identity(List<String> issues, String type, String key, String id) {

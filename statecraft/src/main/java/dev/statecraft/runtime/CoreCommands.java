@@ -4,6 +4,7 @@ import com.mojang.brigadier.Command;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import dev.statecraft.StateCraft;
 import dev.statecraft.api.Actor;
+import dev.statecraft.api.CommandLine;
 import dev.statecraft.api.MenuRegistry;
 import dev.statecraft.api.UserError;
 import dev.statecraft.network.SuiteNetwork;
@@ -69,31 +70,21 @@ public final class CoreCommands {
             }
             return reply.success() ? Command.SINGLE_SUCCESS : 0;
         }
-        if (!source.hasPermission(2) || !line.startsWith("admin ")) {
-            source.sendFailure(Component.literal("This command requires a player; console supports /sc admin <action>."));
-            return 0;
-        }
-        try {
-            var spawn = source.getLevel().getSharedSpawnPos();
-            Actor console = new Actor(new UUID(0, 0), "Server", true,
-                    source.getLevel().dimension().location().toString(), spawn.getX() >> 4, spawn.getZ() >> 4);
-            String result = runtime.executeCore(console, line);
-            runtime.markDirty();
-            runtime.flush();
-            if (!runtime.isWritable()) {
-                source.sendFailure(Component.literal("The action changed memory, but saving failed. "
-                        + "Do not repeat it; resolve the disk error and run /sc admin save."));
-                return 0;
+        var spawn = source.getLevel().getSharedSpawnPos();
+        Actor console = new Actor(new UUID(0, 0), "Server", source.hasPermission(2),
+                source.getLevel().dimension().location().toString(), spawn.getX() >> 4, spawn.getZ() >> 4);
+        ServerRuntime.Reply reply = runtime.invoke(console, "statecraft", line, () -> {
+            var args = CommandLine.split(line);
+            if (!console.admin() || args.isEmpty() || !args.get(0).equalsIgnoreCase("admin")) {
+                throw new UserError("This command requires a player; console supports /sc admin <action>.");
             }
-            source.sendSuccess(() -> Component.literal(result).withStyle(ChatFormatting.GREEN), true);
-            return Command.SINGLE_SUCCESS;
-        } catch (UserError e) {
-            source.sendFailure(Component.literal(e.getMessage()));
-            return 0;
-        } catch (RuntimeException e) {
-            StateCraft.LOGGER.error("StateCraft console command failed.", e);
-            source.sendFailure(Component.literal("StateCraft command failed; see the server log."));
-            return 0;
+            return runtime.executeCore(console, line);
+        });
+        if (reply.success()) {
+            source.sendSuccess(() -> Component.literal(reply.text()).withStyle(ChatFormatting.GREEN), true);
+        } else {
+            source.sendFailure(Component.literal(reply.text()));
         }
+        return reply.success() ? Command.SINGLE_SUCCESS : 0;
     }
 }
