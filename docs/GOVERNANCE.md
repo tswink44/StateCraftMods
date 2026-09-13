@@ -42,24 +42,35 @@ participation; only one's own profile includes an unread personal-mail count.
 
 ## Governments and citizenship
 
-Hierarchy is **Nation → State → City → Claimed Chunks**. A player has at most one
-nation, one state in that nation, and one city in that state. Ancestor citizenship
-is required before joining a descendant. These player membership fields are the
-canonical index; government member snapshots are derived, not independently edited.
+Government and citizenship hierarchy is **Nation → State → City**. Territorial
+claims belong directly to a **nation**, with optional state and city allocations.
+A player still has at most one nation, one state in that nation, and one city in
+that state. Ancestor citizenship is required before joining a descendant. These
+player membership fields are the canonical index; government member snapshots are
+derived, not independently edited. Land allocations do not change citizenship.
 
 Minimal live setup, using the **same fresh/unaffiliated actor**, unique names, an
 unclaimed current chunk, and default zero fees:
 
 ```text
 /sc nation create GTNation
-/sc state create GTNation GTState
-/sc city create GTState GTCity
-/sc chunk claim GTCity here
+/sc chunk claim GTNation here
 ```
 
-The creator automatically leads and belongs to all three levels; no join/invite
-or `open` setting is needed for this sequence. Claim title starts at the city's
-treasury account.
+A nation needs no state or city to claim land. Its first claim is unassigned and
+has a public nation treasury title. To create and explicitly allocate a state/city
+afterwards, using the same actor:
+
+```text
+/sc state create GTNation GTState
+/sc city create GTState GTCity
+/sc chunk assignstate GTNation here GTState
+/sc chunk assigncity GTState here GTCity
+```
+
+The creator automatically leads and belongs to each government they create; no
+join/invite or `open` setting is needed for these sequences. The optional allocations
+transfer public title first to the state, then to the city; they do not move money.
 
 ```text
 nation create <name> [leader: operator only]
@@ -115,12 +126,17 @@ preserving ancestors. **Every affected leadership office must be transferred
 first**, including a governor/mayor's office when leaving the nation. Offices do
 not automatically disappear to permit abandonment.
 
-Disband without `cascade` requires a leaf with no claims and at most its leader.
-Explicit cascade clears the subtree's memberships and public claims rather than
-creating orphans. Ordinary disband cannot confiscate privately purchased land.
-Even operator deletion checks treasury balances, economic references, pledged
-claims, active contracts/bills/elections/diplomacy and property held outside the
-deleted subtree. Resolve those obligations first.
+Disband without `cascade` requires a leaf with no allocated/claimed land and at most
+its leader. A city or state with allocated chunks cannot be disbanded, **even with
+cascade or operator authority**: clear its allocations explicitly first. Deleting
+either level never silently unclaims the nation's land.
+
+Only an explicit **nation cascade** can remove that nation's unencumbered public
+claims along with its government subtree and memberships. Private or externally
+owned titles block national deletion, including operator deletion. Treasury
+balances, economic references, pledged claims, active contracts/bills/elections/
+diplomacy and property held outside the deleted subtree remain guarded. Resolve
+those obligations first.
 
 Tags use 1–12 letters, digits, `_` or `-`. Flags are descriptive text of at most
 128 characters; URL-like text is stored literally, never fetched or executed.
@@ -162,8 +178,10 @@ Unknown policies are rejected, not recorded as if they were enforced.
 ## Territory and protection
 
 ```text
-chunk claim [city] [chunkKey|here]
-chunk unclaim [chunkKey|here]
+chunk claim <nation> <chunks>
+chunk unclaim <nation> <chunks>
+chunk assignstate <nation> <chunks> <state_or_none>
+chunk assigncity <state> <chunks> <city_or_none>
 chunk autoclaim <on|off>
 chunk info [chunkKey|here]
 chunk list [government|all] [page]
@@ -173,24 +191,71 @@ chunk protection [chunkKey|here] [player]
 chunk map [radius:1-5]
 ```
 
-Aliases: `claim`, `unclaim`, and `map` omit the initial `chunk`. Claims belong to
-cities, use their own limits/fees, and must share an edge with that city's existing
-claims **in the same dimension**. A city's first claim in each dimension may seed
-a new territory. Ordinary unclaim cannot split connected territory when enabled.
-Autoclaim uses the actor's resident city and exactly the normal permission,
-adjacency, limit and fee checks. Expected autoclaim failures raise `UserError`;
-already-owned chunks do not charge a second fee. Leaving a city disables autoclaim.
+Aliases: `claim`, `unclaim`, and `map` omit the initial `chunk`. **Only nations claim
+and unclaim.** National leaders/officers manage claims and state allocations; state
+leaders/officers and their national ancestors manage city allocations. Current
+trusted operators are also authorized. Ordinary unclaim additionally requires
+authority over each property title. A mayor or governor cannot claim merely because
+they manage a city/state.
 
-A new claim's **private title** is `city:<UUID>`. Its political city/state/nation
-remain separate from private ownership. Buying a claim changes only the title,
-clears old permits, and preserves political boundaries and tracked improvements.
-Foreign buying is denied by default; enable `foreignProperty` to allow noncitizens.
-Player/company/government title accounts must reference existing known entities.
+`chunks` is `here` or comma-separated `dimension|x|z` keys: **1–64 distinct chunks
+in the actor's current dimension**. Malformed/out-of-bounds keys, mixed dimensions,
+canonical duplicates and overlaps with existing claims are rejected. Bare
+`chunk claim`, `claim here`, and location-only claim/unclaim commands resolve the
+actor's nation and recheck national authority. Supplying a city/state reference
+never implicitly claims for its ancestor.
 
-Public city land allows its title managers, named permits, and the configured
-citizen/allied/enemy/foreign policy. Privately purchased land allows only its title
-managers and explicit permits: public/diplomatic access cannot open a private
-house or its containers. Permit changes/listing require title authority. Actions:
+With `requireAdjacentClaims`, every new selected component must connect by an edge
+to existing national land **in the same dimension**. A nation's first batch in a
+dimension must itself be connected. Preflight traverses the union of selected
+chunks: a connected selection succeeds regardless of mouse-selection order, and
+selected chunks can connect through one another. `requireConnectedClaims` checks
+the final remaining national territory after an entire unclaim batch, not
+intermediate removals. State/city allocations need not be adjacent.
+
+The whole batch is checked before mutation. The acting player pays
+`claimFee × selected chunks` to the **nation treasury** in one atomic
+`EconomyAccess.transferBatch` before claims are created. Any invalid selection,
+foreign/private/existing claim overlap, encumbrance, capacity or fee failure leaves
+all selected claims/titles unchanged and commits no partial payment. Allocations
+and unclaims have no claim fee. Claims committed to market listings, loans,
+government contracts or active treaties cannot be retitled, reallocated or
+unclaimed while those commitments apply.
+
+A new claim has required national ownership, **no state or city allocation**, and
+public `nation:<UUID>` title. `assignstate` selects a state of that nation;
+`assigncity` selects a city of the given state and requires every chunk already
+to belong to exactly that state. `none` clears the selected allocation; clearing a
+state also clears its city. Changing state clears an incompatible city, while
+reassigning the same state preserves its valid city child.
+
+Allocation uses **transfer-public-title**. Public government-owned land takes the
+most-specific assigned government's title: city, otherwise state, otherwise nation.
+Clearing a city returns public title to the state; clearing a state returns it to
+the nation. **Future sale proceeds follow that title, but treasury balances do not
+move.** Changing a public title clears its stale permits. Private player/company
+owners and their permits are preserved on every administrative allocation, even
+when the allocator does not manage the private account. Improvements and original
+claim times are preserved.
+
+Autoclaim uses the actor's nation and rechecks current national authority on every
+movement, even inside already-owned land. It uses the normal adjacency, limits and
+fees, and creates only unassigned national claims. Expected failures raise
+`UserError`; already-owned chunks do not charge again. Leaving a city/state does
+not disable national autoclaim; losing national citizenship does.
+
+Buying property changes only its financial title, clears old permits and preserves
+all political boundaries and tracked improvements. Foreign buying is denied by
+default; enable `foreignProperty` to allow noncitizens. Player/company/government
+title accounts must reference existing known entities.
+
+Protection, inherited policy and property-eligibility checks use the most-specific
+valid assignment: city, otherwise state, otherwise nation. Missing optional
+allocations are **not wilderness**. Public government land allows its title
+managers, named permits and the configured citizen/allied/enemy/foreign policy.
+Private player/company land allows only its title managers and explicit permits:
+public/diplomatic access cannot open a private house or its containers. Permit
+changes/listing require title authority. Actions:
 
 ```text
 BREAK, PLACE, BLOCK_INTERACT, ENTITY_INTERACT, ATTACK
@@ -202,12 +267,19 @@ By default friendly, allied and truce PvP is blocked. `friendlyFire=true` can re
 that diplomatic protection on the claimed land. `pvp` otherwise controls combat;
 `warOverridesPvp=true` permits war combat between signatory citizens on either
 signatory's land, even if its ordinary PvP setting is off. Wilderness PvP/explosions
-have separate configuration. Explosion checks fail closed on malformed claims.
+have separate configuration. Protection and explosion checks fail closed on
+malformed claims, including missing required national ownership and retained null
+claim entries.
 
 The improvement counter clamps to 0–1,000,000,000 and is independent of political
 or private title changes. `chunk info` includes economy/contract/treaty reservations.
 `chunk protection` reports decisions; a requested player's PvP diagnosis uses the
 requester as opponent. Maps are dimension-local, north up, with a maximum 11×11 area.
+
+`maxClaimsPerNation` bounds national claims; `maxClaimsPerCity` now bounds city
+allocations only. Reduced limits do not evict existing land. For complete territory
+invariants, administrative edge cases and migration rules, see
+[National territory](TERRITORY.md).
 
 ## Elections
 
@@ -311,7 +383,7 @@ diplomacy alliance <fromNation> <toNation> [message]
 diplomacy accept <proposalId>
 diplomacy break <fromNation> <ally>
 diplomacy war <fromNation> <toNation> [reason]
-diplomacy peace <fromNation> <toNation> <offerAmount> <demandAmount> <chunk=destinationCity,...|-> [message]
+diplomacy peace <fromNation> <toNation> <offerAmount> <demandAmount> <chunk=destinationGovernment,...|-> [message]
 diplomacy truce <fromNation> <toNation>
 diplomacy terms|info <proposalId> [page]
 diplomacy ratify <proposalId> <yes|no|abstain>
@@ -326,18 +398,21 @@ binding truce cannot be bypassed by breaking an alliance.
 
 Peace proposals require war. `offerAmount` is paid from the proposing nation's
 treasury to the receiving nation; `demandAmount` is the reverse payment. Chunk
-terms use full keys and destination city references, for example:
+terms use full keys and destination nation/state/city references, for example:
 
 ```text
-diplomacy peace AlphaNation BetaNation 100.00 0 minecraft:overworld|0|0=BetaCity "End the war."
+diplomacy peace AlphaNation BetaNation 100.00 0 minecraft:overworld|0|0=BetaNation "End the war."
 ```
 
-Every selected claim must move between the signatories, be publicly city-owned,
-have no economic/contract/other treaty pledge, and preserve configured destination
-limits and per-dimension connectivity. Proposals reserve both selected chunks and
-referenced destination cities until conclusion or expiry. Private property cannot
-be confiscated in peace terms. `truce` is shorthand for a zero-money/no-territory
-peace proposal, **not** unilateral termination of war.
+Every selected **existing** claim must move between signatory nations, be owned by
+the donor's public treasuries, have no economic/contract/other treaty pledge, and
+preserve national claim limits/connectivity per dimension plus city allocation
+limits. Treaties never create claims or confiscate private property. A nation
+destination leaves state/city unassigned; a state or city explicitly negotiates
+those allocations. Legacy `chunk=BetaCity` syntax remains valid. Proposals reserve
+selected chunks and referenced governments/allocations until conclusion or expiry.
+`truce` is shorthand for a zero-money/no-territory peace proposal, **not** unilateral
+termination of war.
 
 With `requirePeaceRatification=true`, or if either nation requires it, executive
 acceptance creates a debate/vote ratification bill in **each** legislature.
@@ -351,11 +426,13 @@ even at proposal time. If ratified settlement cannot pay or its references are
 invalid, status remains `READY`, war/claims remain unchanged, and an actionable
 blocked reason is recorded. Malformed terms require operator repair before either
 leader can `execute` a retry before expiry. Startup/audit checks active terms'
-required fields, canonical chunk keys, and source/destination city references.
-Concluded historical treaties may retain references to cities or claims that no
-longer exist; they are not reopened or treated as active obligations.
-Successful settlement changes public title to the destination city, preserves
-improvements, clears old permits and starts a binding configured truce. Repeat
+required national fields, canonical chunk keys, optional state/city allocations
+and the source claim's complete ownership/allocation snapshot. Concluded historical
+treaties may retain references to governments or claims that no longer exist;
+they are not reopened or treated as active obligations.
+Successful settlement changes national ownership, negotiated allocations and public
+title to the most-specific destination government. It preserves improvements and
+claim times, clears old public permits and starts a binding configured truce. Repeat
 acceptance/execution cannot pay twice. Official mail records proposals, acceptance,
 ratification, failure, expiry and settlement.
 
@@ -452,8 +529,12 @@ contract complete <contractId>
 contract cancel <contractId> <reason>
 ```
 
-The issuer selects government-owned chunks in its political subtree; private land
-and encumbered land are rejected. Selected chunks remain reserved while active.
+The issuer selects public government-owned chunks in its national territory or
+explicit state/city allocation, with titles held in its government subtree. A
+nation may use nation-only chunks; a state may use its chunks without a city;
+city contracts require that city's allocation. Private and encumbered land are
+rejected. Selected chunks remain reserved while active, preventing allocation or
+title changes from orphaning the contract.
 `maxContractChunks` limits new selections, not settlement of an unchanged selection
 that was valid when created. Reducing it does not strand an existing award or its
 escrow. Award/completion still recheck political/private ownership, competing
@@ -529,7 +610,7 @@ admin delete <nation|state|city> <government> [cascade]
 admin delete company <company>
 admin leader <government> <knownPlayer>
 admin rename <government> <name>
-admin reassign <chunkKey|here> <city>
+admin reassign <chunkKey|here> <government>
 admin owner <chunkKey|here> <account>
 admin diagnostics [chunkKey|here]
 admin audit [page]
@@ -543,25 +624,30 @@ operator status on every action. It is not granted just because a UUID was once
 an operator. `bypassEnabled(UUID)` is informational; world adapters must use
 `mayAct(Actor, ...)`, never treat a stored toggle alone as permission.
 
-Forced unclaim intentionally ignores adjacency/private-title authorization, but
-never financial or active-workflow locks. `reassign` changes a chunk's political
-city, deliberately bypasses adjacency, preserves private non-city titles and
-converts an old public city title to the new city. `owner` changes only private
-title and still validates references, player foreign-property eligibility and locks.
+Forced unclaim intentionally ignores adjacency/private-title authorization and can
+address remote dimensions for explicit cleanup, but never bypasses financial or
+active-workflow locks. `reassign` changes an **existing** chunk's national ownership
+and optional state/city allocations according to the destination government. It
+deliberately bypasses adjacency, not capacity or obligations. Public title follows
+the destination; private player/company titles and their permits are preserved.
+Changed public titles clear stale permits. Mismatched claim record keys must be
+repaired first. `owner` changes only financial title and still validates references,
+player foreign-property eligibility and locks.
 Leader reassignment can safely move a known player into the needed hierarchy, but
 does not abandon another office on their behalf.
 
 Audit/repair-preview are read-only apart from normal actor identity refresh, and do
 not advance scheduled workflows. Explicit repair clears dangling memberships,
-stale officers/invitations, invalid permits/policies and financially inert orphan
-public claims/governments. It does **not** invent leadership/share ownership,
-release stock reservations, discard private titles, or erase nonzero escrow.
-Private/pledged orphan claims remain for explicit reassignment. Ambiguous IDs and
-financially inconsistent records remain reported instead of being guessed away.
+stale officers/invitations, invalid permits/policies and financially inert empty
+orphan governments. It does **not** infer national ownership of orphan claims,
+invent leadership/share ownership, release stock reservations, discard titles or
+erase nonzero escrow. Public as well as private/pledged orphan titles remain for
+explicit reassignment or guarded forced removal. Ambiguous IDs and financially
+inconsistent records remain reported instead of being guessed away.
 
 Construction validates both structure and references. Explicitly null required
-containers/fields or an unsupported governance schema raise `UserError` without
-clearing or replacing the supplied data. Truly omitted JSON fields still use the
+structural containers/metadata fields or an unsupported governance schema raise
+`UserError` without clearing or replacing the supplied data. Truly omitted JSON fields still use the
 POJO's declared defaults. Orphan references and inconsistent ledgers are retained
 in **repair-required mode**, rather than making the repair commands inaccessible:
 `info` displays a warning, timers pause, normal commands/property/stock mutations
@@ -572,9 +658,10 @@ queries and validation of an identical existing stock reservation remain usable
 for economy startup; no additional shares are reserved. Stock cancellation may
 still release a reservation as part of an authorized economy recovery.
 
-Expired invitations and reduced configurable population/retention limits are not
+Expired invitations and reduced configurable population/territory/retention limits are not
 misclassified as corrupt loads. They follow normal expiry/retention or constrain
-future actions; citizens are not evicted on configuration changes. The optional
+future actions; citizens and existing claims/allocations are not evicted on
+configuration changes. The optional
 `validationIssues()` getter returns an immutable current report for runtime
 startup logging and diagnostics. It never resets or discards records.
 
@@ -610,6 +697,7 @@ New phases and future election cycles use the current timing configuration.
 | `maxMembersPerState` | 256 |
 | `maxMembersPerCity` | 128 |
 | `maxOfficers` | 32 |
+| `maxClaimsPerNation` | 16384 |
 | `maxClaimsPerCity` | 256 |
 | `maxTotalClaims` | 16384 |
 | `maxPermitsPerChunk` | 32 |
@@ -637,11 +725,15 @@ New phases and future election cycles use the current timing configuration.
 | `totalCompanyShares` | 10000 |
 
 Counts must be positive. Supported hard ceilings include 4096 governments/companies,
-100000 total claims, 1000 retained history/mail entries, 64 treaty/contract chunks,
-256 bids per contract, 20 rows per page and 24000 command-output characters. Output
+100000 total claims and claims per nation, 1000 retained history/mail entries,
+64 chunks per territory batch or treaty/contract, 256 bids per contract, 20 rows
+per page and 24000 command-output characters. Output
 must be at least 512 characters, names 3–64, descriptions at most 2000, and mail
 bodies at most 4000. Share issuance is 1–1,000,000,000. Other count fields are limited
 to 1,000,000.
+
+`maxClaimsPerNation` limits national claiming; `maxClaimsPerCity` limits optional
+city allocations. Neither limit removes existing territory when reduced.
 
 ### Money and voting
 
@@ -650,7 +742,7 @@ to 1,000,000.
 | `nationCreationFee` | 0 cents | `feeAccount` |
 | `stateCreationFee` | 0 cents | Parent nation treasury |
 | `cityCreationFee` | 0 cents | Parent state treasury |
-| `claimFee` | 0 cents | Claiming city's treasury |
+| `claimFee` | 0 cents per chunk | Acting player pays claiming nation's treasury; one atomic batch |
 | `companyCreationFee` | 0 cents | `feeAccount` |
 | `electionCandidateFee` | 0 cents | Nation treasury |
 | `defaultBaseChunkValue` | 10000 cents | Fallback valuation policy |
@@ -732,6 +824,13 @@ UUID-only account/management methods deliberately do not infer operator authorit
 Government accounts are `nation:`, `state:`, and `city:` plus UUID; company accounts
 are `company:<UUID>` and player accounts are `player:<UUID>`.
 
+`GovernanceAccess.ClaimView` keeps its existing component signature:
+`key, dimension, x, z, cityId, stateId, nationId, ownerAccount, improvements, claimedAt`.
+Its `cityId` and `stateId` may now be null; every valid claim view has a required
+`nationId`. Consumers must use the most-specific existing government rather than
+assuming a city. Invalid claims are not exposed as valid views, but their stored
+locations remain protected and repairable.
+
 Start with `EconomyAccess.UNAVAILABLE`, then replace it when the addon is ready.
 All nonzero fees/payments must reach the real economy. The economy's trusted batch
 interface must support the configured `system:` fee account and
@@ -758,6 +857,21 @@ contract/treaty commitments always remain binding.
 
 `GovernanceData` is a mutable, no-Minecraft-dependency, Gson-friendly POJO with
 public nested records-as-POJOs, maps/lists/sets, String UUIDs and a schema version.
+The governance section migrates from schema **1 to 2**
+(`GovernanceData.CURRENT_SCHEMA`), without changing the outer WorldStore or economy
+schema. The POJO's version default stays `1` so JSON that omitted its legacy version
+can migrate. Initialization marks a successful migration dirty once.
+
+Legacy city-only claims gain explicit `nationId` and `stateId` only through a valid,
+indexed city → state → nation chain; contradictory fields and orphan ownership are
+never guessed from an account. Migration retains keys, public/private titles,
+permits, improvements, claim times, policy values, financial locks, escrow and other
+obligations, without payments or reallocations. Legacy treaty `fromCity`/`toCity`
+fields remain, with `fromNation`/`fromState`/`toNation`/`toState` added from valid
+chains. Malformed active terms remain blocked. Schema-2 missing national ownership
+or inconsistent optional allocations stays repair-required, not silently inferred.
+See [National territory](TERRITORY.md) for precise compatibility and repair behavior.
+
 The supplied object is mutated **in place**. No domain command writes world files.
 The runtime must serialize/save atomically on its coordinated server/store path.
 Production integrations should supply the `dirty` callback; the four-argument
@@ -830,6 +944,14 @@ state/mayor rules. Eligible current membership is preferred; an ineligible
 explicit parent/nominee selection is cleared, not silently moved elsewhere.
 Revoked authority is checked using the current actor on every form request.
 
+Claim/unclaim and state-allocation forms use an authorized **nation** dropdown;
+city-allocation forms use an authorized **state** dropdown. The state/city target
+dropdown lists only children of that selected government plus explicit `none`.
+The `chunks` batch field starts empty, accepting explicit `here` or selected
+dimension-qualified keys. Merely opening/describing a form does not select or
+claim land. Map selections seed the batch only when nonempty. All allocations
+preserve private titles; public-title consequences appear in the review.
+
 Other catalogs follow command roles and workflow phases for governments,
 appointments, invitations, claims, elections, bills, diplomacy, companies and
 contracts. Mail selectors expose only authorized message IDs and subjects, never
@@ -855,9 +977,12 @@ Policy inputs change with their selected type: rates use 0–10000 basis points,
 chunk values use integer cents, and direct settings alone permit `inherit`.
 Dividend proposals require a positive amount; `-` is advertised only for the
 roleplay/dissolution/no-territory inputs that accept it. Comma-separated territory
-fields disclose the current chunk-count limit. The shared form transport caps
-each field at 2048 characters, even when a command-side mail limit is higher;
-the complete submitted command is still bounded by its normal command limit.
+fields disclose the current chunk-count limit. Territory claim, unclaim and
+allocation `chunks` fields allow `FormSchema.MAX_VALUE_LENGTH` (4096 characters),
+including 64 vanilla chunks near the world edge. Other fields retain their existing
+2048-character defaults or stricter configured limits. Combined submitted values
+and the complete rendered command remain limited to 4096 characters; expanding a
+batch field does not bypass the overall command bound.
 
 ### Typed sections, details and pending work
 
@@ -957,14 +1082,20 @@ payment. The legislation-only setting remains **national only**.
 
 `ActionPreview.Line.material` identifies confirmation-affecting values. The
 `stateKey` digest binds relevant selected state that may not fit on the card,
-including affected cascade records, claim titles/permits and accepted terms;
+including affected cascade records, required national ownership, optional
+state/city allocations, claim titles/permits and accepted terms;
 it is not a world snapshot or dirty-state detector. Current source balances are
 informational and do not by themselves invalidate an otherwise unchanged quote.
 Spatial commands resolve `here` into the actual dimension-qualified chunk before
 building material review data. Single-chunk actions record that requested target
-independently of saved claim fields, and contract selections record their complete
-resolved chunk list. Changing location or dimension therefore changes the review
-even when the command text, owner and price remain the same.
+independently of saved claim fields, and territory/contract batches record their
+complete resolved chunk list. Claim batches share the same order-independent
+connectivity preflight as execution; allocation previews bind every resulting
+public/private title and assignment. Readable preview lines may abbreviate a long
+selection, but every selected claim's full ownership, allocations and permits still
+contribute to the fingerprint, including claims omitted from an abbreviated line.
+Changing location or dimension therefore
+changes the review even when the command text, owner and price remain the same.
 Immediate plans check current net funding, while external banking/reservation
 guards remain authoritative at settlement. Zero-price operations work without
 Economy; nonzero actions that require it refuse explicitly. A review is not a

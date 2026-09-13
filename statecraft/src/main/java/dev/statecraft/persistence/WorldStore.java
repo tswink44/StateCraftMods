@@ -187,6 +187,18 @@ public final class WorldStore {
         return target;
     }
 
+    public synchronized Path backupSnapshot(String label) throws IOException {
+        if (label == null || !label.matches("[a-z0-9-]{1,64}")) {
+            throw new IllegalArgumentException("Invalid migration backup label.");
+        }
+        Path backups = directory.resolve("backups");
+        Files.createDirectories(backups);
+        Path target = backups.resolve("before-" + label + "-" + BACKUP_TIME.format(Instant.now())
+                + "-" + UUID.randomUUID().toString().substring(0, 8) + ".json");
+        Files.copy(snapshot, target);
+        return target;
+    }
+
     public static void writeDurably(Path target, byte[] bytes) throws IOException {
         try (FileChannel file = FileChannel.open(target, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
             ByteBuffer buffer = ByteBuffer.wrap(bytes);

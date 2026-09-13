@@ -30,7 +30,7 @@ import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class SuiteNetwork {
-    private static final String PROTOCOL = "4";
+    private static final String PROTOCOL = "6";
     private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(StateCraft.MOD_ID, "suite"), () -> PROTOCOL, PROTOCOL::equals, PROTOCOL::equals);
     private static final RequestLimiter LIMITER = new RequestLimiter();
@@ -66,6 +66,14 @@ public final class SuiteNetwork {
                 PreviewResponse::handle, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
         CHANNEL.registerMessage(13, OperationStatusRequest.class, OperationStatusRequest::encode, OperationStatusRequest::decode,
                 OperationStatusRequest::handle, Optional.of(NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(14, DashboardRequest.class, DashboardRequest::encode, DashboardRequest::decode,
+                DashboardRequest::handle, Optional.of(NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(15, DashboardResponse.class, DashboardResponse::encode, DashboardResponse::decode,
+                DashboardResponse::handle, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(16, GovernmentRequest.class, GovernmentRequest::encode, GovernmentRequest::decode,
+                GovernmentRequest::handle, Optional.of(NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(17, GovernmentResponse.class, GovernmentResponse::encode, GovernmentResponse::decode,
+                GovernmentResponse::handle, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
     }
 
     public static void request(int requestId, UUID world, ActionSelection selection, OperationRef operation) {
@@ -74,6 +82,12 @@ public final class SuiteNetwork {
 
     public static void requestSession() { CHANNEL.sendToServer(new SessionRequest()); }
     public static void requestView(int id, UUID world, UiQuery query) { CHANNEL.sendToServer(new ViewRequest(id, world, query)); }
+    public static void requestDashboard(int id, UUID world, PersonalDashboard.Request query) {
+        CHANNEL.sendToServer(new DashboardRequest(id, world, query));
+    }
+    public static void requestGovernment(int id, UUID world, GovernmentOverview.Request query) {
+        CHANNEL.sendToServer(new GovernmentRequest(id, world, query));
+    }
     public static void requestPreview(int id, UUID world, ActionSelection selection) {
         CHANNEL.sendToServer(new PreviewRequest(id, world, selection));
     }
@@ -276,6 +290,128 @@ public final class SuiteNetwork {
         }
     }
 
+    public record DashboardRequest(int id, UUID world, PersonalDashboard.Request query) {
+        void encode(FriendlyByteBuf buffer) {
+            buffer.writeVarInt(id);
+            buffer.writeUUID(world);
+            DashboardCodec.request(buffer, query);
+        }
+
+        static DashboardRequest decode(FriendlyByteBuf buffer) {
+            return new DashboardRequest(UiCodec.count(buffer, Integer.MAX_VALUE), buffer.readUUID(), DashboardCodec.request(buffer));
+        }
+
+        private static void handle(DashboardRequest message, Supplier<NetworkEvent.Context> context) {
+            NetworkEvent.Context ctx = context.get();
+            ctx.enqueueWork(() -> {
+                ServerPlayer player = ctx.getSender();
+                if (player == null) return;
+                PersonalDashboard dashboard = null;
+                UiText error = UiText.EMPTY;
+                try {
+                    limited(player);
+                    checkWorld(player, message.world);
+                    dashboard = StateCraft.runtime().ui().personalDashboard(player, message.query);
+                } catch (UserError denied) {
+                    error = UiText.literal(errorText(denied.getMessage()));
+                } catch (RuntimeException failure) {
+                    error = internalError("dashboard", player, failure);
+                }
+                send(player, new DashboardResponse(message.id, StateCraft.runtime().ui().world(), message.query,
+                        dashboard != null, error, dashboard));
+            });
+            ctx.setPacketHandled(true);
+        }
+    }
+
+    public record DashboardResponse(int id, UUID world, PersonalDashboard.Request query, boolean success,
+                                    UiText error, PersonalDashboard dashboard) {
+        void encode(FriendlyByteBuf buffer) {
+            buffer.writeVarInt(id);
+            buffer.writeUUID(world);
+            DashboardCodec.request(buffer, query);
+            buffer.writeBoolean(success);
+            UiCodec.text(buffer, error);
+            if (success) DashboardCodec.dashboard(buffer, dashboard);
+        }
+
+        static DashboardResponse decode(FriendlyByteBuf buffer) {
+            int id = UiCodec.count(buffer, Integer.MAX_VALUE);
+            UUID world = buffer.readUUID();
+            PersonalDashboard.Request query = DashboardCodec.request(buffer);
+            boolean success = buffer.readBoolean();
+            UiText error = UiCodec.text(buffer);
+            return new DashboardResponse(id, world, query, success, error, success ? DashboardCodec.dashboard(buffer) : null);
+        }
+
+        private static void handle(DashboardResponse message, Supplier<NetworkEvent.Context> context) {
+            NetworkEvent.Context ctx = context.get();
+            ctx.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientHooks.dashboardReply(message)));
+            ctx.setPacketHandled(true);
+        }
+    }
+
+    public record GovernmentRequest(int id, UUID world, GovernmentOverview.Request query) {
+        void encode(FriendlyByteBuf buffer) {
+            buffer.writeVarInt(id);
+            buffer.writeUUID(world);
+            GovernmentOverviewCodec.request(buffer, query);
+        }
+
+        static GovernmentRequest decode(FriendlyByteBuf buffer) {
+            return new GovernmentRequest(UiCodec.count(buffer, Integer.MAX_VALUE), buffer.readUUID(), GovernmentOverviewCodec.request(buffer));
+        }
+
+        private static void handle(GovernmentRequest message, Supplier<NetworkEvent.Context> context) {
+            NetworkEvent.Context ctx = context.get();
+            ctx.enqueueWork(() -> {
+                ServerPlayer player = ctx.getSender();
+                if (player == null) return;
+                GovernmentOverview overview = null;
+                UiText error = UiText.EMPTY;
+                try {
+                    limited(player);
+                    checkWorld(player, message.world);
+                    overview = StateCraft.runtime().ui().governmentOverview(player, message.query);
+                } catch (UserError denied) {
+                    error = UiText.literal(errorText(denied.getMessage()));
+                } catch (RuntimeException failure) {
+                    error = internalError("government overview", player, failure);
+                }
+                send(player, new GovernmentResponse(message.id, StateCraft.runtime().ui().world(), message.query,
+                        overview != null, error, overview));
+            });
+            ctx.setPacketHandled(true);
+        }
+    }
+
+    public record GovernmentResponse(int id, UUID world, GovernmentOverview.Request query, boolean success,
+                                     UiText error, GovernmentOverview overview) {
+        void encode(FriendlyByteBuf buffer) {
+            buffer.writeVarInt(id);
+            buffer.writeUUID(world);
+            GovernmentOverviewCodec.request(buffer, query);
+            buffer.writeBoolean(success);
+            UiCodec.text(buffer, error);
+            if (success) GovernmentOverviewCodec.overview(buffer, overview);
+        }
+
+        static GovernmentResponse decode(FriendlyByteBuf buffer) {
+            int id = UiCodec.count(buffer, Integer.MAX_VALUE);
+            UUID world = buffer.readUUID();
+            var query = GovernmentOverviewCodec.request(buffer);
+            boolean success = buffer.readBoolean();
+            UiText error = UiCodec.text(buffer);
+            return new GovernmentResponse(id, world, query, success, error, success ? GovernmentOverviewCodec.overview(buffer) : null);
+        }
+
+        private static void handle(GovernmentResponse message, Supplier<NetworkEvent.Context> context) {
+            NetworkEvent.Context ctx = context.get();
+            ctx.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientHooks.governmentReply(message)));
+            ctx.setPacketHandled(true);
+        }
+    }
+
     public record PreviewRequest(int id, UUID world, ActionSelection selection) {
         void encode(FriendlyByteBuf buffer) { buffer.writeVarInt(id); buffer.writeUUID(world); UiCodec.selection(buffer, selection); }
         static PreviewRequest decode(FriendlyByteBuf buffer) {
@@ -412,6 +548,7 @@ public final class SuiteNetwork {
                 buffer.writeUtf(territory.ownerAccount(), 128);
                 buffer.writeInt(territory.color());
                 buffer.writeVarInt(territory.improvements());
+                buffer.writeUtf(territory.ownerName(), 128);
             }
         }
 
@@ -434,7 +571,7 @@ public final class SuiteNetwork {
                 }
                 territories.add(new TerritorySnapshot.Territory(tx, tz, buffer.readUtf(64), buffer.readUtf(64),
                         buffer.readUtf(64), buffer.readUtf(128), buffer.readUtf(128), buffer.readUtf(128),
-                        buffer.readUtf(128), buffer.readInt(), buffer.readVarInt()));
+                        buffer.readUtf(128), buffer.readInt(), buffer.readVarInt(), buffer.readUtf(128)));
             }
             return new TerritoryMessage(new TerritorySnapshot(dimension, x, z, radius, territories));
         }

@@ -52,8 +52,8 @@ public final class FormState {
 
     public void selectCustom(String key, String value) {
         FormField field = schema.field(key).orElseThrow(() -> new UserError("Unknown form field."));
-        if (!field.allowCustom() || value.isBlank() || value.length() > 2048) {
-            throw new UserError("Enter a supported custom value of at most 2048 characters.");
+        if (!field.allowCustom() || value.isBlank() || value.length() > field.constraints().maxLength()) {
+            throw new UserError("Enter a supported custom value of at most " + field.constraints().maxLength() + " characters.");
         }
         change(key, value);
         labels.put(key, value.length() <= 128 ? value : value.substring(0, 125) + "...");

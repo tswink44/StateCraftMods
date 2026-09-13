@@ -6,6 +6,7 @@ import dev.statecraft.api.EconomyAccess;
 import dev.statecraft.api.Money;
 import dev.statecraft.api.UserError;
 import dev.statecraft.api.ui.ActionPreview;
+import dev.statecraft.api.ui.DisplayText;
 import dev.statecraft.api.ui.ActionSelection;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,7 +42,7 @@ class GovernancePreviewsTest extends DomainFixture {
         fee(alice, "city create " + state + " FeeCity", 300, "state:" + state);
         String city = government("FeeCity").id();
         fee(alice, "company create Builders", 400, config.feeAccount);
-        fee(alice, "chunk claim " + city + " here", 500, "city:" + city);
+        fee(alice, "chunk claim " + nation + " here", 500, "nation:" + nation);
         fee(alice, "election candidate " + nation, 600, "nation:" + nation);
         assertEquals(7_900, economy.balance(alice.account()));
         assertEquals(6, economy.batches.size());
@@ -83,25 +84,26 @@ class GovernancePreviewsTest extends DomainFixture {
         Actor first = at(alice, "minecraft:overworld", 12, 34);
         Actor moved = at(alice, "minecraft:overworld", 13, 34);
         Actor changedDimension = at(alice, "minecraft:the_nether", 12, 34);
-        String command = "chunk claim " + tree.city() + " here";
+        String command = "chunk claim " + tree.nation() + " here";
         ActionPreview original = pure(first, command);
         ActionPreview neighboring = pure(moved, command);
         ActionPreview otherDimension = pure(changedDimension, command);
-        assertEquals(value(original, "command"), value(neighboring, "command"));
+        assertFalse(has(original, "command"));
+        assertFalse(has(neighboring, "command"));
         assertEquals(value(original, "pay_now"), value(neighboring, "pay_now"));
         assertEquals(value(original, "payment_parties"), value(neighboring, "payment_parties"));
-        assertEquals(first.chunkKey(), value(original, "target_chunk"));
-        assertEquals(moved.chunkKey(), value(neighboring, "target_chunk"));
-        assertEquals(changedDimension.chunkKey(), value(otherDimension, "target_chunk"));
+        assertEquals(DisplayText.chunk(first.chunkKey()), value(original, "target_chunk"));
+        assertEquals(DisplayText.chunk(moved.chunkKey()), value(neighboring, "target_chunk"));
+        assertEquals(DisplayText.chunk(changedDimension.chunkKey()), value(otherDimension, "target_chunk"));
         assertNotEquals(original.fingerprint(), neighboring.fingerprint());
         assertNotEquals(original.fingerprint(), otherDimension.fingerprint());
-        assertEquals(first.chunkKey(), value(pure(first, "claim " + tree.city() + " here"), "target_chunk"));
+        assertEquals(DisplayText.chunk(first.chunkKey()), value(pure(first, "claim " + tree.nation() + " here"), "target_chunk"));
         assertTrue(data.claims.isEmpty());
         run(moved, command);
         assertTrue(data.claims.containsKey(moved.chunkKey()));
         assertFalse(data.claims.containsKey(first.chunkKey()));
         assertEquals(700, economy.balance(alice.account()));
-        assertEquals(300, economy.balance("city:" + tree.city()));
+        assertEquals(300, economy.balance("nation:" + tree.nation()));
     }
 
     @Test
@@ -119,8 +121,8 @@ class GovernancePreviewsTest extends DomainFixture {
             ActionPreview before = pure(here, command);
             ActionPreview after = pure(moved, command);
             String field = command.startsWith("contract") ? "chunks" : "target_chunk";
-            assertEquals(first, value(before, field), command);
-            assertEquals(second, value(after, field), command);
+            assertEquals(DisplayText.chunk(first), value(before, field), command);
+            assertEquals(DisplayText.chunk(second), value(after, field), command);
             assertNotEquals(before.fingerprint(), after.fingerprint(), command);
         }
         Actor adminHere = at(operator, "minecraft:overworld", 0, 0);
@@ -129,27 +131,26 @@ class GovernancePreviewsTest extends DomainFixture {
                 "admin reassign here " + destination.city(), "admin diagnostics here")) {
             ActionPreview before = pure(adminHere, command);
             ActionPreview after = pure(adminMoved, command);
-            assertEquals(first, value(before, "target_chunk"), command);
-            assertEquals(second, value(after, "target_chunk"), command);
+            assertEquals(DisplayText.chunk(first), value(before, "target_chunk"), command);
+            assertEquals(DisplayText.chunk(second), value(after, "target_chunk"), command);
             assertNotEquals(before.fingerprint(), after.fingerprint(), command);
         }
         assertEquals(2, data.claims.size());
     }
 
     @Test
-    void operatorRepairReviewsBindTheRequestedCoordinateIndependentlyOfMalformedRecordKeys() {
+    void operatorReassignmentRefusesMismatchedRecordKeysWithoutChangingEitherClaim() {
         Tree tree = tree(alice, "Alpha");
         Tree destination = tree(dave, "Beta");
         String first = claim(alice, tree, 0, 0);
         String second = claim(alice, tree, 1, 0);
         data.claims.get(first).key = second;
         String command = "admin reassign here " + destination.city();
-        ActionPreview before = pure(at(operator, "minecraft:overworld", 0, 0), command);
+        assertThrows(UserError.class, () -> pure(at(operator, "minecraft:overworld", 0, 0), command));
         ActionPreview after = pure(at(operator, "minecraft:overworld", 1, 0), command);
-        assertEquals(value(before, "chunk"), value(after, "chunk"));
-        assertEquals(first, value(before, "target_chunk"));
-        assertEquals(second, value(after, "target_chunk"));
-        assertNotEquals(before.fingerprint(), after.fingerprint());
+        assertEquals(DisplayText.chunk(second), value(after, "target_chunk"));
+        assertEquals(tree.nation(), data.claims.get(first).nationId);
+        assertEquals(tree.nation(), data.claims.get(second).nationId);
     }
 
     @Test
@@ -196,7 +197,7 @@ class GovernancePreviewsTest extends DomainFixture {
         run(alice, "contract review " + contract);
         ActionPreview award = pure(alice, "contract award " + contract + " Bob");
         assertEquals(Money.format(1_000), value(award, "pay_now"));
-        assertTrue(value(award, "payment_parties").contains("escrow:contract:" + contract));
+        assertTrue(value(award, "payment_parties").contains("Road (contract escrow)"));
         data.contracts.get(contract).bids.get(bob.id().toString()).cents = 2_000;
         ActionPreview changed = pure(alice, "contract award " + contract + " Bob");
         assertNotEquals(award.fingerprint(), changed.fingerprint());
@@ -208,7 +209,7 @@ class GovernancePreviewsTest extends DomainFixture {
         configure();
         ActionPreview completion = pure(alice, "contract complete " + contract);
         assertEquals(Money.format(2_000), value(completion, "pay_now"));
-        assertTrue(value(completion, "payment_parties").contains(bob.account()));
+        assertTrue(value(completion, "payment_parties").contains("Bob (player)"));
         assertThrows(UserError.class, () -> preview(operator(bob, true), "contract complete " + contract));
         data.contracts.get(contract).payeeAccount = cara.account();
         assertThrows(UserError.class, () -> preview(alice, "contract complete " + contract));
@@ -230,8 +231,8 @@ class GovernancePreviewsTest extends DomainFixture {
         String contract = awarded(tree, key, "10");
         ActionPreview refund = pure(bob, "contract cancel " + contract + " Unable");
         assertEquals(Money.format(1_000), value(refund, "pay_now"));
-        assertTrue(value(refund, "payment_parties").contains("escrow:contract:" + contract));
-        assertTrue(value(refund, "payment_parties").contains("AlphaNation [nation:" + tree.nation() + "]"));
+        assertTrue(value(refund, "payment_parties").contains("Road (contract escrow)"));
+        assertTrue(value(refund, "payment_parties").contains("AlphaNation (Nation)"));
         assertThrows(UserError.class, () -> preview(cara, "contract cancel " + contract + " Unwanted"));
         run(bob, "contract cancel " + contract + " Unable");
         assertEquals(1_000, economy.balance("nation:" + tree.nation()));
@@ -254,9 +255,9 @@ class GovernancePreviewsTest extends DomainFixture {
         economy.balances.put("company:" + company, 10L);
         ActionPreview payment = pure(alice, "company execute " + id);
         assertEquals(Money.format(10), value(payment, "pay_now"));
-        assertTrue(value(payment, "payment_parties").contains("Alice [" + alice.account() + "]: " + Money.format(5)));
-        assertTrue(value(payment, "payment_parties").contains("Bob [" + bob.account() + "]: " + Money.format(3)));
-        assertTrue(value(payment, "payment_parties").contains("Cara [" + cara.account() + "]: " + Money.format(2)));
+        assertTrue(value(payment, "payment_parties").contains("Alice (player): " + Money.format(5)));
+        assertTrue(value(payment, "payment_parties").contains("Bob (player): " + Money.format(3)));
+        assertTrue(value(payment, "payment_parties").contains("Cara (player): " + Money.format(2)));
         run(alice, "company execute " + id);
         assertEquals(5, economy.balance(alice.account()));
         assertEquals(3, economy.balance(bob.account()));
@@ -273,7 +274,7 @@ class GovernancePreviewsTest extends DomainFixture {
         data.companyProposals.get(proposal).companyId = second;
         ActionPreview moved = pure(alice, "company vote " + proposal + " yes");
         assertNotEquals(original.fingerprint(), moved.fingerprint());
-        assertTrue(value(moved, "company").contains(second));
+        assertTrue(value(moved, "company").contains("Second Company"));
         data.companyProposals.get(proposal).electorate.put(bob.id().toString(), 100L);
         data.companyProposals.get(proposal).electorate.put(alice.id().toString(), 9_900L);
         ActionPreview reweighted = pure(alice, "company vote " + proposal + " yes");
@@ -298,7 +299,7 @@ class GovernancePreviewsTest extends DomainFixture {
         AtomicInteger dirty = observe();
         ActionPreview original = pure(alice, "company execute " + proposal);
         assertEquals("40", value(original, "transfer_count"));
-        assertTrue(value(original, "distribution").contains("40 recipient accounts"));
+        assertTrue(value(original, "distribution").contains("40 recipients"));
         assertTrue(value(original, "payment_parties").length() < 512);
         assertFalse(value(original, "payment_parties").contains("Holder38"));
         assertEquals(Money.format(10_000), value(original, "pay_now"));
@@ -360,13 +361,13 @@ class GovernancePreviewsTest extends DomainFixture {
         run(alice, command);
         String treaty = latestDiplomacy();
         ActionPreview pending = pure(dave, "diplomacy accept " + treaty);
-        assertEquals("true", value(pending, "ratification"));
+        assertEquals("Yes", value(pending, "ratification"));
         assertEquals(Money.format(1_500), value(pending, "conditional_total"));
         assertTrue(economy.batches.isEmpty());
         config.requirePeaceRatification = false;
         configure();
         ActionPreview immediate = pure(dave, "diplomacy accept " + treaty);
-        assertEquals("false", value(immediate, "ratification"));
+        assertEquals("No", value(immediate, "ratification"));
         assertEquals(Money.format(1_500), value(immediate, "pay_now"));
         assertNotEquals(pending.fingerprint(), immediate.fingerprint());
         run(dave, "diplomacy accept " + treaty);
@@ -389,7 +390,7 @@ class GovernancePreviewsTest extends DomainFixture {
         assertThrows(UserError.class, () -> preview(alice, "nation setting " + tree.nation() + " incomeTaxBps 500"));
         assertThrows(UserError.class, () -> preview(bob, "city setting " + tree.city() + " incomeTaxBps 100"));
         ActionPreview local = pure(cara, "city setting " + tree.city() + " incomeTaxBps 100");
-        assertEquals("100", value(local, "replacement"));
+        assertEquals("1%", value(local, "replacement"));
         assertThrows(UserError.class, () -> preview(cara, "city kick " + tree.city() + " Bob"));
         assertDoesNotThrow(() -> pure(alice, "city kick " + tree.city() + " Bob"));
         assertThrows(UserError.class, () -> preview(alice, "city kick " + tree.city() + " Cara"));
@@ -403,14 +404,14 @@ class GovernancePreviewsTest extends DomainFixture {
         run(alice, "nation setting " + tree.nation() + " pvp true");
         run(alice, "city setting " + tree.city() + " pvp false");
         ActionPreview original = pure(alice, "city setting " + tree.city() + " pvp inherit");
-        assertEquals("true", value(original, "resulting_effective"));
+        assertEquals("On", value(original, "resulting_effective"));
         run(alice, "nation setting " + tree.nation() + " pvp false");
         ActionPreview changed = pure(alice, "city setting " + tree.city() + " pvp inherit");
-        assertEquals("false", value(changed, "resulting_effective"));
+        assertEquals("Off", value(changed, "resulting_effective"));
         assertNotEquals(original.fingerprint(), changed.fingerprint());
         run(alice, "city setting " + tree.city() + " incomeTaxBps 500");
         ActionPreview localTax = pure(alice, "city setting " + tree.city() + " incomeTaxBps inherit");
-        assertEquals("0", value(localTax, "resulting_effective"));
+        assertEquals("0%", value(localTax, "resulting_effective"));
         run(alice, "nation setting " + tree.nation() + " incomeTaxBps 900");
         assertEquals(localTax.fingerprint(), pure(alice, "city setting " + tree.city() + " incomeTaxBps inherit").fingerprint());
         assertEquals("500", government(tree.city()).settings().get("incomeTaxBps"));
@@ -460,10 +461,10 @@ class GovernancePreviewsTest extends DomainFixture {
         run(alice, "diplomacy war " + alpha.nation() + " " + beta.nation());
         run(alice, "diplomacy peace " + alpha.nation() + " " + beta.nation() + " 0 0 " + key + "=" + beta.city());
         String treaty = latestDiplomacy();
-        data.diplomacy.get(treaty).chunks.get(0).fromCity = null;
+        data.diplomacy.get(treaty).chunks.get(0).fromNation = null;
         ActionPreview cancel = pure(operator, "diplomacy cancel " + treaty);
         assertFalse(has(cancel, "pay_now"));
-        assertTrue(value(cancel, "territory_terms").contains("null"));
+        assertTrue(value(cancel, "territory_terms").contains("Unavailable nation"));
         assertThrows(UserError.class, () -> preview(operator, "diplomacy accept " + treaty));
         run(operator, "diplomacy cancel " + treaty);
         assertEquals("CANCELLED", data.diplomacy.get(treaty).status);

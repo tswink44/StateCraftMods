@@ -7,7 +7,9 @@ import dev.statecraft.api.UserError;
 import dev.statecraft.api.ui.ActionIntent;
 import dev.statecraft.api.ui.UiAction;
 import dev.statecraft.client.state.SearchState;
+import dev.statecraft.client.state.UiPresentation;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -40,8 +42,8 @@ final class ActionPickerScreen extends Screen {
     @Override
     protected void init() {
         if (search != null) state.selection(search.selection());
-        int left = Math.max(12, width / 2 - 200);
-        int listWidth = Math.min(400, width - 24);
+        int left = Math.max(12, width / 2 - 240);
+        int listWidth = Math.min(480, width - 24);
         search = new RetainedEditBox(font, left, 34, listWidth, 20, ClientText.tr("gui.statecraft.actions.search", "Find an action"));
         search.setMaxLength(80);
         search.setHint(ClientText.tr("gui.statecraft.actions.search_hint", "Find an action..."));
@@ -53,22 +55,22 @@ final class ActionPickerScreen extends Screen {
         });
         addRenderableWidget(search);
         rows.clear();
-        int count = Math.max(1, (height - 111) / 24);
+        int count = Math.max(1, (height - 111) / 30);
         for (int i = 0; i < count; i++) {
             final int index = i;
-            rows.add(addRenderableWidget(Button.builder(Component.empty(), ignored -> choose(state.offset() + index))
-                    .bounds(left, 62 + i * 24, listWidth, 20).build()));
+            rows.add(addRenderableWidget(UiButton.create(Component.empty(), ignored -> choose(state.offset() + index))
+                    .bounds(left, 62 + i * 30, listWidth, 26).build()));
         }
         int buttonWidth = (listWidth - 8) / 3;
-        previous = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.previous", "Previous"), ignored -> {
+        previous = addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.previous", "Previous"), ignored -> {
             state.offset(state.offset() - rows.size());
             updateRows();
         }).bounds(left, height - 28, buttonWidth, 20).build());
-        next = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.next", "Next"), ignored -> {
+        next = addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.next", "Next"), ignored -> {
             state.offset(state.offset() + rows.size());
             updateRows();
         }).bounds(left + buttonWidth + 4, height - 28, buttonWidth, 20).build());
-        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.back", "Back"), ignored -> onClose())
+        addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.back", "Back"), ignored -> onClose())
                 .bounds(left + (buttonWidth + 4) * 2, height - 28, buttonWidth, 20).build());
         updateRows();
         setInitialFocus(search);
@@ -77,8 +79,10 @@ final class ActionPickerScreen extends Screen {
     private void updateRows() {
         if (rows.isEmpty() || previous == null) return;
         var options = new ArrayList<Option>();
+        var contextual = new HashSet<String>();
         if (parent.state().view() != null) {
             for (UiAction seed : parent.state().view().actions()) {
+                contextual.add(seed.page() + "\n" + seed.template());
                 try {
                     MenuPage target = MenuRegistry.get(seed.page());
                     var action = target.actions().stream().filter(candidate -> candidate.command().equals(seed.template())).findFirst();
@@ -88,7 +92,11 @@ final class ActionPickerScreen extends Screen {
                 }
             }
         }
-        for (MenuPage.Action action : page.actions()) options.add(new Option(page, action, null));
+        if (UiPresentation.includePageActions(parent.state().query(), parent.state().view())) {
+            for (MenuPage.Action action : page.actions()) {
+                if (!contextual.contains(page.id() + "\n" + action.command())) options.add(new Option(page, action, null));
+            }
+        }
         String term = state.text().toLowerCase(Locale.ROOT);
         available = options.stream().filter(option -> (option.label().getString() + " "
                 + (option.action() == null ? option.seed().template() : option.action().command()))
@@ -103,12 +111,13 @@ final class ActionPickerScreen extends Screen {
             Option option = available.get(index);
             Component label = option.label();
             if (option.action() == null || option.seed() != null && !option.seed().enabled()) {
-                label = ClientText.tr("gui.statecraft.action.disabled_label", "[Unavailable] %s", label.getString());
+                label = ClientText.tr("gui.statecraft.action.disabled_label", "Unavailable · %s", label.getString())
+                        .copy().withStyle(style -> style.withColor(UiTheme.WARNING & 0xFFFFFF));
             }
             row.setMessage(label);
             row.setTooltip(Tooltip.create(option.action() == null ? ClientText.tr("gui.statecraft.navigation.version",
                     "This section is not registered. Install matching client/server modules.") : option.seed() != null && !option.seed().enabled()
-                    ? ClientText.of(option.seed().disabledReason()) : Component.literal(option.action().command())));
+                    ? ClientText.of(option.seed().disabledReason()) : option.label()));
         }
         previous.active = state.offset() > 0;
         next.active = state.offset() + rows.size() < available.size();
@@ -143,13 +152,12 @@ final class ActionPickerScreen extends Screen {
     }
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
-        renderBackground(graphics);
-        graphics.fill(0, 0, width, height, 0xEC121923);
-        graphics.drawCenteredString(font, title, width / 2, 12, 0x71D6C1);
+        UiTheme.background(graphics, width, height);
+        UiTheme.header(graphics, title, width, 12);
         Component status = available.isEmpty() ? ClientText.tr("gui.statecraft.actions.empty", "No matching actions. Try another search.")
                 : ClientText.tr("gui.statecraft.actions.page", "Actions %s–%s of %s. Unavailable actions explain why.",
                         state.offset() + 1, Math.min(available.size(), state.offset() + rows.size()), available.size());
-        graphics.drawString(font, font.plainSubstrByWidth(status.getString(), width - 24), 12, height - 43, 0xB7C9D9, false);
+        graphics.drawString(font, font.plainSubstrByWidth(status.getString(), width - 24), 12, height - 43, UiTheme.MUTED, false);
         super.render(graphics, mouseX, mouseY, delta);
     }
     @Override

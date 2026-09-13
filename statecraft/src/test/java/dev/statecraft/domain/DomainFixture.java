@@ -95,7 +95,10 @@ abstract class DomainFixture {
 
     String claim(Actor actor, Tree tree, String dimension, int x, int z) {
         String key = dimension + "|" + x + "|" + z;
-        run(actor, "chunk claim " + tree.city + " " + key);
+        Actor local = at(actor, dimension, x, z);
+        run(local, "chunk claim " + tree.nation + " " + key);
+        run(local, "chunk assignstate " + tree.nation + " " + key + " " + tree.state);
+        run(local, "chunk assigncity " + tree.state + " " + key + " " + tree.city);
         return key;
     }
 

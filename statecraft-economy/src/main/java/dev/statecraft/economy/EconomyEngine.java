@@ -273,7 +273,7 @@ public final class EconomyEngine implements EconomyAccess {
     @Override public long valueOf(String chunkKey) { ledger.thread(); return property.value(chunkKey).value; }
     @Override public boolean isClaimEncumbered(String chunkKey) {
         ledger.thread();
-        return data.properties.containsKey(chunkKey) || banking.encumbers(chunkKey);
+        return data.properties.containsKey(chunkKey) || banking.encumbers(chunkKey) || property.taxEncumbered(chunkKey);
     }
     @Override public boolean isAccountInUse(String account) {
         ledger.thread();
@@ -285,7 +285,9 @@ public final class EconomyEngine implements EconomyAccess {
         if (data.properties.values().stream().anyMatch(l -> l.ownerAccount.equals(account))) return true;
         if (data.stocks.values().stream().anyMatch(l -> ("company:" + l.company).equals(account)
                 || ("player:" + l.seller).equals(account))) return true;
-        return banking.accountInUse(account);
+        if (account.startsWith("nation:") && (data.market.values().stream().anyMatch(l -> account.equals("nation:" + l.sourceNation))
+                || data.stocks.values().stream().anyMatch(l -> account.equals("nation:" + l.sourceNation)))) return true;
+        return property.accountInUse(account) || banking.accountInUse(account);
     }
 
     private void guardReserves(Map<String, Long> balances, Map<String, Long> overrides) {

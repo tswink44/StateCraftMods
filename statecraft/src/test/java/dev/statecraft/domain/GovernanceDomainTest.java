@@ -121,7 +121,8 @@ class GovernanceDomainTest extends DomainFixture {
     }
 
     @Test
-    void adjacencyAndCityLimitsAreDimensionAware() {
+    void adjacencyAndNationLimitsAreDimensionAware() {
+        config.maxClaimsPerNation = 3;
         config.maxClaimsPerCity = 3;
         configure();
         Tree tree = tree(alice, "Alpha");
@@ -131,11 +132,11 @@ class GovernanceDomainTest extends DomainFixture {
         claim(alice, tree, "minecraft:the_nether", 100, 101);
         assertThrows(UserError.class, () -> claim(alice, tree, 1, 0));
         assertEquals(3, engine.claims().size());
-        assertThrows(UserError.class, () -> run(alice, "chunk claim " + tree.city() + " minecraft:overworld|1875001|0"));
+        assertThrows(UserError.class, () -> run(alice, "chunk claim " + tree.nation() + " minecraft:overworld|1875001|0"));
     }
 
     @Test
-    void unclaimCannotSplitACityAndForcedUnclaimStillHonorsEconomy() {
+    void unclaimCannotSplitANationAndForcedUnclaimStillHonorsEconomy() {
         Tree tree = tree(alice, "Alpha");
         String first = claim(alice, tree, 0, 0);
         String bridge = claim(alice, tree, 1, 0);
@@ -306,7 +307,7 @@ class GovernanceDomainTest extends DomainFixture {
         Tree tree = tree(alice, "Alpha");
         join(bob, tree);
         assertThrows(UserError.class, () -> run(bob, "chunk autoclaim on"));
-        run(alice, "city officer " + tree.city() + " Bob add");
+        run(alice, "nation officer " + tree.nation() + " Bob add");
         run(bob, "chunk autoclaim on");
         config.claimFee = 100;
         configure();
@@ -323,6 +324,8 @@ class GovernanceDomainTest extends DomainFixture {
         engine.autoClaim(at(bob, "minecraft:overworld", 1, 0));
         assertEquals(100, economy.balance(bob.account()));
         run(bob, "city leave");
+        assertTrue(engine.autoClaimEnabled(bob.id()));
+        run(bob, "nation leave");
         assertFalse(engine.autoClaimEnabled(bob.id()));
     }
 
@@ -550,7 +553,7 @@ class GovernanceDomainTest extends DomainFixture {
         run(operator, "admin repair preview");
         assertEquals(claimCount, data.claims.size());
         run(operator, "admin repair apply");
-        assertFalse(data.claims.containsKey(publicClaim.key));
+        assertTrue(data.claims.containsKey(publicClaim.key));
         assertTrue(data.claims.containsKey(privateClaim.key));
         assertTrue(data.claims.containsKey(pledgedClaim.key));
         assertNull(data.players.get(dave.id().toString()).nationId);
@@ -631,7 +634,9 @@ class GovernanceDomainTest extends DomainFixture {
         run(alice, "/sc nation create GTNation");
         run(alice, "/sc state create GTNation GTState");
         run(alice, "/sc city create GTState GTCity");
-        run(alice, "/sc chunk claim GTCity here");
+        run(alice, "/sc chunk claim GTNation here");
+        run(alice, "/sc chunk assignstate GTNation here GTState");
+        run(alice, "/sc chunk assigncity GTState here GTCity");
         var claim = engine.claim(alice.chunkKey()).orElseThrow();
         assertEquals(government("GTNation").id(), claim.nationId());
         assertEquals(government("GTState").id(), claim.stateId());

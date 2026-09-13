@@ -339,13 +339,13 @@ public final class StateCraftEconomy {
                             cells.add(".");
                             continue;
                         }
-                        String description = BuiltInRegistries.ITEM.getKey(options[0].getItem()).toString()
+                        String description = itemName(options[0])
                                 + (options.length > 1 ? " (or " + (options.length - 1) + " alternatives)" : "");
                         input.merge(description, 1, Integer::sum);
                         cells.add(symbols.computeIfAbsent(description, ignored -> String.valueOf((char) ('A' + symbols.size()))));
                     }
-                    String layout = recipe instanceof ShapelessRecipe ? "shapeless"
-                            : String.valueOf(BuiltInRegistries.RECIPE_TYPE.getKey(recipe.getType()));
+                    String layout = recipe instanceof ShapelessRecipe ? "Place the ingredients anywhere in the crafting grid."
+                            : dev.statecraft.api.ui.DisplayText.words(BuiltInRegistries.RECIPE_TYPE.getKey(recipe.getType()).getPath());
                     if (recipe instanceof ShapedRecipe shaped) {
                         List<String> rows = new ArrayList<>();
                         for (int row = 0; row < shaped.getHeight(); row++) {
@@ -353,15 +353,24 @@ public final class StateCraftEconomy {
                         }
                         Map<String, String> legend = new LinkedHashMap<>();
                         symbols.forEach((item, symbol) -> legend.put(symbol, item));
-                        layout = shaped.getWidth() + "×" + shaped.getHeight() + ": " + String.join(" / ", rows) + "; " + legend;
+                        layout = shaped.getWidth() + "×" + shaped.getHeight() + " crafting grid:\n" + String.join("\n", rows)
+                                + "\n" + legend.entrySet().stream().map(entry -> entry.getKey() + " = " + entry.getValue())
+                                    .collect(java.util.stream.Collectors.joining(", "));
                     }
-                    recipes.add(recipe.getId() + " [" + layout + "]: materials " + input + " → " + output.getCount() + " × "
-                            + BuiltInRegistries.ITEM.getKey(output.getItem()));
+                    recipes.add(itemName(output) + " (" + output.getCount() + ")\n" + layout + "\nMaterials: "
+                            + input.entrySet().stream().map(entry -> entry.getValue() + " × " + entry.getKey())
+                                .collect(java.util.stream.Collectors.joining(", ")));
                 });
-        return "Live server recipes (not a hardcoded recipe list):\n" + (recipes.isEmpty() ? "(No matching recipes are currently loaded.)" : String.join("\n", recipes))
-                + "\nPhysical currency is not craftable; obtain it through configured villager offers, earned Trading Hub balances, or operator minting."
-                + "\n/sce cash, hub, market, property, company, bank, loan, stock, tax; /sce card bind <account>; /sce merchant list."
-                + "\nATM/Company Vault proximity is required for cash, Trading Hub for item conversion, Company Vault for company payments/dividends. Electronic commands otherwise work remotely.";
+        return "Crafting guide\n\n" + (recipes.isEmpty() ? "No recipes are currently available." : String.join("\n\n", recipes))
+                + "\n\nCurrency cannot be crafted. Earn money at a Trading Hub or trade with merchants."
+                + "\nUse an ATM for physical cash and a Company Vault for company payments and dividends."
+                + "\nOpen the Banking & Trade menu for electronic transfers, markets and loans.";
+    }
+
+    private static String itemName(ItemStack stack) {
+        String name = stack.getHoverName().getString();
+        return name.equals(stack.getDescriptionId())
+                ? dev.statecraft.api.ui.DisplayText.words(BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath()) : name;
     }
 
     private static void notifyOperators(Running running, String text) {

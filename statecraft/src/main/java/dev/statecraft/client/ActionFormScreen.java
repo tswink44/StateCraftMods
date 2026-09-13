@@ -50,6 +50,7 @@ final class ActionFormScreen extends Screen {
     private Button confirm;
     private Button refresh;
     private Button explanation;
+    private Button attention;
 
     ActionFormScreen(ManagementScreen parent, Screen previous, MenuPage.Action action) {
         this(parent, previous, parent.page(), action, Map.of());
@@ -87,7 +88,7 @@ final class ActionFormScreen extends Screen {
                             ? ClientText.tr("gui.statecraft.choices.none_eligible", "No eligible options")
                             : ClientText.tr("gui.statecraft.choices.choose", "Choose...")
                         : Component.literal(state.label(field.key()));
-                input = Button.builder(caption, ignored -> {
+                input = UiButton.create(ClientText.tr("gui.statecraft.choices.dropdown", "%s ▾", caption.getString()), ignored -> {
                     if (locked()) return;
                     keepingOwner = true;
                     draft.focused(field.key());
@@ -111,32 +112,32 @@ final class ActionFormScreen extends Screen {
             inputs.put(field.key(), input);
             if (field.key().equals(draft.focused())) initialFocus = input;
         }
-        explanation = addRenderableWidget(Button.builder(Component.empty(), ignored -> minecraft.setScreen(
+        explanation = addRenderableWidget(UiButton.create(Component.empty(), ignored -> minecraft.setScreen(
                         new InformationScreen(this, ClientText.tr("gui.statecraft.form.validation", "Form status and field details"),
                                 validationDetails())))
                 .bounds(left, height - 88, fieldWidth, 20).build());
         int buttonWidth = (fieldWidth - 8) / 3;
-        Button back = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.form.previous", "Previous fields"), ignored -> {
+        Button back = addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.form.previous", "Previous fields"), ignored -> {
             changePage(pages.page(pageIndex - 1).start());
         }).bounds(left, height - 62, buttonWidth, 20).build());
         back.active = pageIndex > 0;
-        Button next = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.form.next", "Next fields"), ignored -> {
+        Button next = addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.form.next", "Next fields"), ignored -> {
             changePage(pages.page(pageIndex + 1).start());
         }).bounds(left + buttonWidth + 4, height - 62, buttonWidth, 20).build());
         next.active = pageIndex + 1 < pages.pages().size();
-        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.operations.title", "Operations"),
+        attention = addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.attention", "Attention"),
                         ignored -> ClientHooks.operations(this))
                 .bounds(left + (buttonWidth + 4) * 2, height - 62, buttonWidth, 20).build());
-        confirm = addRenderableWidget(Button.builder(action.intent() == ActionIntent.QUERY
+        confirm = addRenderableWidget(UiButton.create(action.intent() == ActionIntent.QUERY
                         ? ClientText.tr("gui.statecraft.form.run_query", "Run query") : ClientText.tr("gui.statecraft.form.review", "Review action"),
-                        ignored -> review()).bounds(left, height - 28, buttonWidth, 20).build());
-        refresh = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.form.refresh_choices", "Refresh choices"),
+                        ignored -> review()).bounds(left, height - 28, buttonWidth, 20).primary().build());
+        refresh = addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.form.refresh_choices", "Refresh choices"),
                         ignored -> {
                             draft.serverErrors(Map.of());
                             request(FormQuery.INITIAL);
                         })
                 .bounds(left + buttonWidth + 4, height - 28, buttonWidth, 20).build());
-        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.back", "Back"), ignored -> onClose())
+        addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.back", "Back"), ignored -> onClose())
                 .bounds(left + (buttonWidth + 4) * 2, height - 28, buttonWidth, 20).build());
         if (initialFocus != null && initialFocus.active) setInitialFocus(initialFocus);
         else if (!inputs.isEmpty()) setInitialFocus(inputs.values().iterator().next());
@@ -189,7 +190,7 @@ final class ActionFormScreen extends Screen {
             return operation.inFlight() ? ClientText.tr("gui.statecraft.operation.waiting",
                     "Submitted — waiting for the server. Inputs are locked.")
                     : ClientText.outcome(operation.outcome()).copy().append(". ").append(ClientText.tr(
-                            "gui.statecraft.form.locked", "Inputs are locked. Use Operations to check status or retry the same ready operation."));
+                            "gui.statecraft.form.locked", "Inputs are locked. Use Attention to check the pending action."));
         }
         if (!error.fallback().isEmpty()) return ClientText.of(error);
         if (pending >= 0 || refreshAt != 0) return ClientText.tr("gui.statecraft.form.loading", "Loading eligible choices...");
@@ -210,9 +211,11 @@ final class ActionFormScreen extends Screen {
     }
     private void controls() {
         if (confirm == null) return;
+        attention.visible = ClientHooks.needsAttention();
+        attention.active = attention.visible;
         confirm.active = loaded && !metadataFailed && pending < 0 && refreshAt == 0 && !locked()
                 && draft.errors().isEmpty() && (!action.intent().requiresReview() || ClientHooks.submissionProblem(action.command()).fallback().isEmpty());
-        explanation.setMessage(reason());
+        UiTheme.status(explanation, reason());
         confirm.setTooltip(Tooltip.create(reason()));
         refresh.active = !locked() && pending < 0 && !template.fields().isEmpty();
         inputs.forEach((key, input) -> {
@@ -345,10 +348,11 @@ final class ActionFormScreen extends Screen {
         Component text = Component.literal(field.label() + "\n" + field.hint());
         UiText failure = draft.errors().get(field.key());
         if (failure != null) text = text.copy().append("\n").append(ClientText.of(failure));
-        if (!field.dependencies().isEmpty()) text = text.copy().append("\n").append(ClientText.tr(
-                "gui.statecraft.field.depends", "Choose these fields first: %s", String.join(", ", field.dependencies())));
-        return text.copy().append("\n").append(ClientText.tr("gui.statecraft.field.limit",
-                "Maximum %s characters.", field.constraints().maxLength()));
+        List<String> missing = field.dependencies().stream().filter(key -> state.value(key).isBlank())
+                .map(key -> state.schema().field(key).map(FormField::label).orElse(key)).toList();
+        if (!missing.isEmpty()) text = text.copy().append("\n").append(ClientText.tr(
+                "gui.statecraft.field.depends", "Choose these fields first: %s", String.join(", ", missing)));
+        return text;
     }
     private Component validationDetails() {
         Component text = reason();
@@ -359,20 +363,22 @@ final class ActionFormScreen extends Screen {
     public Component getNarrationMessage() { return title.copy().append(". ").append(reason()); }
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
-        renderBackground(graphics);
-        graphics.fill(0, 0, width, height, 0xEC121923);
+        UiTheme.background(graphics, width, height);
         int left = Math.max(12, width / 2 - 220);
         int fieldWidth = Math.min(440, width - 24);
-        graphics.drawCenteredString(font, title, width / 2, 10, 0x71D6C1);
-        graphics.drawCenteredString(font, ClientText.page(page), width / 2, 26, 0xA8BECE);
+        UiTheme.header(graphics, title, width, 10);
+        graphics.drawString(font, font.plainSubstrByWidth(ClientText.page(page).getString(), width - 24), 12, 28, UiTheme.MUTED, false);
         Map<String, UiText> errors = draft.errors();
         for (FormPages.Slot slot : visible.slots()) {
             FormField field = state.schema().fields().get(slot.index());
-            graphics.drawString(font, font.plainSubstrByWidth(field.label(), fieldWidth), left, slot.labelY(), 0xDCE8F1, false);
+            graphics.fill(left - 4, slot.labelY() - 4, left + fieldWidth + 4, slot.messageY() + 12, UiTheme.SURFACE);
+            graphics.fill(left - 4, slot.labelY() - 4, left - 2, slot.messageY() + 12,
+                    errors.containsKey(field.key()) ? UiTheme.NEGATIVE : UiTheme.BORDER);
+            graphics.drawString(font, font.plainSubstrByWidth(field.label(), fieldWidth), left, slot.labelY(), UiTheme.TEXT, false);
             Component hint = errors.containsKey(field.key()) ? ClientText.tr("gui.statecraft.field.error", "Error: %s",
                     ClientText.of(errors.get(field.key())).getString()) : Component.literal(field.hint());
             graphics.drawString(font, font.plainSubstrByWidth(hint.getString(), fieldWidth), left, slot.messageY(),
-                    errors.containsKey(field.key()) ? 0xFFB5A8 : 0xA8BECE, false);
+                    errors.containsKey(field.key()) ? UiTheme.NEGATIVE : UiTheme.MUTED, false);
         }
         if (!loaded || template.fields().isEmpty()) {
             Component message = !loaded ? ClientText.tr("gui.statecraft.form.loading", "Loading eligible choices...")
@@ -380,8 +386,8 @@ final class ActionFormScreen extends Screen {
             int y = 54;
             for (var line : font.split(message, fieldWidth)) {
                 if (y + 10 >= height - FormPages.FOOTER_HEIGHT) break;
-                graphics.drawString(font, line, left, y, 0xDFE9F2, false);
-                y += 11;
+                graphics.drawString(font, line, left, y, UiTheme.TEXT, false);
+                y += 12;
             }
         }
         super.render(graphics, mouseX, mouseY, delta);

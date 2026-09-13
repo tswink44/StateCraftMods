@@ -40,8 +40,8 @@ final class Integrity {
     }
 
     /** Absent JSON fields use POJO defaults; explicit null containers indicate malformed data. */
-    static void initialize(GovernanceData data) {
-        GovernanceEngine.check(data.schemaVersion == 1,
+    static boolean initialize(GovernanceData data) {
+        GovernanceEngine.check(data.schemaVersion == 1 || data.schemaVersion == GovernanceData.CURRENT_SCHEMA,
                 "Unsupported governance schema " + data.schemaVersion + "; migrate/restore it without resetting world data.");
         required(data.players, "players");
         required(data.governments, "governments");
@@ -126,6 +126,12 @@ final class Integrity {
             required(contract.bids, path + "bids");
             required(contract.completionNote, path + "completionNote");
         }
+        if (data.schemaVersion == 1) {
+            Territory.migrateLegacy(data);
+            data.schemaVersion = GovernanceData.CURRENT_SCHEMA;
+            return true;
+        }
+        return false;
     }
 
     private static void required(Object value, String path) {
@@ -148,7 +154,8 @@ final class Integrity {
 
     private List<String> issues(boolean structuralOnly) {
         List<String> result = new ArrayList<>();
-        if (e.data.schemaVersion != 1) result.add("Unsupported schema version " + e.data.schemaVersion + "; do not repair without migration.");
+        if (e.data.schemaVersion != GovernanceData.CURRENT_SCHEMA)
+            result.add("Unsupported schema version " + e.data.schemaVersion + "; do not repair without migration.");
         if (e.data.lastTick < 0) result.add("World lastTick is negative.");
         Set<String> governmentNames = new HashSet<>();
         for (Map.Entry<String, Government> entry : e.data.governments.entrySet()) {
@@ -188,7 +195,7 @@ final class Integrity {
             if (player.cityId != null && (!e.validHierarchy(city) || city.kind != Kind.CITY
                     || !Objects.equals(city.parentId, player.stateId) || !Objects.equals(e.nationId(city), player.nationId)))
                 result.add("Inconsistent city membership " + player.id);
-            if (player.autoClaim && (city == null || !e.member(player.id, city)))
+            if (player.autoClaim && (nation == null || !e.member(player.id, nation)))
                 result.add("Invalid automatic claim membership " + player.id);
             auditMail(result, player.inbox, player.sent, "player:" + entry.getKey(), structuralOnly);
         }
@@ -200,9 +207,8 @@ final class Integrity {
             try {
                 if (!ChunkKey.parse(key).toString().equals(key)) result.add("Noncanonical chunk key " + key);
             } catch (UserError | NullPointerException error) { result.add("Invalid chunk key " + key); }
-            Government city = e.data.governments.get(claim.cityId);
-            if (!e.validHierarchy(city) || city.kind != Kind.CITY)
-                result.add("Orphan claim " + key + "; private or encumbered titles will be preserved for explicit reassignment.");
+            if (e.claimGovernment(claim) == null)
+                result.add("Orphan/invalid national claim " + key + "; nation is required and state/city allocations must agree. Title and obligations are preserved for explicit reassignment.");
             try { e.validateOwnerAccount(claim.ownerAccount); }
             catch (UserError error) { result.add("Invalid private owner account at " + key + ": " + claim.ownerAccount); }
             if (claim.improvements < 0 || claim.improvements > 1_000_000_000) result.add("Invalid improvement count at " + key);
@@ -210,6 +216,15 @@ final class Integrity {
                 if (!e.data.players.containsKey(permit.getKey()) || permit.getValue() == null
                         || permit.getValue().isEmpty() || !PERMITS.containsAll(permit.getValue()))
                     result.add("Invalid chunk permit at " + key + " for " + permit.getKey());
+            }
+        }
+        if (!structuralOnly) {
+            for (Government government : e.data.governments.values()) {
+                if (!e.validHierarchy(government)) continue;
+                if (government.kind == Kind.NATION && e.nationClaims(government.id).size() > e.config.maxClaimsPerNation)
+                    result.add("National claims exceed configured limit in " + government.id + " (never unclaimed automatically).");
+                if (government.kind == Kind.CITY && e.cityClaims(government.id).size() > e.config.maxClaimsPerCity)
+                    result.add("City allocations exceed configured limit in " + government.id + " (never unassigned automatically).");
             }
         }
         for (Map.Entry<String, Invitation> entry : e.data.invitations.entrySet()) {
@@ -331,7 +346,7 @@ final class Integrity {
     }
 
     String repair() {
-        GovernanceEngine.check(e.data.schemaVersion == 1, "This schema requires an explicit migration, not orphan repair.");
+        GovernanceEngine.check(e.data.schemaVersion == GovernanceData.CURRENT_SCHEMA, "This schema requires an explicit migration, not orphan repair.");
         e.changed();
         int changes = 0;
         if (e.data.lastTick < 0) {
@@ -363,7 +378,7 @@ final class Integrity {
                 player.cityId = null;
                 changes++;
             }
-            if (player.cityId == null) player.autoClaim = false;
+            if (player.nationId == null) player.autoClaim = false;
         }
         for (Government government : e.data.governments.values()) {
             if (government == null) continue;
@@ -412,14 +427,7 @@ final class Integrity {
                 claim.improvements = Math.max(0, Math.min(1_000_000_000, claim.improvements));
                 changes++;
             }
-            Government city = e.data.governments.get(claim.cityId);
-            boolean orphan = !e.validHierarchy(city) || city.kind != Kind.CITY;
-            boolean publicTitle = claim.ownerAccount == null || ("city:" + claim.cityId).equals(claim.ownerAccount);
-            if (orphan && publicTitle && freeClaim(key)) {
-                e.data.claims.remove(key);
-                e.history("repair", key, "Removed unencumbered orphan public claim.");
-                changes++;
-            }
+            // Missing national ownership is never inferred here, nor erased to make an audit pass.
         }
         for (Contract contract : e.data.contracts.values()) {
             if (contract != null && contract.escrowCents == 0 && !e.data.governments.containsKey(contract.governmentId)
@@ -438,7 +446,8 @@ final class Integrity {
                 if (e.data.players.values().stream().filter(Objects::nonNull).anyMatch(p -> Objects.equals(p.nationId, government.id)
                         || Objects.equals(p.stateId, government.id) || Objects.equals(p.cityId, government.id))) continue;
                 if (e.data.governments.values().stream().filter(Objects::nonNull).anyMatch(g -> government.id.equals(g.parentId))) continue;
-                if (e.data.claims.values().stream().filter(Objects::nonNull).anyMatch(c -> government.id.equals(c.cityId)
+                if (e.data.claims.values().stream().filter(Objects::nonNull).anyMatch(c -> government.id.equals(c.nationId)
+                        || government.id.equals(c.stateId) || government.id.equals(c.cityId)
                         || e.account(government).equals(c.ownerAccount))) continue;
                 if (e.commerce.governmentLocked(government.id) || e.politics.governmentLocked(government.id)) continue;
                 try { e.assertAccountDisposable(e.account(government)); }
@@ -464,7 +473,7 @@ final class Integrity {
         e.history("repair", "world", "Applied " + changes + " safe repairs; financial titles, shares and obligations were not guessed.");
         int remaining = issues().size();
         return "Applied " + changes + " safe repairs. " + remaining + " issues remain; use admin audit [page]."
-                + "\nPrivate orphan property, financial obligations, stock reservations, conflicting IDs and missing leaders require explicit operator decisions."
+                + "\nOrphan property, financial obligations, stock reservations, conflicting IDs and missing leaders require explicit operator decisions."
                 + "\nUse admin reassign for preserved claims and admin leader for leadership; financial records are never discarded to make an audit pass.";
     }
 

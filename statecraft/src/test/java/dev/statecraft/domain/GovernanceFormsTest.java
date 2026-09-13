@@ -303,7 +303,7 @@ class GovernanceFormsTest extends DomainFixture {
         assertEquals(Set.of("government", "key"), Set.copyOf(field(editing, "value").dependencies()));
         FormBuilder typed = form(alice, command, Map.of("government", nation, "key", "incomeTaxBps", "value", "123"));
         assertEquals("123", typed.value("value"));
-        assertEquals(FormField.Kind.TEXT, field(typed, "value").kind());
+        assertEquals(FormField.Kind.CHOICE, field(typed, "value").kind());
         FormBuilder proposing = form(alice, "bill propose <nation> <policy> <value> <title> <text>",
                 Map.of("nation", nation, "policy", "foreignAccess", "title", "My title", "text", "My\ntext"));
         assertEquals("", proposing.value("value"));
@@ -520,7 +520,7 @@ class GovernanceFormsTest extends DomainFixture {
         data.claims.put(orphan.key, orphan);
         engine = new GovernanceEngine(data, config, EconomyAccess.UNAVAILABLE, time::get);
         String before = new Gson().toJson(data);
-        assertDoesNotThrow(() -> form(operator, "admin reassign <chunk> <city>"));
+        assertDoesNotThrow(() -> form(operator, "admin reassign <chunk> <government>"));
         assertTrue(catalog(form(cara, "mail read <message>"), "message").isEmpty());
         assertTrue(catalog(form(cara, STATE), "nation").isEmpty());
         assertEquals(before, new Gson().toJson(data));

@@ -175,6 +175,20 @@ final class TestWorld {
             claims.put(key, new ClaimView(old.key(), old.dimension(), old.x(), old.z(), old.cityId(), old.stateId(),
                     old.nationId(), owner, old.improvements(), old.claimedAt()));
         }
+        void allocation(String key, String state, String city) {
+            ClaimView old = claims.get(key);
+            if (city != null && state == null) throw new IllegalArgumentException("Cities require a state allocation.");
+            String owner = old.ownerAccount();
+            if (owner.startsWith("nation:") || owner.startsWith("state:") || owner.startsWith("city:")) {
+                owner = city != null ? "city:" + city : state != null ? "state:" + state : "nation:" + old.nationId();
+            }
+            claims.put(key, new ClaimView(old.key(), old.dimension(), old.x(), old.z(), city, state,
+                    old.nationId(), owner, old.improvements(), old.claimedAt()));
+        }
+        void assign(String key, String state, String city) {
+            if (economy != null && economy.isClaimEncumbered(key)) throw new UserError("Encumbered.");
+            allocation(key, state, city);
+        }
         void improvements(String key, int count) {
             ClaimView old = claims.get(key);
             claims.put(key, new ClaimView(old.key(), old.dimension(), old.x(), old.z(), old.cityId(), old.stateId(),
@@ -184,6 +198,7 @@ final class TestWorld {
 
         @Override public Collection<GovernmentView> governments() { return List.copyOf(governments.values()); }
         @Override public Optional<GovernmentView> government(String id) {
+            if (id == null) throw new AssertionError("Optional government IDs must not be looked up.");
             return governments.values().stream().filter(g -> g.id().equals(id) || g.name().equalsIgnoreCase(id)).findFirst();
         }
         @Override public Collection<CompanyView> companies() { return companies.entrySet().stream().map(this::view).toList(); }

@@ -7,6 +7,8 @@ import dev.statecraft.api.ui.EntityRef;
 import dev.statecraft.api.ui.UiQuery;
 import dev.statecraft.api.ui.UiText;
 import dev.statecraft.api.ui.UiView;
+import dev.statecraft.api.ui.PersonalDashboard;
+import dev.statecraft.api.ui.GovernmentOverview;
 import java.util.UUID;
 
 public final class ViewState {
@@ -14,6 +16,10 @@ public final class ViewState {
     private final UUID id = UUID.randomUUID();
     private UiQuery query;
     private UiView view;
+    private PersonalDashboard personalDashboard;
+    private PersonalDashboard.Request dashboardRequest = PersonalDashboard.Request.FIRST;
+    private GovernmentOverview governmentOverview;
+    private GovernmentOverview.Request governmentRequest;
     private Content content = Content.TYPED;
     private ActionSelection explicit;
     private String output = "";
@@ -26,6 +32,7 @@ public final class ViewState {
     private EntityRef selected = EntityRef.NONE;
     private String selectedText = "";
     private String advanced = "";
+    private boolean advancedOpen;
     private EditSelection searchSelection = EditSelection.end("");
     private EditSelection advancedSelection = EditSelection.end("");
     private SearchState actionSearch = new SearchState();
@@ -34,6 +41,19 @@ public final class ViewState {
     public UUID id() { return id; }
     public UiQuery query() { return query; }
     public UiView view() { return view; }
+    public PersonalDashboard personalDashboard() { return personalDashboard; }
+    public PersonalDashboard.Request dashboardRequest() { return dashboardRequest; }
+    public boolean isPersonalDashboard() { return query.page().equals("statecraft:dashboard") && !query.entity().present(); }
+    public GovernmentOverview governmentOverview() { return governmentOverview; }
+    public boolean isGovernmentOverview() {
+        return query.page().equals("statecraft:detail") && query.entity().kind() == EntityRef.Kind.GOVERNMENT;
+    }
+    public GovernmentOverview.Request governmentRequest() {
+        if (governmentRequest == null || !governmentRequest.governmentId().equals(query.entity().id())) {
+            governmentRequest = new GovernmentOverview.Request(query.entity().id(), 0, 0);
+        }
+        return governmentRequest;
+    }
     public Content content() { return content; }
     public ActionSelection explicit() { return explicit; }
     public String output() { return output; }
@@ -50,14 +70,49 @@ public final class ViewState {
     public EntityRef selected() { return selected; }
     public String selectedText() { return selectedText; }
     public String advanced() { return advanced; }
+    public boolean advancedOpen() { return advancedOpen; }
     public EditSelection searchSelection() { return searchSelection; }
     public EditSelection advancedSelection() { return advancedSelection; }
     public SearchState actionSearch() { return actionSearch; }
     public void scroll(int value) { scroll = Math.max(0, value); }
     public void select(EntityRef entity, String text) { selected = entity; selectedText = text; }
     public void advanced(String value) { advanced = value; }
+    public void advancedOpen(boolean value) { advancedOpen = value; }
     public void searchSelection(EditSelection value) { searchSelection = value; }
     public void advancedSelection(EditSelection value) { advancedSelection = value; }
+
+    public void dashboardRequest(PersonalDashboard.Request replacement) {
+        if (!replacement.equals(dashboardRequest)) {
+            dashboardRequest = replacement;
+            revision++;
+            stale = true;
+        }
+    }
+
+    public void personalDashboard(PersonalDashboard replacement) {
+        personalDashboard = replacement;
+        dashboardRequest = new PersonalDashboard.Request(replacement.accounts().offset(), replacement.companies().offset(),
+                replacement.propertyCities().offset());
+        content = Content.TYPED;
+        stale = false;
+        banner = UiText.EMPTY;
+    }
+
+    public void governmentRequest(GovernmentOverview.Request replacement) {
+        if (!replacement.equals(governmentRequest)) {
+            governmentRequest = replacement;
+            revision++;
+            stale = true;
+        }
+    }
+
+    public void governmentOverview(GovernmentOverview replacement) {
+        governmentOverview = replacement;
+        governmentRequest = new GovernmentOverview.Request(replacement.id(), replacement.children().offset(), replacement.officers().offset());
+        content = Content.TYPED;
+        stale = false;
+        banner = UiText.EMPTY;
+    }
 
     public void query(UiQuery replacement) {
         if (replacement.equals(query) && content == Content.TYPED) return;
@@ -135,6 +190,10 @@ public final class ViewState {
     public ViewState copy() {
         ViewState copy = new ViewState(query);
         copy.view = view;
+        copy.personalDashboard = personalDashboard;
+        copy.dashboardRequest = dashboardRequest;
+        copy.governmentOverview = governmentOverview;
+        copy.governmentRequest = governmentRequest;
         copy.content = content;
         copy.explicit = explicit;
         copy.output = output;
@@ -144,6 +203,7 @@ public final class ViewState {
         copy.selected = selected;
         copy.selectedText = selectedText;
         copy.advanced = advanced;
+        copy.advancedOpen = advancedOpen;
         copy.searchSelection = searchSelection;
         copy.advancedSelection = advancedSelection;
         copy.actionSearch = actionSearch.copy();

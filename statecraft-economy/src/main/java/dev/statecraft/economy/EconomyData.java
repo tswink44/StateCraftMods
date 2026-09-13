@@ -91,6 +91,7 @@ public final class EconomyData {
     public static final class Valuation {
         public String chunk;
         public String taxOwnerAccount;
+        public PropertyTaxBasis taxBasis;
         public long value;
         public long base;
         public String biome;
@@ -103,6 +104,8 @@ public final class EconomyData {
         public long nextTaxAt;
         public long nextRecalculationAt;
     }
+
+    public record PropertyTaxBasis(String nationId, String stateId, String cityId, List<Taxation.Charge> charges) {}
 
     public static final class StockListing {
         public String id;

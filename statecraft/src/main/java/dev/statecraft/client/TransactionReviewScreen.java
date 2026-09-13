@@ -11,6 +11,7 @@ import dev.statecraft.api.ui.UiText;
 import dev.statecraft.client.state.FormDraft;
 import dev.statecraft.client.state.PendingOperations;
 import dev.statecraft.client.state.UiScope;
+import dev.statecraft.client.state.UiPresentation;
 import dev.statecraft.network.SuiteNetwork;
 import java.util.ArrayList;
 import java.util.Map;
@@ -42,6 +43,7 @@ final class TransactionReviewScreen extends Screen {
     private Button check;
     private Button retry;
     private Button status;
+    private Button attention;
     private long operationRevision = -1;
 
     TransactionReviewScreen(ManagementScreen parent, Screen previous, ActionSelection selection, ActionIntent intent, FormDraft draft) {
@@ -62,24 +64,24 @@ final class TransactionReviewScreen extends Screen {
     protected void init() {
         card = addRenderableWidget(new TextPanel(font, 12, 38, width - 24, height - 139,
                 ignored -> {}, ignored -> {}, value -> scroll = value));
-        status = addRenderableWidget(Button.builder(Component.empty(), ignored -> minecraft.setScreen(
+        status = addRenderableWidget(UiButton.create(Component.empty(), ignored -> minecraft.setScreen(
                         new InformationScreen(this, ClientText.tr("gui.statecraft.review.status", "Review status"), reason())))
                 .bounds(12, height - 92, width - 24, 16).build());
         int buttonWidth = (width - 32) / 3;
-        check = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.operations.check", "Check status"),
+        check = addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.operations.check", "Check status"),
                         ignored -> ClientHooks.checkOperation(operation))
                 .bounds(12, height - 70, buttonWidth, 20).build());
-        retry = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.operations.retry", "Retry same ID"),
+        retry = addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.operations.retry", "Retry safely"),
                         ignored -> ClientHooks.retry(operation))
                 .bounds(16 + buttonWidth, height - 70, buttonWidth, 20).build());
-        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.operations.title", "Operations"),
+        attention = addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.attention", "Attention"),
                         ignored -> ClientHooks.operations(this))
                 .bounds(20 + buttonWidth * 2, height - 70, buttonWidth, 20).build());
-        confirm = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.review.confirm", "Confirm reviewed terms"), ignored -> confirm())
-                .bounds(12, height - 28, buttonWidth, 20).build());
-        refresh = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.review.refresh", "Refresh quote"), ignored -> requestQuote())
+        confirm = addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.review.confirm", "Confirm reviewed terms"), ignored -> confirm())
+                .bounds(12, height - 28, buttonWidth, 20).primary().build());
+        refresh = addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.review.refresh", "Refresh quote"), ignored -> requestQuote())
                 .bounds(16 + buttonWidth, height - 28, buttonWidth, 20).build());
-        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.back", "Back"), ignored -> onClose())
+        addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.back", "Back"), ignored -> onClose())
                 .bounds(20 + buttonWidth * 2, height - 28, buttonWidth, 20).build());
         buildCard();
         controls();
@@ -175,43 +177,54 @@ final class TransactionReviewScreen extends Screen {
     }
     private void controls() {
         if (confirm == null) return;
+        attention.visible = ClientHooks.needsAttention();
+        attention.active = attention.visible;
         boolean fresh = quote != null && ClientHooks.clock().validUntil(quote.expiresAt(), ClientHooks.time());
         confirm.active = ClientHooks.current(scope) && !operation.present() && pending < 0 && fresh
                 && error.fallback().isEmpty() && ClientHooks.submissionProblem(selection.template()).fallback().isEmpty();
         refresh.active = ClientHooks.current(scope) && !locked() && pending < 0;
         check.active = locked() && !entry().inFlight();
         retry.active = entry() != null && entry().retryable();
-        status.setMessage(reason());
+        UiTheme.status(status, reason());
         confirm.setTooltip(Tooltip.create(reason()));
     }
     private void buildCard() {
         if (card == null) return;
         var lines = new ArrayList<TextPanel.Entry>();
         if (quote != null) {
-            lines.add(TextPanel.Entry.text(ClientText.of(quote.preview().title())));
-            for (var line : quote.preview().lines()) lines.add(TextPanel.Entry.text(
-                    (line.material() ? ClientText.tr("gui.statecraft.review.material", "[Material]")
-                            : ClientText.tr("gui.statecraft.review.information", "[Information]")).copy().append(" ")
-                            .append(ClientText.of(line.label())).append(": ").append(ClientText.of(line.value()))));
+            Component heading = ClientText.of(quote.preview().title());
+            lines.add(new TextPanel.Entry(heading, heading.getString(), EntityRef.NONE,
+                    UiPresentation.Tone.ACCENT, UiPresentation.Icon.PAPER));
+            for (var line : quote.preview().lines()) lines.add(TextPanel.Entry.field(ClientText.of(line.label()), ClientText.of(line.value()),
+                    UiPresentation.reviewTone(line.label().key(), line.label().fallback(), line.material())));
             if (!quote.preview().warning().fallback().isEmpty()) lines.add(TextPanel.Entry.text(
-                    ClientText.tr("gui.statecraft.review.warning", "Warning: %s", ClientText.of(quote.preview().warning()).getString())));
+                    ClientText.tr("gui.statecraft.review.warning", "Warning: %s", ClientText.of(quote.preview().warning()).getString()),
+                    UiPresentation.Tone.WARNING));
         }
         if (intent == ActionIntent.RAW) {
             lines.add(TextPanel.Entry.text(ClientText.tr("gui.statecraft.advanced.captured", "Captured advanced command: %s", selection.command())));
             lines.add(TextPanel.Entry.text(ClientText.tr("gui.statecraft.advanced.caution",
-                    "Advanced commands are conservative: inspect all server warnings. A result is retained for copying; it will not be automatically repeated.")));
+                    "Advanced commands are conservative: inspect all server warnings. A result is retained for copying; it will not be automatically repeated."),
+                    UiPresentation.Tone.WARNING));
         }
         if (changedTerms) lines.add(TextPanel.Entry.text(ClientText.tr("gui.statecraft.review.changed",
-                "Terms changed. Read the new material terms; confirmation is never automatic.")));
-        if (!error.fallback().isEmpty()) lines.add(TextPanel.Entry.text(ClientText.of(error)));
-        fieldErrors.forEach((field, message) -> lines.add(TextPanel.Entry.text(Component.literal(field + ": ").append(ClientText.of(message)))));
+                "Terms changed. Read the new material terms; confirmation is never automatic."), UiPresentation.Tone.WARNING));
+        if (!error.fallback().isEmpty()) lines.add(TextPanel.Entry.text(ClientText.of(error), UiPresentation.Tone.NEGATIVE));
+        fieldErrors.forEach((field, message) -> {
+            String label = draft == null ? dev.statecraft.api.form.FormBuilder.label(field)
+                    : draft.state().schema().field(field).map(dev.statecraft.api.form.FormField::label)
+                        .orElse(dev.statecraft.api.form.FormBuilder.label(field));
+            lines.add(TextPanel.Entry.field(Component.literal(label), ClientText.of(message), UiPresentation.Tone.NEGATIVE));
+        });
         if (entry() != null) {
-            lines.add(TextPanel.Entry.text(ClientText.outcome(entry().outcome())));
+            lines.add(TextPanel.Entry.text(ClientText.outcome(entry().outcome()), entry().outcome().uncertain()
+                    ? UiPresentation.Tone.WARNING : entry().outcome().success() ? UiPresentation.Tone.POSITIVE : UiPresentation.Tone.NORMAL));
             if (!entry().text().isEmpty()) lines.add(TextPanel.Entry.text(Component.literal(entry().text())));
-            lines.add(TextPanel.Entry.text(ClientText.tr("gui.statecraft.operation.reference", "Operation: %s", operation.id())));
         }
-        lines.add(TextPanel.Entry.text(ClientText.tr("gui.statecraft.review.recovery",
-                "Recovery IDs prevent duplicate suite operations. Player inventories and world data save separately; physical cash and item recovery may require an operator.")));
+        if (entry() != null && entry().outcome().uncertain()) {
+            lines.add(TextPanel.Entry.text(ClientText.tr("gui.statecraft.review.recovery",
+                    "Do not repeat this action. Check its status or contact an operator for help."), UiPresentation.Tone.WARNING));
+        }
         if (quote == null && pending >= 0) lines.add(0, TextPanel.Entry.text(ClientText.tr("gui.statecraft.review.loading",
                 "Preparing server-reviewed terms. Nothing has been submitted.")));
         card.content(lines, scroll, EntityRef.NONE, "");
@@ -232,13 +245,14 @@ final class TransactionReviewScreen extends Screen {
     }
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
-        renderBackground(graphics);
-        graphics.fill(0, 0, width, height, 0xEF121923);
-        graphics.drawCenteredString(font, title, width / 2, 12, 0x71D6C1);
+        UiTheme.background(graphics, width, height);
+        UiTheme.header(graphics, title, width, 12);
         Component expiry = quote == null ? ClientText.tr("gui.statecraft.review.not_confirmed", "No confirmation sent")
                 : ClientText.tr("gui.statecraft.review.expires", "Quote expires in %s seconds",
                         ClientHooks.clock().secondsRemaining(quote.expiresAt(), ClientHooks.time()));
-        graphics.drawCenteredString(font, expiry, width / 2, height - 43, 0xB7C9D9);
+        graphics.drawCenteredString(font, font.plainSubstrByWidth(expiry.getString(), width - 24), width / 2,
+                height - 43, quote != null && !ClientHooks.clock().validUntil(quote.expiresAt(), ClientHooks.time())
+                        ? UiTheme.WARNING : UiTheme.MUTED);
         super.render(graphics, mouseX, mouseY, delta);
     }
     @Override

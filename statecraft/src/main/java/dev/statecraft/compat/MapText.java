@@ -47,8 +47,7 @@ final class MapText {
     }
 
     static String label(Territory territory) {
-        for (String candidate : new String[]{territory.cityName(), territory.cityId(),
-                territory.stateName(), territory.stateId(), territory.nationName(), territory.nationId()}) {
+        for (String candidate : new String[]{territory.cityName(), territory.stateName(), territory.nationName()}) {
             String label = plain(candidate, 96);
             if (!label.isBlank()) {
                 return label;
@@ -58,14 +57,10 @@ final class MapText {
     }
 
     static String description(Territory territory) {
-        return "Nation: " + entity(territory.nationName(), territory.nationId())
-                + "\nState: " + entity(territory.stateName(), territory.stateId())
-                + "\nCity: " + entity(territory.cityName(), territory.cityId())
-                + "\nOwner: " + plain(territory.ownerAccount(), 128);
-    }
-
-    private static String entity(String name, String id) {
-        return plain(name, 96) + " (" + plain(id, 96) + ")";
+        return "Nation: " + plain(territory.nationName(), 96)
+                + (territory.stateName() == null || territory.stateName().isBlank() ? "" : "\nState: " + plain(territory.stateName(), 96))
+                + (territory.cityName() == null || territory.cityName().isBlank() ? "" : "\nCity: " + plain(territory.cityName(), 96))
+                + "\nOwner: " + plain(territory.ownerName(), 128);
     }
 
     static String fingerprint(String... parts) {

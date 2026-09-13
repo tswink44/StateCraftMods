@@ -13,7 +13,7 @@ class PacketCodecTest {
     void territoryPacketPreservesDimensionHierarchyAndOwnership() {
         TerritorySnapshot snapshot = new TerritorySnapshot("minecraft:the_nether", -4, 6, 8,
                 List.of(new TerritorySnapshot.Territory(-5, 7, "nation-id", "state-id", "city-id",
-                        "Nation", "State", "City", "player:owner", 0x667788, 12)));
+                        "Nation", "State", "City", "player:owner", 0x667788, 12, "Alice")));
         FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
         try {
             new SuiteNetwork.TerritoryMessage(snapshot).encode(buffer);

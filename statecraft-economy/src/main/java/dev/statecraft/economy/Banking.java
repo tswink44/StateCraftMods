@@ -512,11 +512,12 @@ public final class Banking {
         if (!claim.ownerAccount().equals("player:" + borrower) || !e.governance.maySellProperty(UUID.fromString(borrower), key)) {
             throw new UserError("Collateral must be a claim the borrower privately owns and may sell.");
         }
-        if (e.data.properties.containsKey(key) || e.data.loans.values().stream().anyMatch(loan ->
+        if (e.data.properties.containsKey(key) || e.property.taxEncumbered(key) || e.data.loans.values().stream().anyMatch(loan ->
                 !loan.id.equals(ignoreLoan) && OPEN_LOANS.contains(loan.status) && !loan.collateralReleased && key.equals(loan.collateral))) {
-            throw new UserError("This claim is already listed or pledged.");
+            throw new UserError("This claim is already listed, pledged, or subject to unpaid property taxes.");
         }
         long limit = Money.tax(updateValuation ? e.valueOf(key) : e.property.previewValue(key).value, e.config.maximumLoanToValueBps);
+        if (e.property.taxEncumbered(key)) throw new UserError("Resolve the property's unpaid taxes before pledging it.");
         if (principal > limit) throw new UserError("The loan exceeds the collateral's permitted loan-to-value amount: " + Money.format(limit));
     }
 
@@ -800,7 +801,7 @@ public final class Banking {
                 Map.of(bank.account(), requiredReserve(bank)));
         loan.collateralReleased = true;
         try {
-            payment.commitWith(() -> e.governance.transferProperty(loan.collateral, "company:" + bank.company));
+            payment.commitWith(() -> e.property.transferTitle(claim, "company:" + bank.company));
         } catch (RuntimeException | Error failure) {
             loan.collateralReleased = false;
             throw failure;

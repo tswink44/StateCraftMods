@@ -25,6 +25,7 @@ import dev.statecraft.network.SuiteNetwork;
 import dev.statecraft.persistence.WorldStore;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.nio.file.Files;
 import java.time.Clock;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -71,6 +72,10 @@ public final class ServerRuntime {
         economy = integrationLocks.offlineAccess();
         boolean migrating = store.migrated();
         GovernanceData data = store.load("governance", GovernanceData.class, GovernanceData::new);
+        if (data.schemaVersion < 2 && Files.exists(store.directory().resolve("world.json"))) {
+            Path backup = store.backupSnapshot("national-claims-v2");
+            StateCraft.LOGGER.info("Preserved the pre-migration StateCraft snapshot at {}", backup);
+        }
         governance = new GovernanceEngine(data, config, economy, clock::millis, this::markDirty);
         governanceForms = new GovernanceForms(governance);
         registerModule("statecraft", (player, command) -> executeCore(actor(player), command));
@@ -426,7 +431,8 @@ public final class ServerRuntime {
 
     public void synchronize(ServerPlayer player, boolean force) {
         TerritorySnapshot snapshot = TerritorySnapshots.around(actor(player), governance,
-                key -> StateCraft.LOGGER.error("Orphan claim {} was omitted from map sync; run /sc admin audit.", key));
+                key -> StateCraft.LOGGER.error("Orphan claim {} was omitted from map sync; run /sc admin audit.", key),
+                governance::knownPlayerName);
         if (force || !snapshot.equals(lastSnapshot.get(player.getUUID()))) {
             lastSnapshot.put(player.getUUID(), snapshot);
             SuiteNetwork.territory(player, snapshot);

@@ -1,0 +1,11 @@
+{
+  "gui.statecraft.help.title": "Help",
+  "gui.statecraft.help.choose": "Command help and crafting recipes",
+  "gui.statecraft.help.commands": "Commands",
+  "gui.statecraft.help.commands_hint": "Browse command help and examples.",
+  "gui.statecraft.help.recipes": "Recipes",
+  "gui.statecraft.help.recipes_hint": "View crafting grids, ingredients and outputs.",
+  "gui.statecraft.help.recipes_unavailable": "Install StateCraft Economy to view its crafting recipes.",
+  "gui.statecraft.attention": "Attention",
+  "gui.statecraft.attention_hint": "Check a pending action before repeating it."
+}

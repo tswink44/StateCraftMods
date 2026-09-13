@@ -87,7 +87,7 @@ public final class Commerce {
         listing.seller = seller.id().toString();
         listing.sellerAccount = seller.account();
         listing.sourceChunk = seller.chunkKey();
-        listing.sourceNation = e.governance.nationOf(seller.id()).orElse(null);
+        listing.sourceNation = e.taxes.originNation(seller.chunkKey(), e.governance.nationOf(seller.id()).orElse(null));
         listing.item = quote.held().withCount(quantity);
         listing.remaining = quantity;
         listing.unitPrice = unitPrice;
@@ -269,7 +269,7 @@ public final class Commerce {
         listing.company = company.id();
         listing.seller = actor.id().toString();
         listing.sourceChunk = actor.chunkKey();
-        listing.sourceNation = e.governance.nationOf(actor.id()).orElse(null);
+        listing.sourceNation = e.taxes.originNation(actor.chunkKey(), e.governance.nationOf(actor.id()).orElse(null));
         listing.remaining = quantity;
         listing.unitPrice = unitPrice;
         listing.createdAt = e.clock.millis();

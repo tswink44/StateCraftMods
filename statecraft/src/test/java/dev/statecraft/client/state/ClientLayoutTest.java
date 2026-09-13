@@ -79,6 +79,18 @@ class ClientLayoutTest {
     }
 
     @Test
+    void technicalControlsStartCollapsedAndPreserveTheirDraftWhenHidden() {
+        ViewState view = new ViewState(dev.statecraft.api.ui.UiQuery.page("statecraft:nations"));
+        assertFalse(view.advancedOpen());
+        view.advancedOpen(true);
+        view.advanced("nation info Arcadia");
+        assertTrue(view.copy().advancedOpen());
+        view.advancedOpen(false);
+        assertFalse(view.copy().advancedOpen());
+        assertEquals("nation info Arcadia", view.copy().advanced());
+    }
+
+    @Test
     void localMoneyIntegerAndAllConstraintsProduceFieldLevelMessagesBeforeReview() {
         FormField amount = new FormField("amount", "Amount", FormField.Kind.TEXT, "", "", "", List.of(), false,
                 List.of(), 0, false, FormConstraints.money(1, 10_000).or("all"));

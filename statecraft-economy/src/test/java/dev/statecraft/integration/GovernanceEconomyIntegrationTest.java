@@ -70,6 +70,54 @@ class GovernanceEconomyIntegrationTest {
     }
 
     @Test
+    void allocationsMovePublicTitlesWithoutMovingTreasuryCashAndPreservePrivateTitles() throws IOException {
+        Fixture fixture = new Fixture(world);
+        fixture.governance.execute(OWNER, "nation create Arcadia");
+        fixture.governance.execute(OWNER, "state create Arcadia Westhaven");
+        fixture.governance.execute(OWNER, "city create Westhaven Oakvale");
+        fixture.governance.execute(OWNER, "nation invite Arcadia Citizen");
+        fixture.governance.execute(BUYER, "nation accept Arcadia");
+        fixture.governance.execute(OWNER, "chunk claim Arcadia here");
+        String key = OWNER.chunkKey();
+        String nation = fixture.gov("Arcadia").account();
+        String state = fixture.gov("Westhaven").account();
+        String city = fixture.gov("Oakvale").account();
+        var national = fixture.governance.claim(key).orElseThrow();
+        assertNull(national.stateId());
+        assertNull(national.cityId());
+        assertEquals(nation, national.ownerAccount());
+        fixture.fund(nation, 10000);
+
+        fixture.governance.execute(OWNER, "chunk assignstate Arcadia here Westhaven");
+        assertEquals(state, fixture.governance.claim(key).orElseThrow().ownerAccount());
+        assertEquals(10000, fixture.economy.balance(nation));
+        assertEquals(0, fixture.economy.balance(state));
+        fixture.economy.property().list(OWNER, key, 5000);
+        assertThrows(UserError.class, () -> fixture.governance.execute(OWNER, "chunk assigncity Westhaven here Oakvale"));
+        assertEquals(state, fixture.governance.claim(key).orElseThrow().ownerAccount());
+        assertNull(fixture.governance.claim(key).orElseThrow().cityId());
+        fixture.economy.property().delist(OWNER, key);
+        fixture.governance.execute(OWNER, "chunk assigncity Westhaven here Oakvale");
+        assertEquals(city, fixture.governance.claim(key).orElseThrow().ownerAccount());
+
+        fixture.governance.transferProperty(key, BUYER.account());
+        fixture.governance.execute(OWNER, "chunk assigncity Westhaven here none");
+        assertEquals(BUYER.account(), fixture.governance.claim(key).orElseThrow().ownerAccount());
+        fixture.governance.execute(OWNER, "chunk assignstate Arcadia here none");
+        var privateNational = fixture.governance.claim(key).orElseThrow();
+        assertEquals(BUYER.account(), privateNational.ownerAccount());
+        assertNull(privateNational.stateId());
+        assertNull(privateNational.cityId());
+        assertEquals(national.nationId(), privateNational.nationId());
+        assertEquals(10000, fixture.economy.balance(nation));
+        fixture.store.save();
+        var loaded = new Fixture(world).governance.claim(key).orElseThrow();
+        assertEquals(BUYER.account(), loaded.ownerAccount());
+        assertNull(loaded.stateId());
+        assertNull(loaded.cityId());
+    }
+
+    @Test
     void treasurySelectionsTrackActualInheritedOfficesAndTheirRevocation() throws IOException {
         Fixture fixture = new Fixture(world);
         fixture.hierarchy();
@@ -101,7 +149,7 @@ class GovernanceEconomyIntegrationTest {
         var original = fixture.governance.claim(OWNER.chunkKey()).orElseThrow();
         fixture.economy.property().list(OWNER, original.key(), 5000);
         assertTrue(fixture.economy.isClaimEncumbered(original.key()));
-        assertThrows(UserError.class, () -> fixture.governance.execute(OWNER, "chunk unclaim"));
+        assertThrows(UserError.class, () -> fixture.governance.execute(OWNER, "chunk unclaim Arcadia here"));
         assertThrows(UserError.class, () -> fixture.economy.property()
                 .buy(FOREIGNER, original.key(), false, InventoryPort.NONE));
         assertEquals(10000, fixture.economy.balance(FOREIGNER.account()));
@@ -116,7 +164,7 @@ class GovernanceEconomyIntegrationTest {
         assertEquals(5000, fixture.economy.balance(BUYER.account()));
         assertEquals(5000, fixture.economy.balance("city:" + original.cityId()));
         assertFalse(fixture.economy.isClaimEncumbered(original.key()));
-        assertThrows(UserError.class, () -> fixture.governance.execute(OWNER, "chunk unclaim"));
+        assertThrows(UserError.class, () -> fixture.governance.execute(OWNER, "chunk unclaim Arcadia here"));
     }
 
     @Test
@@ -259,7 +307,9 @@ class GovernanceEconomyIntegrationTest {
             governance.execute(OWNER, "nation create Arcadia");
             governance.execute(OWNER, "state create Arcadia Westhaven");
             governance.execute(OWNER, "city create Westhaven Oakvale");
-            governance.execute(OWNER, "chunk claim Oakvale");
+            governance.execute(OWNER, "chunk claim Arcadia here");
+            governance.execute(OWNER, "chunk assignstate Arcadia here Westhaven");
+            governance.execute(OWNER, "chunk assigncity Westhaven here Oakvale");
             governance.execute(OWNER, "nation invite Arcadia Citizen");
             governance.execute(BUYER, "nation accept Arcadia");
         }

@@ -63,6 +63,24 @@ final class EconomyIntegrity {
         data.valuations.forEach((id, value) -> {
             same(id, value.chunk); ChunkKey.parse(id); Money.nonNegative(value.value); Money.nonNegative(value.base);
             if (value.taxOwnerAccount != null) Ledger.account(value.taxOwnerAccount);
+            if (value.taxBasis != null) {
+                Objects.requireNonNull(value.taxOwnerAccount, "Missing property taxpayer");
+                Ledger.account("nation:" + Objects.requireNonNull(value.taxBasis.nationId()));
+                if (value.taxBasis.stateId() != null) Ledger.account("state:" + value.taxBasis.stateId());
+                if (value.taxBasis.cityId() != null) {
+                    Objects.requireNonNull(value.taxBasis.stateId(), "City without state");
+                    Ledger.account("city:" + value.taxBasis.cityId());
+                }
+                Set<String> governments = new java.util.HashSet<>();
+                for (Taxation.Charge charge : value.taxBasis.charges()) {
+                    Ledger.account(charge.account()); Money.positive(charge.cents());
+                    if (!"propertyTaxBps".equals(charge.kind()) || !governments.add(charge.government())
+                            || !(charge.account().equals("nation:" + value.taxBasis.nationId())
+                            || value.taxBasis.stateId() != null && charge.account().equals("state:" + value.taxBasis.stateId())
+                            || value.taxBasis.cityId() != null && charge.account().equals("city:" + value.taxBasis.cityId()))
+                            || !charge.account().endsWith(":" + charge.government())) fail("Invalid property tax basis");
+                }
+            }
             if (value.nextTaxAt < 0 || value.nextRecalculationAt < 0) fail("Invalid property schedule");
         });
         data.stocks.forEach((id, listing) -> {

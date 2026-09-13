@@ -17,6 +17,9 @@ import dev.statecraft.api.ui.OperationRef;
 import dev.statecraft.api.ui.PreviewQuote;
 import dev.statecraft.api.ui.UiQuery;
 import dev.statecraft.api.ui.UiText;
+import dev.statecraft.api.ui.PersonalDashboard;
+import dev.statecraft.api.ui.GovernmentOverview;
+import dev.statecraft.api.ui.ClaimMapMode;
 import dev.statecraft.client.state.ClientWorkspace;
 import dev.statecraft.client.state.FormDraft;
 import dev.statecraft.client.state.PendingOperations;
@@ -25,6 +28,7 @@ import dev.statecraft.client.state.RequestTracker;
 import dev.statecraft.client.state.ServerClock;
 import dev.statecraft.client.state.UiScope;
 import dev.statecraft.client.state.ViewState;
+import dev.statecraft.client.state.UiPresentation;
 import dev.statecraft.network.SuiteNetwork;
 import java.io.IOException;
 import java.util.ArrayDeque;
@@ -58,6 +62,8 @@ public final class ClientHooks {
     private static final RequestTracker<Consumer<SuiteNetwork.FormResponse>> FORMS = new RequestTracker<>();
     private static final RequestTracker<Consumer<SuiteNetwork.ViewResponse>> VIEWS = new RequestTracker<>();
     private static final RequestTracker<Consumer<SuiteNetwork.PreviewResponse>> PREVIEWS = new RequestTracker<>();
+    private static final RequestTracker<Consumer<SuiteNetwork.DashboardResponse>> DASHBOARDS = new RequestTracker<>();
+    private static final RequestTracker<Consumer<SuiteNetwork.GovernmentResponse>> GOVERNMENTS = new RequestTracker<>();
     private static final ArrayDeque<OperationRef> RECONCILE = new ArrayDeque<>();
     private static final ServerClock CLOCK = new ServerClock();
     private static final PendingReferenceStore REFERENCES = new PendingReferenceStore(
@@ -86,6 +92,7 @@ public final class ClientHooks {
     static long time() { return net.minecraft.Util.getMillis(); }
     static UiText recoveryError() { return recoveryError; }
     static int pendingCount() { return workspace == null ? 0 : workspace.operations().pendingReferences().size(); }
+    static boolean needsAttention() { return UiPresentation.needsAttention(pendingCount(), !recoveryError.fallback().isEmpty()); }
 
     public static void session(UUID world, long serverTime) {
         Minecraft minecraft = Minecraft.getInstance();
@@ -102,7 +109,7 @@ public final class ClientHooks {
             loadRecovery();
             RECONCILE.addAll(workspace.operations().pendingReferences());
             if (pendingCount() > 0) minecraft.player.displayClientMessage(ClientText.tr(
-                    "gui.statecraft.operations.restored", "%s pending operation(s) restored. Press N, then Operations; do not repeat them.",
+                    "gui.statecraft.operations.restored", "%s pending action(s) restored. Press N, then Attention; do not repeat them.",
                     pendingCount()), false);
         }
         if (!opening.isEmpty()) {
@@ -238,11 +245,21 @@ public final class ClientHooks {
     static void refresh(ViewState state) {
         if (state.pending() >= 0 || workspace == null || state.content() == ViewState.Content.RAW) return;
         if (state.content() == ViewState.Content.QUERY && state.explicit() != null) query(state, state.explicit());
+        else if (state.isPersonalDashboard()) requestDashboard(state);
+        else if (state.isGovernmentOverview()) requestGovernment(state);
         else requestView(state);
     }
 
     static void requestView(ViewState state) {
         if (workspace == null) { refreshSession(); return; }
+        if (state.isPersonalDashboard() && state.content() == ViewState.Content.TYPED) {
+            requestDashboard(state);
+            return;
+        }
+        if (state.isGovernmentOverview() && state.content() == ViewState.Content.TYPED) {
+            requestGovernment(state);
+            return;
+        }
         cancelView(state);
         int id = nextRequest();
         UiQuery query = state.query();
@@ -281,7 +298,53 @@ public final class ClientHooks {
         int id = state.pending();
         VIEWS.forget(id);
         RESPONSES.forget(id);
+        DASHBOARDS.forget(id);
+        GOVERNMENTS.forget(id);
         state.cancel(id);
+    }
+
+    private static void requestDashboard(ViewState state) {
+        cancelView(state);
+        int id = nextRequest();
+        PersonalDashboard.Request query = state.dashboardRequest();
+        long revision = state.revision();
+        state.request(id);
+        DASHBOARDS.watch(id, scope(), connection, query, time(), response -> {
+            if (!state.accept(response.id(), revision)) return;
+            if (response.success()) state.personalDashboard(response.dashboard());
+            else state.failure(response.error());
+        }, () -> {
+            if (state.accept(id, revision)) state.failure(UiText.tr("gui.statecraft.dashboard.timeout",
+                    "The dashboard could not be loaded. Refresh to try again."));
+        });
+        SuiteNetwork.requestDashboard(id, workspace.scope().world(), query);
+    }
+
+    public static void dashboardReply(SuiteNetwork.DashboardResponse response) {
+        if (workspace == null || !workspace.scope().world().equals(response.world())) return;
+        DASHBOARDS.take(response.id(), scope(), connection, response.query()).ifPresent(receiver -> receiver.accept(response));
+    }
+
+    private static void requestGovernment(ViewState state) {
+        cancelView(state);
+        int id = nextRequest();
+        GovernmentOverview.Request query = state.governmentRequest();
+        long revision = state.revision();
+        state.request(id);
+        GOVERNMENTS.watch(id, scope(), connection, query, time(), response -> {
+            if (!state.accept(response.id(), revision)) return;
+            if (response.success()) state.governmentOverview(response.overview());
+            else state.failure(response.error());
+        }, () -> {
+            if (state.accept(id, revision)) state.failure(UiText.tr("gui.statecraft.government.timeout",
+                    "The government overview could not be loaded. Refresh to try again."));
+        });
+        SuiteNetwork.requestGovernment(id, workspace.scope().world(), query);
+    }
+
+    public static void governmentReply(SuiteNetwork.GovernmentResponse response) {
+        if (workspace == null || !workspace.scope().world().equals(response.world())) return;
+        GOVERNMENTS.take(response.id(), scope(), connection, response.query()).ifPresent(receiver -> receiver.accept(response));
     }
 
     public static void viewReply(SuiteNetwork.ViewResponse response) {
@@ -364,6 +427,11 @@ public final class ClientHooks {
         if (!entity.present() || workspace == null) return;
         if (entity.kind() == EntityRef.Kind.OPERATION) {
             workspace.operations().tracked(entity).ifPresent(ClientHooks::checkOperation);
+            var current = workspace.navigation().current().view();
+            if (current != null && current.query().page().equals("statecraft:admin_operations")) {
+                navigate(new UiQuery("statecraft:admin_operations", entity, "", 0));
+                return;
+            }
         }
         navigate(UiQuery.detail(entity));
     }
@@ -371,7 +439,16 @@ public final class ClientHooks {
         if (workspace == null) return;
         var location = workspace.navigation().current();
         Minecraft.getInstance().setScreen(location.view() == null ? new NavigationScreen(location)
+                : location.view().isPersonalDashboard() ? new DashboardScreen(location.view())
+                : location.view().query().page().equals("statecraft:help") && !location.view().query().entity().present()
+                    ? new HelpScreen()
+                : location.view().query().page().equals("economy:guide") && !location.view().query().entity().present()
+                    ? new RecipeGuideScreen(location.view())
+                : location.view().isGovernmentOverview() ? new GovernmentOverviewScreen(location.view())
                 : new ManagementScreen(location.view()));
+    }
+    static void claimMap(ManagementScreen origin, String governmentId, ClaimMapMode mode) {
+        if (workspace != null) Minecraft.getInstance().setScreen(new ClaimMapScreen(origin, governmentId, mode));
     }
     static void back() {
         if (workspace != null && workspace.navigation().back()) showLocation();
@@ -402,11 +479,13 @@ public final class ClientHooks {
         FORMS.expire(now);
         VIEWS.expire(now);
         PREVIEWS.expire(now);
+        DASHBOARDS.expire(now);
+        GOVERNMENTS.expire(now);
         boolean expired = workspace != null && workspace.operations().expire(now);
         if (Minecraft.getInstance().player == null) return;
         if (expired) Minecraft.getInstance().player.displayClientMessage(ClientText.tr(
                 "gui.statecraft.operations.timeout_notice",
-                "An operation timed out. Do not repeat it; press N, then Operations to check its status."), false);
+                "An action timed out. Do not repeat it; press N, then Attention to check its status."), false);
         if (workspace == null || !CLOCK.fresh(now)) refreshSession();
         if (workspace != null && !RECONCILE.isEmpty() && now >= nextReconcileAt) {
             checkOperation(RECONCILE.removeFirst());
@@ -434,6 +513,8 @@ public final class ClientHooks {
         FORMS.clear();
         VIEWS.clear();
         PREVIEWS.clear();
+        DASHBOARDS.clear();
+        GOVERNMENTS.clear();
         RECONCILE.clear();
         territory(TerritorySnapshot.EMPTY);
     }

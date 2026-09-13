@@ -19,6 +19,22 @@ class WorldStoreTest {
     }
 
     @Test
+    void migrationBackupCopiesPersistedBytesWithoutSavingPartiallyMigratedModels() throws IOException {
+        WorldStore store = new WorldStore(world);
+        Data data = store.load("governance", Data.class, Data::new);
+        data.balances.put("original", 10L);
+        store.save();
+        String original = Files.readString(world.resolve("statecraft").resolve("world.json"));
+        data.balances.put("unsaved", 20L);
+        Path backup = store.backupSnapshot("national-claims-v2");
+        assertEquals(original, Files.readString(backup));
+        assertEquals(original, Files.readString(world.resolve("statecraft").resolve("world.json")));
+        assertEquals(1, store.revision());
+        assertTrue(backup.getFileName().toString().startsWith("before-national-claims-v2-"));
+        assertThrows(IllegalArgumentException.class, () -> store.backupSnapshot("..\\escape"));
+    }
+
+    @Test
     void snapshotPersistsAllModulesAndPreservesAnAbsentEconomy() throws IOException {
         WorldStore store = new WorldStore(world);
         Data core = store.load("governance", Data.class, Data::new);

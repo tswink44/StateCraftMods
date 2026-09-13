@@ -129,6 +129,7 @@ final class EconomyMenus {
     private static Action financial(String label, String command) { return new Action(label, command, ActionIntent.MUTATION, true); }
     private static Action navigation(String label, String command) { return new Action(label, command, ActionIntent.NAVIGATION, false); }
     private static void page(String id, String title, String query, Action... actions) {
-        MenuRegistry.register(new MenuPage("economy:" + id, title, query, List.of(actions)));
+        MenuRegistry.register(new MenuPage("economy:" + id, title, query, List.of(actions),
+                !id.equals("dashboard") && !id.equals("guide")));
     }
 }

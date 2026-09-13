@@ -34,7 +34,7 @@ class TerritoryMapGeometryTest {
         assertEquals(32, region.maxX());
         assertEquals(32, region.maxZ());
         assertEquals("City", region.label());
-        assertTrue(region.description().contains("Owner: owner"));
+        assertTrue(region.description().contains("Owner: Alice"));
     }
 
     @Test
@@ -103,12 +103,29 @@ class TerritoryMapGeometryTest {
         assertTrue(TerritoryMapGeometry.regions(TerritorySnapshot.EMPTY).isEmpty());
     }
 
+    @Test
+    void overlayLabelsHideIdentifiersButDifferentOwnersStillKeepTheirOwnBoundaries() {
+        String first = "11111111-2222-3333-4444-555555555555";
+        String second = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+        var snapshot = snapshot("minecraft:overworld",
+                new Territory(0, 0, first, first, first, "Nation", "State", "City", "player:" + first, 1, 0, "Alice"),
+                new Territory(1, 0, first, first, first, "Nation", "State", "City", "player:" + second, 1, 0, "Alice"));
+        var regions = TerritoryMapGeometry.regions(snapshot);
+        assertEquals(2, regions.size());
+        for (var region : regions) {
+            assertTrue(region.description().contains("Alice"));
+            assertFalse(region.description().contains(first));
+            assertFalse(region.description().contains(second));
+            assertFalse(region.label().contains(first));
+        }
+    }
+
     private static Territory claim(int x, int z) {
         return claim(x, z, "owner", 0x336699);
     }
 
     private static Territory claim(int x, int z, String owner, int color) {
-        return new Territory(x, z, "nation", "state", "city", "Nation", "State", "City", owner, color, 0);
+        return new Territory(x, z, "nation", "state", "city", "Nation", "State", "City", owner, color, 0, "Alice");
     }
 
     private static TerritorySnapshot snapshot(String dimension, Territory... territories) {

@@ -264,7 +264,8 @@ public final class ProtectionEvents {
 
     private String parcel(Level level, BlockPos pos) {
         return StateCraft.runtime().governance().claim(key(level, pos))
-                .map(claim -> claim.cityId() + ":" + claim.ownerAccount()).orElse("wilderness");
+                .map(claim -> claim.nationId() + ":" + java.util.Objects.toString(claim.stateId(), "")
+                        + ":" + java.util.Objects.toString(claim.cityId(), "") + ":" + claim.ownerAccount()).orElse("wilderness");
     }
 
     @SubscribeEvent(priority = EventPriority.HIGH)

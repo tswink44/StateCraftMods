@@ -15,6 +15,7 @@ public class GovernanceConfig {
     public int maxMembersPerState = 256;
     public int maxMembersPerCity = 128;
     public int maxOfficers = 32;
+    public int maxClaimsPerNation = 16_384;
     public int maxClaimsPerCity = 256;
     public int maxTotalClaims = 16_384;
     public int maxPermitsPerChunk = 32;
@@ -118,6 +119,7 @@ public class GovernanceConfig {
             bad("maxCommandOutput", "must be between 512 and 24000");
         if (maxGovernments > 4_096 || maxCompanies > 4_096 || maxTotalClaims > 100_000)
             bad("world limits", "exceed the supported snapshot limits");
+        if (maxClaimsPerNation > 100_000) bad("maxClaimsPerNation", "must not exceed 100000");
         if (maxHistory > 1_000 || maxMail > 1_000) bad("history/mail limits", "must not exceed 1000");
         if (maxTreatyChunks > 64 || maxContractChunks > 64 || maxContractBids > 256)
             bad("workflow limits", "exceed supported bounds");

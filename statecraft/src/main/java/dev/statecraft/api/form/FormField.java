@@ -25,7 +25,7 @@ public record FormField(String key, String label, Kind kind, String value, Strin
         Objects.requireNonNull(constraints);
         dependencies = List.copyOf(dependencies);
         choices = List.copyOf(choices);
-        if (key.isBlank() || key.length() > 64 || label.length() > 128 || value.length() > 2048
+        if (key.isBlank() || key.length() > 64 || label.length() > 128 || value.length() > FormSchema.MAX_VALUE_LENGTH
                 || selectedLabel.length() > 128 || hint.length() > 384
                 || dependencies.size() > FormSchema.MAX_FIELDS || choices.size() > FormSchema.PAGE_SIZE
                 || dependencies.stream().anyMatch(d -> d.length() > 64) || offset < 0) {

@@ -163,7 +163,7 @@ class GovernancePresentationTest extends DomainFixture {
         run(alice, "contract complete " + contract);
         run(bob, "company disband " + company);
         UiView authorized = detail(alice, EntityRef.Kind.CONTRACT, contract);
-        assertTrue(authorized.body().fallback().contains("Former company [company:" + company + "]"));
+        assertTrue(authorized.body().fallback().contains("Former company"));
         assertTrue(authorized.rows().stream().anyMatch(row -> row.detail().fallback().contains("PRIVATE BID TERMS")));
         UiAction bids = action(authorized, "contract bids <contract> <page>");
         assertTrue(bids.enabled());
@@ -216,7 +216,7 @@ class GovernancePresentationTest extends DomainFixture {
         UiView claims = assertDoesNotThrow(() -> page(alice, "claims", "", 0));
         assertEquals(2, claims.rows().size());
         assertTrue(claims.rows().stream().anyMatch(row -> !row.entity().present()
-                && row.detail().fallback().contains("UI identity limit")));
+                && row.detail().fallback().contains("unavailable in this view")));
         assertTrue(run(alice, "chunk info " + key).contains(key));
     }
 
@@ -226,15 +226,15 @@ class GovernancePresentationTest extends DomainFixture {
         String key = "minecraft:overworld|12|34";
         AtomicInteger dirty = observe();
         UiView wilderness = detail(alice, EntityRef.Kind.CLAIM, key);
-        assertTrue(wilderness.body().fallback().contains("No government currently claims"));
-        UiAction claim = action(wilderness, "chunk claim <city> <chunk>");
+        assertTrue(wilderness.body().fallback().contains("No nation currently claims"));
+        UiAction claim = action(wilderness, "chunk claim <nation> <chunks>");
         assertTrue(claim.enabled());
-        assertEquals(Map.of("chunk", key), claim.values());
+        assertEquals(Map.of("chunks", key), claim.values());
         assertDoesNotThrow(() -> claim.selection().registeredAction());
         assertTrue(data.claims.isEmpty());
         assertEquals(0, dirty.get());
         UiView unauthorized = detail(bob, EntityRef.Kind.CLAIM, key);
-        assertFalse(action(unauthorized, "chunk claim <city> <chunk>").enabled());
+        assertFalse(action(unauthorized, "chunk claim <nation> <chunks>").enabled());
         assertThrows(UserError.class, () -> detail(alice, EntityRef.Kind.CLAIM, "minecraft:overworld|012|34"));
         assertThrows(UserError.class, () -> detail(alice, EntityRef.Kind.CLAIM, "minecraft:overworld|1875001|0"));
         data.claims.put(key, null);
@@ -317,7 +317,7 @@ class GovernancePresentationTest extends DomainFixture {
         run(alice, "company cancel " + proposal);
         run(alice, "company disband " + company);
         UiView historical = detail(bob, EntityRef.Kind.COMPANY_PROPOSAL, proposal);
-        assertTrue(historical.body().fallback().contains("Decision: roleplay"));
+        assertTrue(historical.body().fallback().contains("Decision: Roleplay only"));
         assertTrue(historical.actions().stream().noneMatch(UiAction::enabled));
         UiView law = detail(bob, EntityRef.Kind.LAW, tree.nation() + ":" + bill);
         assertTrue(law.body().fallback().contains("Charter") || law.title().fallback().equals("Charter"));

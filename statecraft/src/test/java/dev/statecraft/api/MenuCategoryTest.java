@@ -14,8 +14,11 @@ class MenuCategoryTest {
         CoreMenus.register();
         Set<String> pages = MenuCategory.GOVERNMENTS.pages(MenuRegistry.pages()).stream()
                 .map(MenuPage::id).collect(Collectors.toSet());
-        assertEquals(Set.of("statecraft:nations", "statecraft:states", "statecraft:cities", "statecraft:members",
-                "statecraft:officers", "statecraft:invitations"), pages);
+        assertEquals(Set.of("statecraft:nations", "statecraft:states", "statecraft:cities"), pages);
+        assertTrue(MenuCategory.COMMUNICATIONS.pages(MenuRegistry.pages()).isEmpty());
+        for (String hidden : List.of("members", "officers", "invitations", "mail", "official_mail")) {
+            assertFalse(MenuRegistry.get("statecraft:" + hidden).listed());
+        }
         assertEquals(MenuCategory.POLITICS, MenuCategory.of("statecraft:elections"));
         assertEquals(MenuCategory.TERRITORY, MenuCategory.of("economy:property"));
         assertEquals(MenuCategory.BUSINESS, MenuCategory.of("economy:stock"));

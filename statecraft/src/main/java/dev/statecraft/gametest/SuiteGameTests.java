@@ -14,6 +14,8 @@ import dev.statecraft.api.ui.ActionOutcome;
 import dev.statecraft.api.ui.ActionSelection;
 import dev.statecraft.api.ui.OperationRef;
 import dev.statecraft.api.ui.UiQuery;
+import dev.statecraft.api.ui.EntityRef;
+import dev.statecraft.api.ui.PersonalDashboard;
 import dev.statecraft.api.ui.UiView;
 import dev.statecraft.domain.GovernanceData;
 import dev.statecraft.persistence.WorldStore;
@@ -83,6 +85,15 @@ public final class SuiteGameTests {
     @GameTest(template = "test_empty", timeoutTicks = 40)
     public static void managementMenusAreRegistered(GameTestHelper helper) {
         helper.assertTrue(!MenuRegistry.pages().isEmpty(), "At least one governance menu is registered");
+        var overview = dev.statecraft.api.MenuCategory.OVERVIEW.pages(MenuRegistry.pages()).stream()
+                .map(dev.statecraft.api.MenuPage::id).toList();
+        helper.assertTrue(overview.equals(java.util.List.of("statecraft:dashboard", "statecraft:help")),
+                "Overview and Help has only the personal dashboard and combined Help entry");
+        helper.assertTrue(dev.statecraft.api.HelpNavigation.available(MenuRegistry.pages(), dev.statecraft.api.HelpNavigation.COMMANDS),
+                "Command help stays reachable through Help");
+        helper.assertTrue(dev.statecraft.api.HelpNavigation.available(MenuRegistry.pages(), dev.statecraft.api.HelpNavigation.RECIPES)
+                        == ModList.get().isLoaded("statecraft_economy"),
+                "Recipes are an internal Help destination only when Economy is installed");
         for (var page : MenuRegistry.pages()) {
             helper.assertTrue(!CommandLine.split(page.query()).isEmpty(), "Menu has a valid query: " + page.id());
             helper.assertTrue(!page.actions().isEmpty(), "Menu has usable actions: " + page.id());
@@ -136,7 +147,9 @@ public final class SuiteGameTests {
             governance.execute(actor, "nation create " + nation);
             governance.execute(actor, "state create " + nation + " " + state);
             governance.execute(actor, "city create " + state + " " + city);
-            governance.execute(actor, "chunk claim " + city);
+            governance.execute(actor, "chunk claim " + nation + " here");
+            governance.execute(actor, "chunk assignstate " + nation + " here " + state);
+            governance.execute(actor, "chunk assigncity " + state + " here " + city);
 
             var deniedBreak = new BlockEvent.BreakEvent(level, position, level.getBlockState(position), guest);
             MinecraftForge.EVENT_BUS.post(deniedBreak);
@@ -325,14 +338,34 @@ public final class SuiteGameTests {
         ActionSelection selection = ActionSelection.form("statecraft:mail", "mail send <recipient> <subject> <body>",
                 Map.of("recipient", recipient.getUUID().toString(), "subject", "Reviewed mail", "body", "One delivery only."));
         var quote = runtime.ui().preview(owner, selection);
+        String reviewText = quote.preview().title().fallback() + quote.preview().warning().fallback()
+                + quote.preview().lines().stream().map(line -> line.label().fallback() + line.value().fallback())
+                    .collect(java.util.stream.Collectors.joining("\n"));
+        helper.assertTrue(!reviewText.contains(owner.getUUID().toString()) && !reviewText.contains(recipient.getUUID().toString()),
+                "Reviewed mail shows player names rather than internal identities");
         helper.assertTrue(runtime.ui().status(owner, quote.operation()).outcome() == ActionOutcome.READY,
                 "An unsubmitted review can be retried only with its own ID");
         var first = runtime.ui().execute(owner, selection, quote.operation());
         helper.assertTrue(first.success(), "The reviewed action succeeds: " + first.text());
+        helper.assertTrue(!first.text().contains(owner.getUUID().toString()) && !first.text().contains(recipient.getUUID().toString()),
+                "Guided completion does not echo account identifiers");
         var again = runtime.ui().execute(owner, selection, quote.operation());
         helper.assertTrue(again.success(), "A repeated ID returns its stored completion");
         helper.assertTrue(data.players.get(recipient.getUUID().toString()).inbox.size() == before + 1,
                 "The repeated request did not deliver another message");
+        var message = data.players.get(recipient.getUUID().toString()).inbox.get(
+                data.players.get(recipient.getUUID().toString()).inbox.size() - 1);
+        var read = runtime.ui().execute(recipient,
+                ActionSelection.form("statecraft:mail", "mail read <message>", Map.of("message", message.id)), OperationRef.NONE);
+        helper.assertTrue(read.success() && read.text().contains("One delivery only."),
+                "Guided mail reading preserves the full message");
+        helper.assertTrue(!read.text().contains(owner.getUUID().toString()) && !read.text().contains(recipient.getUUID().toString())
+                        && !read.text().contains(message.id),
+                "Guided query results hide system-generated mail and account identifiers");
+        UiView receiptView = runtime.ui().view(owner, UiQuery.detail(
+                new EntityRef("statecraft", EntityRef.Kind.OPERATION, quote.operation().id().toString())));
+        helper.assertTrue(!receiptView.body().fallback().contains(quote.operation().id().toString()),
+                "Normal receipt details keep recovery identifiers hidden");
         helper.assertTrue(runtime.ui().status(recipient, quote.operation()).outcome() == ActionOutcome.UNKNOWN,
                 "Another player cannot inspect the owner's receipt");
         var altered = ActionSelection.form(selection.page(), selection.template(),
@@ -367,6 +400,11 @@ public final class SuiteGameTests {
         var selection = ActionSelection.form("statecraft:mail", "mail send <recipient> <subject> <body>",
                 Map.of("recipient", recipient.getUUID().toString(), "subject", "Interrupted mail", "body", "Not sent."));
         var quote = runtime.ui().preview(owner, selection);
+        String reviewText = quote.preview().title().fallback() + quote.preview().warning().fallback()
+                + quote.preview().lines().stream().map(line -> line.label().fallback() + line.value().fallback())
+                    .collect(java.util.stream.Collectors.joining("\n"));
+        helper.assertTrue(!reviewText.contains(owner.getUUID().toString()) && !reviewText.contains(recipient.getUUID().toString()),
+                "Payment reviews identify accounts by friendly names");
         runtime.ui().operations().begin(actor, quote.operation(), UiRuntime.requestHash(selection),
                 selection.page(), "Interrupted mail", ActionIntent.MUTATION);
         runtime.saveNow();
@@ -422,12 +460,78 @@ public final class SuiteGameTests {
                 helper.assertTrue(view.rows().size() <= UiView.MAX_ROWS, "View rows are bounded: " + page.id());
                 helper.assertTrue(view.actions().size() <= UiView.MAX_ACTIONS, "View actions are bounded: " + page.id());
                 for (var action : view.actions()) action.selection().registeredAction();
+                if (page.id().equals("economy:guide")) {
+                    helper.assertTrue(!view.body().fallback().contains("minecraft:") && !view.body().fallback().contains("statecraft_economy:"),
+                            "The recipe guide uses item names rather than registry keys");
+                    helper.assertTrue(view.body().fallback().contains("Iron Ingot"),
+                            "The recipe guide still shows readable material requirements");
+                }
             } catch (dev.statecraft.api.UserError denied) {
                 String message = denied.getMessage().toLowerCase(java.util.Locale.ROOT);
                 helper.assertTrue(!message.contains("has not provided") && !message.contains("not implemented")
                                 && !message.contains("unknown command") && !message.contains("unsupported command"),
                         "Every section must reach a presentation provider: " + page.id() + " -> " + denied.getMessage());
             }
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "test_empty", timeoutTicks = 100)
+    public static void personalDashboardShowsCitizenshipAndExactAccountDestinations(GameTestHelper helper) {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        var owner = FakePlayerFactory.get(helper.getLevel(), new GameProfile(UUID.randomUUID(), "DashA" + suffix));
+        var other = FakePlayerFactory.get(helper.getLevel(), new GameProfile(UUID.randomUUID(), "DashB" + suffix));
+        var runtime = StateCraft.runtime();
+        var actor = ServerRuntime.actor(owner);
+        var engine = runtime.engine();
+        engine.login(actor);
+        engine.login(ServerRuntime.actor(other));
+        String nation = "Nation" + suffix, state = "State" + suffix, city = "City" + suffix, company = "Company" + suffix;
+        try {
+            engine.execute(actor, "nation create " + nation);
+            engine.execute(actor, "state create " + nation + " " + state);
+            engine.execute(actor, "city create " + state + " " + city);
+            engine.execute(actor, "company create " + company);
+            PersonalDashboard data = runtime.ui().personalDashboard(owner, PersonalDashboard.Request.FIRST);
+            helper.assertTrue(data.name().equals(actor.name()), "Name comes from the connected player");
+            helper.assertTrue(data.nation().name().fallback().equals(nation), "The actual nation citizenship is shown");
+            helper.assertTrue(data.city().name().fallback().equals("[" + city + "] (" + state + "/" + nation + ")"),
+                    "City formatting includes its state and nation");
+            helper.assertTrue(data.city().target().entity().id().equals(engine.government(city).orElseThrow().id()),
+                    "Clicking citizenship targets the exact government overview");
+            helper.assertTrue(data.companies().entries().stream().anyMatch(entry -> entry.name().fallback().equals(company)
+                            && entry.target().entity().kind() == EntityRef.Kind.COMPANY),
+                    "Shareholdings link to the company overview");
+            var overviewRequest = new dev.statecraft.api.ui.GovernmentOverview.Request(data.nation().target().entity().id(), 0, 0);
+            var overview = runtime.ui().governmentOverview(owner, overviewRequest);
+            helper.assertTrue(overview.officialInbox() != null && overview.groups().stream().anyMatch(group -> group.id().equals("settings")),
+                    "Government managers receive Settings and the scoped official inbox");
+            runtime.ui().view(owner, overview.officialInbox());
+            var publicOverview = runtime.ui().governmentOverview(other, overviewRequest);
+            helper.assertTrue(publicOverview.officialInbox() == null
+                            && publicOverview.groups().stream().noneMatch(group -> group.id().equals("settings")),
+                    "Other players cannot see government invitation settings or official mail");
+            boolean privateMailbox = false;
+            try { runtime.ui().view(other, overview.officialInbox()); }
+            catch (dev.statecraft.api.UserError denied) { privateMailbox = true; }
+            helper.assertTrue(privateMailbox, "Opening a copied official-mail target rechecks the sender's authority");
+            PersonalDashboard stranger = runtime.ui().personalDashboard(other, PersonalDashboard.Request.FIRST);
+            helper.assertTrue(stranger.nation() == null && stranger.companies().entries().isEmpty(),
+                    "Dashboard data is scoped to the actual sender");
+            if (runtime.economy().available()) {
+                var account = data.accounts().entries().get(0);
+                helper.assertTrue(account.target().page().equals("economy:atm")
+                                && account.target().entity().id().equals(actor.account()),
+                        "The personal balance opens that account's ATM");
+                runtime.ui().view(owner, account.target());
+                boolean rejected = false;
+                try { runtime.ui().view(other, account.target()); }
+                catch (dev.statecraft.api.UserError denied) { rejected = true; }
+                helper.assertTrue(rejected, "A foreign player cannot reuse the personal account target");
+            }
+        } finally {
+            if (engine.company(company).isPresent()) engine.execute(actor, "company disband " + company);
+            if (engine.government(nation).isPresent()) engine.execute(actor, "nation disband " + nation + " cascade");
         }
         helper.succeed();
     }

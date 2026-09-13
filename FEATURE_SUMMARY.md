@@ -13,7 +13,7 @@ The core StateCraft mod can provide non-economic governance features by itself. 
 
 ### Nations and Government
 
-- Organizes territory as **Nation → State → City → Claimed Chunks**.
+- Organizes governments as **Nation → State → City**. Nations claim chunks; state and city allocations are optional.
 - Supports nation leaders, officers, state governors, city mayors, members, citizens, and role-based permissions.
 - Allows players to create, join, leave, invite to, manage, rename, or disband governments.
 - Supports open or invitation-only nation membership.
@@ -22,7 +22,9 @@ The core StateCraft mod can provide non-economic governance features by itself. 
 
 ### Territory, Claims, and Protection
 
-- Claims Minecraft chunks for cities and records their city, state, and nation ownership.
+- Only nations claim Minecraft chunks. Every claim has a nation and may optionally be allocated to one of its states and then a city.
+- Nation officials allocate claimed land to states; state officials allocate their territory to cities.
+- Public titles and future sale proceeds follow state/city allocations, while existing player/company private ownership is preserved.
 - Enforces adjacency rules, claim limits, permissions, and optional claim fees.
 - Supports manual claiming, unclaiming, and automatic claiming while moving.
 - Protects claimed land from unauthorized:
@@ -76,7 +78,9 @@ The core StateCraft mod can provide non-economic governance features by itself. 
 - Provides persistent player mail with compose, inbox, and message-view screens.
 - Provides separate government mailboxes for official notifications.
 - Includes player profiles showing nation and role information.
-- Includes GUIs for nations, states, cities, members, invitations, claims, elections, laws, diplomacy, companies, contracts, mail, officers, and executive actions.
+- Includes personal and Nation/State/City overviews with scoped action sub-menus, graphical claim/allocation maps, elections, laws, diplomacy, companies, contracts, and executive actions.
+- Officers are listed on government overviews. Invitation management is inside officer/leader Settings, with no separate Citizens & Roles, Officers, Invitations, or Communications tab.
+- Personal mail opens from My Dashboard; official mail opens from the relevant government overview.
 - Default keybinds:
   - **N** — Open the StateCraft menu
   - **B** — Cycle territory border modes

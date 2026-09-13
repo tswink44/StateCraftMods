@@ -103,7 +103,13 @@ class GovernancePersistenceTest extends DomainFixture {
         assertThrows(UserError.class, () -> restored.execute(alice, "nation rename " + tree.nation() + " Renamed"));
         assertFalse(restored.mayAct(alice, validKey, AccessAction.BREAK, null));
         restored.execute(operator, "admin repair apply");
-        assertFalse(data.claims.containsKey(orphan.key));
+        assertTrue(data.claims.containsKey(orphan.key));
+        assertFalse(restored.validationIssues().isEmpty());
+        restored.execute(operator, "admin reassign " + orphan.key + " " + tree.nation());
+        assertEquals(tree.nation(), orphan.nationId);
+        assertNull(orphan.stateId);
+        assertNull(orphan.cityId);
+        assertEquals("nation:" + tree.nation(), orphan.ownerAccount);
         assertTrue(data.claims.containsKey(validKey));
         assertTrue(restored.validationIssues().isEmpty());
         assertTrue(restored.mayAct(alice, validKey, AccessAction.BREAK, null));

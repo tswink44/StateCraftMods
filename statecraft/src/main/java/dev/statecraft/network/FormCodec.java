@@ -17,7 +17,7 @@ final class FormCodec {
         buffer.writeVarInt(values.size());
         values.forEach((key, value) -> {
             buffer.writeUtf(key, 64);
-            buffer.writeUtf(value, 2048);
+            buffer.writeUtf(value, FormSchema.MAX_VALUE_LENGTH);
         });
     }
 
@@ -27,7 +27,7 @@ final class FormCodec {
         int length = 0;
         for (int i = 0; i < count; i++) {
             String key = buffer.readUtf(64);
-            String value = buffer.readUtf(2048);
+            String value = buffer.readUtf(FormSchema.MAX_VALUE_LENGTH);
             length += value.length();
             if (result.putIfAbsent(key, value) != null || length > 4096) {
                 throw new DecoderException("Invalid StateCraft form values.");
@@ -42,7 +42,7 @@ final class FormCodec {
             buffer.writeUtf(field.key(), 64);
             buffer.writeUtf(field.label(), 128);
             buffer.writeByte(field.kind().ordinal());
-            buffer.writeUtf(field.value(), 2048);
+            buffer.writeUtf(field.value(), FormSchema.MAX_VALUE_LENGTH);
             buffer.writeUtf(field.selectedLabel(), 128);
             buffer.writeUtf(field.hint(), 384);
             buffer.writeVarInt(field.dependencies().size());
@@ -76,7 +76,7 @@ final class FormCodec {
             if (kind >= FormField.Kind.values().length) {
                 throw new DecoderException("Unknown StateCraft field type.");
             }
-            String value = buffer.readUtf(2048);
+            String value = buffer.readUtf(FormSchema.MAX_VALUE_LENGTH);
             String selectedLabel = buffer.readUtf(128);
             String hint = buffer.readUtf(384);
             int dependenciesCount = count(buffer, FormSchema.MAX_FIELDS);
@@ -93,7 +93,7 @@ final class FormCodec {
             int offset = count(buffer, 1_000_000);
             boolean more = buffer.readBoolean();
             FormConstraints.Type constraintType = UiCodec.enumeration(buffer, FormConstraints.Type.values());
-            int maximumLength = count(buffer, 2048);
+            int maximumLength = count(buffer, FormSchema.MAX_VALUE_LENGTH);
             long minimum = buffer.readLong();
             long maximum = buffer.readLong();
             int alternativeCount = count(buffer, 16);

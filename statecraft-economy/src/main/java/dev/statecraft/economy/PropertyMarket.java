@@ -10,10 +10,12 @@ import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
 import java.util.ArrayList;
+import java.util.Objects;
 
 public final class PropertyMarket {
     private final EconomyEngine e;
     private final ValuationEnvironment environment;
+    private String settlingTitle;
 
     PropertyMarket(EconomyEngine engine, ValuationEnvironment environment) {
         e = engine;
@@ -25,16 +27,33 @@ public final class PropertyMarket {
         ChunkKey.parse(key);
         GovernanceAccess.ClaimView claim = e.governance.claim(key).orElseThrow(() -> new UserError("That chunk is not claimed."));
         EconomyData.Valuation existing = e.data.valuations.get(key);
-        if (existing != null && existing.taxOwnerAccount == null) {
-            existing.taxOwnerAccount = claim.ownerAccount();
-            e.dirty.run();
+        if (existing != null) {
+            initializeAssessment(existing, claim);
+            if (existing.nextRecalculationAt > e.clock.millis() && !jurisdictionChanged(existing, claim)) {
+                if (!claim.ownerAccount().equals(existing.taxOwnerAccount)) {
+                    EconomyData.PropertyTaxBasis basis = taxBasis(claim.nationId(), claim.stateId(), claim.cityId(), existing.value);
+                    assessDue(existing, basis.charges());
+                    existing.taxOwnerAccount = claim.ownerAccount();
+                    existing.taxBasis = basis;
+                    e.dirty.run();
+                }
+                return existing;
+            }
         }
-        if (existing != null && existing.nextRecalculationAt > e.clock.millis()) return existing;
         return recalculate(claim);
     }
 
     public EconomyData.Valuation recalculate(GovernanceAccess.ClaimView claim) {
         EconomyData.Valuation result = calculate(claim);
+        EconomyData.Valuation previous = e.data.valuations.get(claim.key());
+        if (previous != null) {
+            initializeAssessment(previous, claim);
+            if (assessmentChanged(previous, claim)) {
+                // A changed public allocation must not send the old owner's overdue taxes to the new tiers.
+                assessDue(previous, jurisdictionChanged(previous, claim) ? previous.taxBasis.charges() : result.taxBasis.charges());
+                result.nextTaxAt = previous.nextTaxAt;
+            }
+        }
         e.data.valuations.put(claim.key(), result);
         e.dirty.run();
         return result;
@@ -45,7 +64,8 @@ public final class PropertyMarket {
         ChunkKey.parse(key);
         GovernanceAccess.ClaimView claim = e.governance.claim(key).orElseThrow(() -> new UserError("That chunk is not claimed."));
         EconomyData.Valuation existing = e.data.valuations.get(key);
-        return existing != null && existing.nextRecalculationAt > e.clock.millis() ? existing : calculate(claim);
+        return existing != null && existing.nextRecalculationAt > e.clock.millis() && !jurisdictionChanged(existing, claim)
+                ? existing : calculate(claim);
     }
 
     private EconomyData.Valuation calculate(GovernanceAccess.ClaimView claim) {
@@ -57,7 +77,7 @@ public final class PropertyMarket {
         EconomyData.Valuation previous = e.data.valuations.get(claim.key());
         EconomyData.Valuation result = new EconomyData.Valuation();
         result.chunk = claim.key();
-        result.taxOwnerAccount = previous == null || previous.taxOwnerAccount == null ? claim.ownerAccount() : previous.taxOwnerAccount;
+        result.taxOwnerAccount = claim.ownerAccount();
         result.base = e.config.defaultChunkValueCents;
         int propertyRates = 0;
         for (GovernanceAccess.GovernmentView government : e.taxes.tiers(claim.key(), claim.nationId())) {
@@ -86,11 +106,56 @@ public final class PropertyMarket {
             computed = computed.multiply(BigInteger.valueOf(factor)).divide(BigInteger.valueOf(10_000));
         }
         result.value = computed.min(BigInteger.valueOf(Money.MAX)).longValueExact();
+        result.taxBasis = taxBasis(claim.nationId(), claim.stateId(), claim.cityId(), result.value);
         result.calculatedAt = e.clock.millis();
         result.nextRecalculationAt = EconomyEngine.deadline(result.calculatedAt, e.config.valuationIntervalMillis);
         result.nextTaxAt = previous == null ? EconomyEngine.deadline(result.calculatedAt, e.config.propertyTaxPeriodMillis)
                 : previous.nextTaxAt;
         return result;
+    }
+
+    private EconomyData.PropertyTaxBasis taxBasis(String nation, String state, String city, long value) {
+        return new EconomyData.PropertyTaxBasis(nation, state, city,
+                e.taxes.quote(e.taxes.tiers(nation, state, city), value, "propertyTaxBps"));
+    }
+
+    private void initializeAssessment(EconomyData.Valuation value, GovernanceAccess.ClaimView claim) {
+        boolean changed = false;
+        if (value.taxOwnerAccount == null) {
+            value.taxOwnerAccount = claim.ownerAccount();
+            changed = true;
+        }
+        if (value.taxBasis == null) {
+            value.taxBasis = legacyTaxBasis(value, claim);
+            changed = true;
+        }
+        if (changed) e.dirty.run();
+    }
+
+    private EconomyData.PropertyTaxBasis legacyTaxBasis(EconomyData.Valuation value, GovernanceAccess.ClaimView claim) {
+        String owner = value.taxOwnerAccount;
+        if (owner != null && !owner.equals(claim.ownerAccount())
+                && (owner.startsWith("nation:") || owner.startsWith("state:") || owner.startsWith("city:"))) {
+            GovernanceAccess.GovernmentView government = e.governance.government(owner.substring(owner.indexOf(':') + 1))
+                    .filter(g -> g.account().equals(owner)).orElse(null);
+            if (government != null) {
+                String city = government.kind() == GovernanceAccess.Kind.CITY ? government.id() : null;
+                String state = city != null ? government.parentId()
+                        : government.kind() == GovernanceAccess.Kind.STATE ? government.id() : null;
+                return taxBasis(government.nationId(), state, city, value.value);
+            }
+        }
+        return taxBasis(claim.nationId(), claim.stateId(), claim.cityId(), value.value);
+    }
+
+    private static boolean assessmentChanged(EconomyData.Valuation value, GovernanceAccess.ClaimView claim) {
+        return value.taxOwnerAccount != null && !claim.ownerAccount().equals(value.taxOwnerAccount) || jurisdictionChanged(value, claim);
+    }
+
+    private static boolean jurisdictionChanged(EconomyData.Valuation value, GovernanceAccess.ClaimView claim) {
+        EconomyData.PropertyTaxBasis basis = value.taxBasis;
+        return basis != null && (!Objects.equals(basis.nationId(), claim.nationId())
+                || !Objects.equals(basis.stateId(), claim.stateId()) || !Objects.equals(basis.cityId(), claim.cityId()));
     }
 
     public String list(Actor actor, String key, long price) {
@@ -116,7 +181,7 @@ public final class PropertyMarket {
         if (!actor.admin() && !e.governance.maySellProperty(actor.id(), key)) {
             throw new UserError("Only the private owner or an authorized property official may list this chunk.");
         }
-        if (e.isClaimEncumbered(key)) throw new UserError("The chunk is already listed or pledged as loan collateral.");
+        if (e.isClaimEncumbered(key)) throw new UserError("The chunk is already listed, pledged as loan collateral, or subject to unpaid property taxes.");
         if (e.data.properties.size() >= e.config.maximumActiveListings) throw new UserError("The property listing limit has been reached.");
         e.validateDestination(claim.ownerAccount());
         EconomyEngine.deadline(e.clock.millis(), e.config.propertyListingLifetimeMillis);
@@ -171,7 +236,7 @@ public final class PropertyMarket {
         try {
             payment.commitWith(() -> {
                 if (fundWithCash) cash.commit();
-                try { e.governance.transferProperty(key, buyer.account()); }
+                try { transferTitle(claim, buyer.account()); }
                 catch (RuntimeException | Error failure) {
                     if (fundWithCash) cash.rollback();
                     throw failure;
@@ -257,16 +322,12 @@ public final class PropertyMarket {
             return false;
         }
         EconomyData.Valuation value = value(key);
-        if (!claim.ownerAccount().equals(value.taxOwnerAccount)) {
-            settleDueBeforeTransfer(key);
-            value.taxOwnerAccount = claim.ownerAccount();
-            e.dirty.run();
-        }
         int processed = 0;
         while (value.nextTaxAt <= e.clock.millis() && processed++ < e.config.catchUpPeriodsPerTick) {
             long next = EconomyEngine.deadline(value.nextTaxAt, e.config.propertyTaxPeriodMillis);
             List<Taxation.Charge> charges = e.taxes.quote(key, claim.nationId(), value.value, "propertyTaxBps");
             for (Taxation.Charge charge : charges) e.taxes.assess(value.taxOwnerAccount, charge, key);
+            value.taxBasis = new EconomyData.PropertyTaxBasis(claim.nationId(), claim.stateId(), claim.cityId(), charges);
             value.nextTaxAt = next;
             e.dirty.run();
         }
@@ -276,14 +337,52 @@ public final class PropertyMarket {
     void settleDueBeforeTransfer(String key) {
         GovernanceAccess.ClaimView claim = e.governance.claim(key).orElseThrow(() -> new UserError("The claimed property disappeared."));
         EconomyData.Valuation value = value(key);
+        if (value.nextTaxAt <= e.clock.millis()) {
+            List<Taxation.Charge> charges = e.taxes.quote(key, claim.nationId(), value.value, "propertyTaxBps");
+            assessDue(value, charges);
+            value.taxBasis = new EconomyData.PropertyTaxBasis(claim.nationId(), claim.stateId(), claim.cityId(), charges);
+        }
+    }
+
+    private void assessDue(EconomyData.Valuation value, List<Taxation.Charge> charges) {
         if (value.nextTaxAt > e.clock.millis()) return;
         long periods = (e.clock.millis() - value.nextTaxAt) / e.config.propertyTaxPeriodMillis + 1;
         long next = BigInteger.valueOf(value.nextTaxAt).add(BigInteger.valueOf(periods)
                 .multiply(BigInteger.valueOf(e.config.propertyTaxPeriodMillis))).longValueExact();
-        List<Taxation.Charge> charges = e.taxes.quote(key, claim.nationId(), value.value, "propertyTaxBps");
-        for (Taxation.Charge charge : charges) e.taxes.assessPeriods(value.taxOwnerAccount, charge, key, periods);
+        for (Taxation.Charge charge : charges) e.taxes.assessPeriods(value.taxOwnerAccount, charge, value.chunk, periods);
         value.nextTaxAt = next;
         e.dirty.run();
+    }
+
+    boolean taxEncumbered(String key) {
+        return !key.equals(settlingTitle) && e.taxes.encumbers(key);
+    }
+
+    void transferTitle(GovernanceAccess.ClaimView expected, String ownerAccount) {
+        GovernanceAccess.ClaimView current = e.governance.claim(expected.key())
+                .orElseThrow(() -> new UserError("The claimed property disappeared."));
+        if (!expected.ownerAccount().equals(current.ownerAccount()) || !expected.nationId().equals(current.nationId())
+                || !Objects.equals(expected.stateId(), current.stateId()) || !Objects.equals(expected.cityId(), current.cityId())) {
+            throw new UserError("The property's title or territorial allocation changed; review the transaction again.");
+        }
+        if (settlingTitle != null) throw new UserError("Another property title is being settled.");
+        // Only an economy title settlement may leave assessed debts with the former payer.
+        // Core territorial assignments and other titles still see every lien and reservation.
+        settlingTitle = expected.key();
+        try { e.governance.transferProperty(expected.key(), ownerAccount); }
+        finally { settlingTitle = null; }
+    }
+
+    boolean accountInUse(String account) {
+        for (EconomyData.Valuation value : e.data.valuations.values()) {
+            GovernanceAccess.ClaimView claim = e.governance.claim(value.chunk).orElse(null);
+            if (claim == null || value.taxOwnerAccount == null
+                    || value.nextTaxAt > e.clock.millis() && !assessmentChanged(value, claim)) continue;
+            EconomyData.PropertyTaxBasis basis = value.taxBasis == null ? legacyTaxBasis(value, claim) : value.taxBasis;
+            if (basis.charges().stream().anyMatch(charge -> !value.taxOwnerAccount.equals(charge.account())
+                    && (account.equals(value.taxOwnerAccount) || account.equals(charge.account())))) return true;
+        }
+        return false;
     }
 
     void transferred(String key, String ownerAccount) {

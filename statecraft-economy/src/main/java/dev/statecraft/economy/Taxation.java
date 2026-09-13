@@ -52,18 +52,28 @@ public final class Taxation {
     }
 
     public List<GovernanceAccess.GovernmentView> tiers(String chunk, String fallbackNation) {
+        GovernanceAccess.ClaimView claim = chunk == null ? null : governance.claim(chunk).orElse(null);
+        return claim == null ? tiers(fallbackNation, null, null) : tiers(claim.nationId(), claim.stateId(), claim.cityId());
+    }
+
+    List<GovernanceAccess.GovernmentView> tiers(String nation, String state, String city) {
         Map<String, GovernanceAccess.GovernmentView> result = new LinkedHashMap<>();
-        governance.claim(chunk).ifPresent(claim -> {
-            addGovernment(result, claim.nationId());
-            addGovernment(result, claim.stateId());
-            addGovernment(result, claim.cityId());
-        });
-        if (result.isEmpty()) addGovernment(result, fallbackNation);
+        addGovernment(result, nation, GovernanceAccess.Kind.NATION, nation);
+        addGovernment(result, state, GovernanceAccess.Kind.STATE, nation);
+        if (state != null) addGovernment(result, city, GovernanceAccess.Kind.CITY, nation);
         return List.copyOf(result.values());
     }
 
-    private void addGovernment(Map<String, GovernanceAccess.GovernmentView> target, String id) {
-        if (id != null) governance.government(id).ifPresent(g -> target.put(g.id(), g));
+    String originNation(String chunk, String fallbackNation) {
+        return chunk == null ? fallbackNation : governance.claim(chunk)
+                .map(GovernanceAccess.ClaimView::nationId).orElse(fallbackNation);
+    }
+
+    private void addGovernment(Map<String, GovernanceAccess.GovernmentView> target, String id,
+                               GovernanceAccess.Kind kind, String nation) {
+        if (id != null && !id.isBlank()) governance.government(id)
+                .filter(g -> g.id().equals(id) && g.kind() == kind && Objects.equals(g.nationId(), nation))
+                .ifPresent(g -> target.put(g.id(), g));
     }
 
     public static int rate(GovernanceAccess.GovernmentView government, String setting) {
@@ -79,9 +89,13 @@ public final class Taxation {
     }
 
     public List<Charge> quote(String chunk, String fallbackNation, long gross, String setting) {
+        return quote(tiers(chunk, fallbackNation), gross, setting);
+    }
+
+    List<Charge> quote(List<GovernanceAccess.GovernmentView> tiers, long gross, String setting) {
         Money.nonNegative(gross);
         List<Charge> charges = new ArrayList<>();
-        for (GovernanceAccess.GovernmentView government : tiers(chunk, fallbackNation)) {
+        for (GovernanceAccess.GovernmentView government : tiers) {
             long amount = Money.tax(gross, rate(government, setting));
             if (amount != 0) charges.add(new Charge(government.id(), government.account(), setting, amount));
         }
@@ -179,6 +193,10 @@ public final class Taxation {
 
     static boolean isPropertyArrear(EconomyData.Arrear debt) {
         return "propertyTaxBps".equals(debt.kind);
+    }
+
+    boolean encumbers(String chunk) {
+        return data.arrears.values().stream().anyMatch(debt -> isPropertyArrear(debt) && chunk.equals(debt.subject));
     }
 
     boolean tickPropertyArrear(String id) {

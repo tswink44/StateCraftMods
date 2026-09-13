@@ -695,7 +695,8 @@ final class Politics {
                 if (!proposal.lastError.isEmpty()) rows.add("Execution blocked: " + proposal.lastError);
                 for (ChunkTerm term : proposal.chunks)
                     rows.add(term == null ? "Invalid chunk term: operator repair required."
-                            : term.key + ": " + e.governmentName(term.fromCity) + " -> " + e.governmentName(term.toCity));
+                            : term.key + ": " + e.governmentName(term.fromNation) + " -> " + e.governmentName(term.toNation)
+                            + " (state=" + e.governmentName(term.toState) + ", city=" + e.governmentName(term.toCity) + ")");
                 e.data.bills.values().stream().filter(Objects::nonNull).filter(b -> proposal.id.equals(b.treatyId))
                         .forEach(b -> rows.add("Ratification bill: " + e.governmentName(b.nationId) + " " + b.id + " " + b.status));
                 return e.page("Diplomatic terms", rows, args.page(3));
@@ -786,16 +787,21 @@ final class Politics {
         check(terms.length <= e.config.maxTreatyChunks, "Too many chunks in this treaty.");
         for (String value : terms) {
             String[] parts = value.split("=", -1);
-            check(parts.length == 2, "Chunk terms use chunkKey=destinationCity, separated by commas.");
+            check(parts.length == 2, "Chunk terms use chunkKey=destinationNationOrAllocation, separated by commas.");
             String key = ChunkKey.parse(parts[0]).toString();
             check(seen.add(key), "A chunk cannot appear twice in a treaty.");
             Claim claim = e.requiredClaim(key);
+            check(e.viewableClaim(claim), "Repair the selected claim before negotiating its national ownership.");
             Government destination = e.gov(parts[1]);
-            check(destination.kind == Kind.CITY, "Treaty destinations must be cities.");
             ChunkTerm term = new ChunkTerm();
             term.key = key;
+            term.fromNation = claim.nationId;
+            term.fromState = claim.stateId;
             term.fromCity = claim.cityId;
-            term.toCity = destination.id;
+            term.toNation = e.nationId(destination);
+            term.toState = destination.kind == Kind.CITY ? destination.parentId
+                    : destination.kind == Kind.STATE ? destination.id : null;
+            term.toCity = destination.kind == Kind.CITY ? destination.id : null;
             proposal.chunks.add(term);
         }
     }
@@ -821,20 +827,35 @@ final class Politics {
                 throw new UserError(field + "key must be canonical dimension|x|z coordinates: " + term.key);
             }
             check(seen.add(term.key), field + "duplicates chunk " + term.key + ".");
-            Government oldCity = e.data.governments.get(term.fromCity);
-            Government newCity = e.data.governments.get(term.toCity);
-            check(e.validHierarchy(oldCity) && oldCity.kind == Kind.CITY,
-                    field + "fromCity must reference a valid source city.");
-            check(e.validHierarchy(newCity) && newCity.kind == Kind.CITY,
-                    field + "toCity must reference a valid destination city.");
-            String donorNation = e.nationId(oldCity);
-            String receivingNation = e.nationId(newCity);
+            validateTermScope(term.fromNation, term.fromState, term.fromCity, field + "from");
+            validateTermScope(term.toNation, term.toState, term.toCity, field + "to");
+            String donorNation = term.fromNation;
+            String receivingNation = term.toNation;
             check((from.id.equals(donorNation) && to.id.equals(receivingNation))
                             || (to.id.equals(donorNation) && from.id.equals(receivingNation)),
-                    field + "cities must belong to opposite signatories.");
+                    field + "national ownership must transfer between opposite signatories.");
             Claim claim = e.data.claims.get(term.key);
-            check(claim != null && term.key.equals(claim.key), field + "references a missing or invalid claimed chunk.");
+            check(e.viewableClaim(claim), field + "references a missing or invalid claimed chunk.");
+            check(Objects.equals(term.fromNation, claim.nationId) && Objects.equals(term.fromState, claim.stateId)
+                            && Objects.equals(term.fromCity, claim.cityId),
+                    field + "source national ownership/state/city snapshot no longer matches the claim.");
         }
+    }
+
+    private void validateTermScope(String nationId, String stateId, String cityId, String field) {
+        Government nation = e.data.governments.get(nationId);
+        check(e.validHierarchy(nation) && nation.kind == Kind.NATION, field + "Nation must reference a valid nation.");
+        if (stateId == null) {
+            check(cityId == null, field + "City requires an explicit state allocation.");
+            return;
+        }
+        Government state = e.data.governments.get(stateId);
+        check(e.validHierarchy(state) && state.kind == Kind.STATE && nationId.equals(state.parentId),
+                field + "State must belong to the selected nation.");
+        if (cityId == null) return;
+        Government city = e.data.governments.get(cityId);
+        check(e.validHierarchy(city) && city.kind == Kind.CITY && stateId.equals(city.parentId),
+                field + "City must belong to the selected state.");
     }
 
     void validateTreaty(DiplomaticProposal proposal) {
@@ -847,23 +868,39 @@ final class Politics {
         e.requireEconomy(proposal.offeredCents);
         e.requireEconomy(proposal.demandedCents);
         check(proposal.chunks.size() <= e.config.maxTreatyChunks, "Treaty chunk limit exceeded.");
-        Set<String> recipients = new HashSet<>();
         Map<String, Set<String>> after = new LinkedHashMap<>();
+        Map<String, Set<String>> incoming = new LinkedHashMap<>();
+        Map<String, Set<String>> dimensions = new LinkedHashMap<>();
+        List<Territory.Allocation> allocations = new ArrayList<>();
         for (ChunkTerm term : proposal.chunks) {
             Claim claim = e.requiredClaim(term.key);
-            check(Objects.equals(term.fromCity, claim.cityId), "A treaty chunk has changed political ownership.");
-            Government oldCity = e.gov(term.fromCity);
-            Government newCity = e.gov(term.toCity);
-            check(e.account(oldCity).equals(claim.ownerAccount), "Treaties cannot confiscate privately owned property.");
+            check(Objects.equals(term.fromNation, claim.nationId) && Objects.equals(term.fromState, claim.stateId)
+                    && Objects.equals(term.fromCity, claim.cityId), "A treaty chunk has changed national ownership or allocation.");
+            check(e.publicTitle(claim), "Treaties cannot confiscate privately owned property.");
+            Government owner = e.gov(claim.ownerAccount.split(":", 2)[1]);
+            check(term.fromNation.equals(e.nationId(owner)), "A treaty cannot transfer another nation's public property.");
             e.assertClaimFree(term.key, proposal.id);
-            after.computeIfAbsent(oldCity.id, e::cityClaims).remove(term.key);
-            after.computeIfAbsent(newCity.id, e::cityClaims).add(term.key);
-            recipients.add(newCity.id);
+            after.computeIfAbsent(term.fromNation, e::nationClaims).remove(term.key);
+            after.computeIfAbsent(term.toNation, e::nationClaims).add(term.key);
+            incoming.computeIfAbsent(term.toNation, ignored -> new HashSet<>()).add(term.key);
+            String dimension = ChunkKey.parse(term.key).dimension();
+            dimensions.computeIfAbsent(term.fromNation, ignored -> new HashSet<>()).add(dimension);
+            dimensions.computeIfAbsent(term.toNation, ignored -> new HashSet<>()).add(dimension);
+            allocations.add(e.territory.allocation(claim, term.toNation, term.toState, term.toCity));
         }
-        for (Map.Entry<String, Set<String>> city : after.entrySet()) {
-            check(city.getValue().size() <= e.config.maxClaimsPerCity, "Treaty would exceed a city's claim limit.");
-            if (e.config.requireConnectedClaims || (e.config.requireAdjacentClaims && recipients.contains(city.getKey())))
-                check(e.connected(city.getValue()), "Treaty would create disconnected territory in " + e.governmentName(city.getKey()) + ".");
+        e.territory.validateCapacity(allocations);
+        for (Map.Entry<String, Set<String>> nation : after.entrySet()) {
+            if (e.config.requireConnectedClaims) {
+                Set<String> affected = nation.getValue().stream()
+                        .filter(key -> dimensions.get(nation.getKey()).contains(ChunkKey.parse(key).dimension()))
+                        .collect(Collectors.toSet());
+                check(e.connected(affected), "Treaty would create disconnected national territory in " + e.governmentName(nation.getKey()) + ".");
+            }
+            if (e.config.requireAdjacentClaims && incoming.containsKey(nation.getKey())) {
+                Set<String> base = new HashSet<>(nation.getValue());
+                base.removeAll(incoming.get(nation.getKey()));
+                e.territory.validateAdditions(base, incoming.get(nation.getKey()));
+            }
         }
     }
 
@@ -871,15 +908,12 @@ final class Politics {
         validateTreaty(proposal);
         if ("READY".equals(proposal.status) || "AWAITING_RATIFICATION".equals(proposal.status))
             check(proposal.ratified.containsAll(List.of(proposal.fromNation, proposal.toNation)), "Both ratifications are required.");
+        List<Territory.Allocation> allocations = proposal.chunks.stream()
+                .map(term -> e.territory.allocation(e.data.claims.get(term.key), term.toNation, term.toState, term.toCity)).toList();
         e.pay(treatyTransfers(proposal));
         // No validation or external payment remains after this point.
         e.changed();
-        for (ChunkTerm term : proposal.chunks) {
-            Claim claim = e.data.claims.get(term.key);
-            claim.cityId = term.toCity;
-            claim.ownerAccount = "city:" + term.toCity;
-            claim.permits.clear();
-        }
+        allocations.forEach(e.territory::apply);
         Relation relation = relation(proposal.fromNation, proposal.toNation);
         relation.status = "NEUTRAL";
         relation.truceUntil = deadline(e.now(), e.config.truceDurationMillis);
@@ -998,7 +1032,9 @@ final class Politics {
                 || e.data.diplomacy.values().stream().filter(Objects::nonNull)
                 .anyMatch(p -> holdsProposalObligations(p) && (governmentId.equals(p.fromNation) || governmentId.equals(p.toNation)
                         || p.chunks == null || p.chunks.stream().filter(Objects::nonNull)
-                        .anyMatch(term -> governmentId.equals(term.fromCity) || governmentId.equals(term.toCity))))
+                        .anyMatch(term -> governmentId.equals(term.fromNation) || governmentId.equals(term.toNation)
+                                || governmentId.equals(term.fromState) || governmentId.equals(term.toState)
+                                || governmentId.equals(term.fromCity) || governmentId.equals(term.toCity))))
                 || e.data.relations.values().stream().filter(Objects::nonNull)
                 .anyMatch(r -> (governmentId.equals(r.first) || governmentId.equals(r.second))
                         && (!"NEUTRAL".equals(r.status) || r.truceUntil > e.now()));

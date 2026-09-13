@@ -21,7 +21,8 @@ public final class UiMenus {
             MenuRegistry.register(new MenuPage(page, title, "info", List.of(
                     new MenuPage.Action("Dashboard", "gui statecraft:dashboard", ActionIntent.NAVIGATION),
                     new MenuPage.Action("Reconcile operation", RESOLVE, ActionIntent.MUTATION),
-                    new MenuPage.Action("Recover unknown receipt", RECOVER, ActionIntent.MUTATION))));
+                    new MenuPage.Action("Recover unknown receipt", RECOVER, ActionIntent.MUTATION)),
+                    page.equals("statecraft:admin_operations")));
         }
     }
 }

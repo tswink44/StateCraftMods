@@ -13,7 +13,7 @@ public record FormConstraints(Type type, int maxLength, long minimum, long maxim
     public FormConstraints {
         java.util.Objects.requireNonNull(type);
         alternatives = List.copyOf(alternatives);
-        if (maxLength < 1 || maxLength > 2048 || minimum > maximum || alternatives.size() > 16
+        if (maxLength < 1 || maxLength > FormSchema.MAX_VALUE_LENGTH || minimum > maximum || alternatives.size() > 16
                 || alternatives.stream().anyMatch(value -> value.isBlank() || value.length() > 32)
                 || type == Type.MONEY && (minimum < 0 || maximum > Money.MAX)) {
             throw new IllegalArgumentException("Invalid field constraints.");

@@ -31,7 +31,7 @@ public record FormContext(Actor actor, String page, String command, Map<String, 
         }
         int length = 0;
         for (Map.Entry<String, String> entry : values.entrySet()) {
-            if (entry.getKey().length() > 64 || entry.getValue().length() > 2048) {
+            if (entry.getKey().length() > 64 || entry.getValue().length() > FormSchema.MAX_VALUE_LENGTH) {
                 throw new UserError("A form value is too long.");
             }
             length += entry.getValue().length();

@@ -42,7 +42,7 @@ final class ChoicePickerScreen extends Screen {
         int panelWidth = Math.min(440, width - 24);
         search = new RetainedEditBox(font, left, 35, panelWidth, 20, ClientText.tr("gui.statecraft.choices.search", "Search choices"));
         search.setMaxLength(80);
-        search.setHint(ClientText.tr("gui.statecraft.choices.search_hint", "Search names or IDs..."));
+        search.setHint(ClientText.tr("gui.statecraft.choices.search_hint", "Search by name..."));
         search.setValue(state.text());
         search.restore(state.selection());
         search.setResponder(value -> {
@@ -51,28 +51,28 @@ final class ChoicePickerScreen extends Screen {
             updated();
         });
         addRenderableWidget(search);
-        int visible = Math.max(1, (height - 156) / 23);
+        int visible = Math.max(1, (height - 156) / 28);
         rows.clear();
         for (int row = 0; row < visible; row++) {
             final int index = row;
-            rows.add(addRenderableWidget(Button.builder(Component.empty(), ignored -> {
+            rows.add(addRenderableWidget(UiButton.create(Component.empty(), ignored -> {
                 List<FormChoice> choices = owner.field(key).choices();
                 if (owner.choicesReady() && queryAt == 0 && scroll + index < choices.size()) owner.selected(key, choices.get(scroll + index));
-            }).bounds(left, 62 + row * 23, panelWidth, 20).build()));
+            }).bounds(left, 62 + row * 28, panelWidth, 24).build()));
         }
-        status = addRenderableWidget(Button.builder(Component.empty(), ignored -> minecraft.setScreen(new InformationScreen(
+        status = addRenderableWidget(UiButton.create(Component.empty(), ignored -> minecraft.setScreen(new InformationScreen(
                         this, title, statusText().copy().append("\n").append(owner.field(key).hint()))))
                 .bounds(left, height - 88, panelWidth, 20).build());
-        custom = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.choices.custom", "Custom value..."), ignored -> useCustom())
+        custom = addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.choices.custom", "Custom value..."), ignored -> useCustom())
                 .bounds(left, height - 62, panelWidth, 20).build());
         int buttonWidth = (panelWidth - 8) / 3;
-        previous = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.previous", "Previous"), ignored -> query(
+        previous = addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.previous", "Previous"), ignored -> query(
                         Math.max(0, owner.field(key).offset() - FormSchema.PAGE_SIZE)))
                 .bounds(left, height - 28, buttonWidth, 20).build());
-        next = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.next", "Next"),
+        next = addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.next", "Next"),
                         ignored -> query(owner.field(key).offset() + FormSchema.PAGE_SIZE))
                 .bounds(left + buttonWidth + 4, height - 28, buttonWidth, 20).build());
-        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.back", "Back"), ignored -> onClose())
+        addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.back", "Back"), ignored -> onClose())
                 .bounds(left + (buttonWidth + 4) * 2, height - 28, buttonWidth, 20).build());
         updated();
         setInitialFocus(search);
@@ -99,19 +99,20 @@ final class ChoicePickerScreen extends Screen {
             if (button.visible) {
                 FormChoice choice = field.choices().get(index);
                 button.setMessage(Component.literal(choice.label()));
-                button.setTooltip(Tooltip.create(Component.literal(choice.label() + "\n" + choice.detail() + "\n" + choice.value())));
+                button.setTooltip(Tooltip.create(Component.literal(choice.label()
+                        + (choice.detail().isBlank() ? "" : "\n" + choice.detail()))));
             }
         }
         previous.active = owner.choicesReady() && queryAt == 0 && field.offset() > 0;
         next.active = owner.choicesReady() && queryAt == 0 && field.more();
         custom.visible = field.allowCustom();
         custom.active = field.allowCustom() && owner.choicesReady() && queryAt == 0;
-        status.setMessage(statusText());
+        UiTheme.status(status, statusText());
     }
     private Component statusText() {
         FormField field = owner.field(key);
         if (owner.locked()) return ClientText.tr("gui.statecraft.form.locked",
-                "Inputs are locked. Use Operations to check status or retry the same ready operation.");
+                "Inputs are locked. Use Attention to check the pending action.");
         if (owner.waiting() || queryAt != 0) return ClientText.tr("gui.statecraft.choices.loading", "Loading matching choices...");
         if (!owner.error().isEmpty()) return Component.literal(owner.error());
         if (field.choices().isEmpty()) return ClientText.tr("gui.statecraft.choices.empty",
@@ -137,9 +138,8 @@ final class ChoicePickerScreen extends Screen {
     public Component getNarrationMessage() { return title.copy().append(". ").append(statusText()); }
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
-        renderBackground(graphics);
-        graphics.fill(0, 0, width, height, 0xEF121923);
-        graphics.drawCenteredString(font, title, width / 2, 12, 0x71D6C1);
+        UiTheme.background(graphics, width, height);
+        UiTheme.header(graphics, title, width, 12);
         super.render(graphics, mouseX, mouseY, delta);
     }
     @Override

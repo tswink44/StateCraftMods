@@ -10,6 +10,7 @@ import dev.statecraft.api.form.FormChoice;
 import dev.statecraft.api.form.FormContext;
 import dev.statecraft.api.form.FormConstraints;
 import dev.statecraft.api.form.FormProvider;
+import dev.statecraft.api.ui.DisplayText;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -24,9 +25,11 @@ public final class EconomyForms implements FormProvider {
     private static final Set<String> OPEN_LOANS = Set.of("REQUESTED", "ACTIVE", "DEFAULTED");
     private static final Set<String> OWED_LOANS = Set.of("ACTIVE", "DEFAULTED");
     private final EconomyEngine engine;
+    private final EconomyDisplay display;
 
     public EconomyForms(EconomyEngine engine) {
         this.engine = Objects.requireNonNull(engine);
+        display = new EconomyDisplay(engine);
     }
 
     @Override public void describe(FormContext context, FormBuilder form) {
@@ -61,22 +64,22 @@ public final class EconomyForms implements FormProvider {
         for (String field : List.of("account", "fromAccount", "companyAccount")) {
             if (!form.has(field)) continue;
             Map<String, String> candidates = new LinkedHashMap<>();
-            candidates.put(actor.account(), "Your wallet (" + actor.name() + ")");
+            candidates.put(actor.account(), display.account(actor, actor.account()));
             for (FormChoice prior : form.choices(field)) {
                 String account = resolve(actor, prior.value());
                 if (account != null) candidates.putIfAbsent(account, playerLabel(account, prior.label()));
             }
-            engine.governance.governments().forEach(g -> candidates.put(g.account(), g.name() + " - " + lower(g.kind().name())));
-            engine.governance.companies().forEach(c -> candidates.put(c.account(), c.name() + " - company"));
+            engine.governance.governments().forEach(g -> candidates.put(g.account(), display.account(g.account())));
+            engine.governance.companies().forEach(c -> candidates.put(c.account(), display.account(c.account())));
             engine.data.banks.values().stream().filter(b -> !b.closed)
-                    .forEach(b -> candidates.put(b.account(), b.name + " - bank assets"));
+                    .forEach(b -> candidates.put(b.account(), display.account(b.account())));
             if (actor.admin()) {
                 engine.data.accounts.keySet().forEach(account -> candidates.putIfAbsent(account, playerLabel(account, account)));
             }
             List<FormChoice> choices = new ArrayList<>();
             candidates.forEach((account, label) -> {
                 if ((!field.equals("companyAccount") || account.startsWith("company:")) && authorized(actor, account)) {
-                    choices.add(option(account, label, account + "; balance " + Money.format(engine.balance(account))));
+                    choices.add(option(account, label, "Balance " + Money.format(engine.balance(account))));
                 }
             });
             String saved = engine.data.selectedAccounts.getOrDefault(actor.id().toString(), actor.account());
@@ -97,18 +100,18 @@ public final class EconomyForms implements FormProvider {
         for (CompanyView company : engine.governance.companies()) {
             if (shares) {
                 long available = engine.governance.availableShares(company.id(), actor.id());
-                if (available > 0) choices.add(option(company.id(), company.name(), available + " unreserved shares; " + company.id()));
+                if (available > 0) choices.add(option(company.id(), display.company(company.id()), available + " unreserved shares"));
             } else if (authorized(actor, company.account())) {
                 if (creatingBank && (engine.data.banks.containsKey(company.id())
                         || !canFundBank(company.account()))) continue;
-                String detail = company.id() + "; treasury " + Money.format(engine.balance(company.account()));
-                choices.add(option(company.id(), company.name(), detail));
+                String detail = "Company treasury " + Money.format(engine.balance(company.account()));
+                choices.add(option(company.id(), display.company(company.id()), detail));
             }
         }
         String preferred = engine.data.selectedAccounts.getOrDefault(actor.id().toString(), "");
         if (preferred.startsWith("company:")) preferred = preferred.substring(8);
         form.choice("company", shares ? "Company shares you own" : "Managed company",
-                creatingBank ? "Unregistered bank identities only; the treasury must cover minimum seed capital and the creation fee."
+                creatingBank ? "Companies without an existing bank only; the treasury must cover minimum seed capital and the creation fee."
                         : shares ? "Shareholders may list their own available shares without being company managers."
                         : "Company treasury permission is required; ordinary membership is not enough.",
                 choices, preferred, List.of(), false);
@@ -125,18 +128,18 @@ public final class EconomyForms implements FormProvider {
             if (!form.has(field)) continue;
             Map<String, FormChoice> choices = new LinkedHashMap<>();
             engine.data.playerNames.forEach((id, name) ->
-                    choices.put("player:" + id, option("player:" + id, name, "Player account")));
+                    choices.put("player:" + id, option("player:" + id, display.account("player:" + id), "Personal account")));
             for (FormChoice prior : form.choices(field)) {
                 String account = resolve(actor, prior.value());
                 if (account != null && account.startsWith("player:")) {
-                    choices.putIfAbsent(account, option(account, playerLabel(account, prior.label()), "Player account"));
+                    choices.putIfAbsent(account, option(account, playerLabel(account, prior.label()), "Personal account"));
                 }
             }
-            choices.put(actor.account(), option(actor.account(), actor.name(), "Your wallet"));
+            choices.put(actor.account(), option(actor.account(), display.account(actor, actor.account()), "Your wallet"));
             engine.governance.governments().forEach(g ->
-                    choices.put(g.account(), option(g.account(), g.name(), lower(g.kind().name()) + " treasury; " + g.account())));
+                    choices.put(g.account(), option(g.account(), display.account(g.account()), DisplayText.words(g.kind().name()) + " treasury")));
             engine.governance.companies().forEach(c ->
-                    choices.put(c.account(), option(c.account(), c.name(), "Company treasury; " + c.account())));
+                    choices.put(c.account(), option(c.account(), display.account(c.account()), "Company treasury")));
             String source = form.has("fromAccount") ? form.value("fromAccount")
                     : family.equals("company") && !form.value("company").isEmpty() ? "company:" + form.value("company") : actor.account();
             choices.remove(source);
@@ -162,19 +165,19 @@ public final class EconomyForms implements FormProvider {
                             || engine.governance.maySellProperty(actor.id(), listing.chunk);
                 }
                 if (allowed) choices.add(option(listing.chunk, chunkLabel(actor, listing.chunk),
-                        Money.format(listing.price) + "; seller " + listing.ownerAccount
+                        Money.format(listing.price) + "; seller " + display.account(listing.ownerAccount)
                                 + (listing.expiresAt <= engine.clock.millis() ? "; expired listing" : "")));
             }
         } else {
             for (ClaimView claim : engine.governance.claims()) {
                 if (!action.equals("list") || (!engine.isClaimEncumbered(claim.key())
                         && (actor.admin() || engine.governance.maySellProperty(actor.id(), claim.key())))) {
-                    choices.add(option(claim.key(), chunkLabel(actor, claim.key()), "Owner " + claim.ownerAccount() + cachedValue(claim.key())));
+                    choices.add(option(claim.key(), chunkLabel(actor, claim.key()), "Owner " + display.account(claim.ownerAccount()) + cachedValue(claim.key())));
                 }
             }
         }
         form.choice("chunkKeyOrHere", action.equals("buy") ? "Property for sale" : "Claimed property",
-                "Uses the explicit chunk key, not a moving 'here' alias. Ownership, eligibility and commitments are checked again on submit.",
+                "Keeps the selected location even if you move. Ownership, eligibility and commitments are checked again on submit.",
                 choices, actor.chunkKey(), List.of(), false);
     }
 
@@ -187,9 +190,9 @@ public final class EconomyForms implements FormProvider {
                 if (listing.remaining <= 0 || (cancel ? !actor.admin() && !listing.seller.equals(actor.id().toString())
                         : listing.expiresAt <= engine.clock.millis()
                             || action.equals("buy") && listing.seller.equals(actor.id().toString()))) continue;
-                choices.add(option(listing.id, listing.remaining + " x " + listing.item.item(),
-                        listing.id + "; " + Money.format(listing.unitPrice) + " each; seller " + playerName(listing.seller)
-                                + (!listing.item.snbt().isEmpty() ? "; NBT preserved" : "")
+                choices.add(option(listing.id, listing.remaining + " × " + display.item(listing.item),
+                        Money.format(listing.unitPrice) + " each; seller " + display.player(listing.seller)
+                                + (!listing.item.snbt().isEmpty() ? "; " + display.itemDetails(listing.item) : "")
                                 + (listing.expiresAt <= engine.clock.millis() ? "; expired, reclaimable" : "")));
             }
         } else if (family.equals("stock")) {
@@ -197,9 +200,9 @@ public final class EconomyForms implements FormProvider {
                 if (listing.remaining <= 0 || (cancel ? !actor.admin() && !listing.seller.equals(actor.id().toString())
                         : listing.expiresAt <= engine.clock.millis() || listing.seller.equals(actor.id().toString())
                             || engine.governance.company(listing.company).isEmpty())) continue;
-                String company = engine.governance.company(listing.company).map(CompanyView::name).orElse(listing.company);
+                String company = display.company(listing.company);
                 choices.add(option(listing.id, company + " - " + listing.remaining + " shares",
-                        listing.id + "; " + Money.format(listing.unitPrice) + " per share; seller " + playerName(listing.seller)
+                        Money.format(listing.unitPrice) + " per share; seller " + display.player(listing.seller)
                                 + (listing.expiresAt <= engine.clock.millis() ? "; expired, releasable" : "")));
             }
         } else return;
@@ -235,12 +238,12 @@ public final class EconomyForms implements FormProvider {
                     || hasDefault(actor) || openLoans(bank.id) >= engine.config.maximumBankLoans)) continue;
             if (family.equals("bank") && action.equals("close")
                     && (engine.banking.liabilities(bank).signum() != 0 || openLoans(bank.id) != 0)) continue;
-            String detail = bank.id + "; deposit " + bank.depositInterestBps + " bps; loan " + bank.loanInterestBps
-                    + " bps per " + bank.interestPeriodMillis + "ms";
-            if (withdrawing) detail = bank.id + "; your deposit " + Money.format(fundedBalance)
+            String detail = "Deposit " + DisplayText.percent(bank.depositInterestBps) + "; loan " + DisplayText.percent(bank.loanInterestBps)
+                    + " per " + DisplayText.duration(bank.interestPeriodMillis);
+            if (withdrawing) detail = "your deposit " + Money.format(fundedBalance)
                     + "; withdrawal fee " + Money.format(bank.withdrawalFeeCents);
             if (bank.closed) detail += "; closed";
-            choices.add(option(bank.id, bank.name, detail));
+            choices.add(option(bank.id, display.bank(bank.id), detail));
         }
         form.choice("bank", managed ? "Managed bank" : withdrawing ? "Your bank deposits" : "Bank",
                 funding ? "Choose a property first. Only your funded deposits are offered; final costs, fees and reserves are checked on submit."
@@ -274,8 +277,8 @@ public final class EconomyForms implements FormProvider {
             if (!allowed || form.has("bank") && !loan.bank.equals(form.value("bank"))) continue;
             String status = loan.status.equals("REQUESTED") && loan.applicationExpiresAt <= engine.clock.millis()
                     ? "EXPIRED APPLICATION" : loan.status;
-            choices.add(option(loan.id, (bank == null ? loan.bank : bank.name) + " - " + status,
-                    loan.id + "; borrower " + playerName(loan.borrower) + "; principal " + Money.format(loan.principal)
+            choices.add(option(loan.id, display.bank(loan.bank) + " - " + DisplayText.words(status),
+                    "Borrower " + display.player(loan.borrower) + "; principal " + Money.format(loan.principal)
                             + "; accrued interest " + Money.format(loan.interest) + "; current autopay " + (loan.autoPay ? "on" : "off")));
         }
         form.choice("loanId", "Loan", "Only loans you may use for this action. Shown interest is the stored snapshot, not a new accrual.",
@@ -379,39 +382,48 @@ public final class EconomyForms implements FormProvider {
             if (bank != null && family.equals("bank") && action.equals("terms")) {
                 rate = field.equals("depositBps") ? bank.depositInterestBps : field.equals("loanBps") ? bank.loanInterestBps : bank.originationFeeBps;
             }
-            form.text(field, FormBuilder.label(field), field.equals("originationBps")
-                    ? "One-time origination fee; 100 bps = 1%." : "Basis points per financial period; 100 bps = 1%.",
-                    Integer.toString(rate), false, "bank");
+            int maximum = field.equals("depositBps") ? engine.config.maximumDepositInterestBps
+                    : field.equals("loanBps") ? engine.config.maximumLoanInterestBps : engine.config.maximumOriginationFeeBps;
+            Set<Integer> rates = new java.util.TreeSet<>(List.of(0, 25, 50, 100, 125, 200, 500, 1000));
+            rates.add(rate);
+            try { rates.add(Integer.parseInt(form.value(field))); } catch (NumberFormatException incomplete) { }
+            form.choice(field, field.equals("depositBps") ? "Deposit interest" : field.equals("loanBps") ? "Loan interest" : "Origination fee",
+                    (field.equals("originationBps") ? "One-time fee." : "Interest per financial period.")
+                            + " Choose a percentage, or enter hundredths of a percent (100 = 1%).",
+                    rates.stream().filter(value -> value >= 0 && value <= maximum)
+                            .map(value -> option("" + value, DisplayText.percent(value),
+                                    field.equals("originationBps") ? "Charged once when funded" : "Per financial period")).toList(),
+                    Integer.toString(rate), List.of("bank"), true);
         }
     }
 
     private void searchChoices(FormBuilder form, String family) {
         if (form.has("companySearch")) {
-            form.choice("companySearch", "Company search", "Choose a company ID or type part of a company/listing name.",
-                    engine.governance.companies().stream().map(c -> option(c.id(), c.name(), c.id())).toList(),
+            form.choice("companySearch", "Company search", "Choose a company or type part of a company/listing name.",
+                    engine.governance.companies().stream().map(c -> option(c.id(), display.company(c.id()), "Company shares")).toList(),
                     "", List.of(), true);
         }
         if (form.has("itemSearch")) {
             Map<String, FormChoice> choices = new LinkedHashMap<>();
             for (FormChoice prior : form.choices("itemSearch")) {
                 if (prior.value().matches("[a-z0-9_.-]+:[a-z0-9_./-]+")) {
-                    choices.put(prior.value(), option(prior.value(), prior.value(), "Item ID; custom searches are supported."));
+                    choices.put(prior.value(), option(prior.value(), EconomyDisplay.registry(prior.value()), "Item; custom searches are supported."));
                 }
             }
-            engine.values.prices().forEach((id, price) -> choices.put(id, option(id, id,
+            engine.values.prices().forEach((id, price) -> choices.put(id, option(id, EconomyDisplay.registry(id),
                     engine.values.isCurrency(id) ? "Currency - not sellable at the Hub" : "Hub value " + Money.format(price) + " each")));
-            form.choice("itemSearch", "Item price search", "Search priced registry IDs or type any item ID/search text.",
+            form.choice("itemSearch", "Item price search", "Choose a priced item or enter search text.",
                     choices.values(), "", List.of(), true);
         }
         if (form.has("search") && family.equals("market")) {
             Map<String, FormChoice> choices = new LinkedHashMap<>();
             for (EconomyData.MarketListing listing : engine.data.market.values()) {
                 if (listing.remaining <= 0 || listing.expiresAt <= engine.clock.millis()) continue;
-                choices.putIfAbsent(listing.item.item(), option(listing.item.item(), listing.item.item(), "Search every listing of this item."));
-                choices.put(listing.id, option(listing.id, listing.remaining + " x " + listing.item.item(),
-                        Money.format(listing.unitPrice) + " each; seller " + playerName(listing.seller)));
+                choices.putIfAbsent(listing.item.item(), option(listing.item.item(), EconomyDisplay.registry(listing.item.item()), "Search every listing of this item."));
+                choices.put(listing.id, option(listing.id, listing.remaining + " × " + display.item(listing.item),
+                        Money.format(listing.unitPrice) + " each; seller " + display.player(listing.seller)));
             }
-            form.choice("search", "Marketplace search", "Choose an item/listing, or type part of an item ID or seller name.",
+            form.choice("search", "Marketplace search", "Choose an item/listing, or type part of an item or seller name.",
                     choices.values(), "", List.of(), true);
         }
     }
@@ -528,15 +540,11 @@ public final class EconomyForms implements FormProvider {
         catch (UserError unknown) { return null; }
     }
 
-    private String playerName(String id) {
-        return engine.data.playerNames.getOrDefault(id, id);
-    }
-
     private String playerLabel(String account, String prior) {
-        if (!account.startsWith("player:")) return account;
+        if (!account.startsWith("player:")) return display.account(account);
         String id = account.substring(7);
-        String fallback = prior.matches("[A-Za-z0-9_]{1,16}") ? prior : "Player " + id;
-        return engine.data.playerNames.getOrDefault(id, fallback);
+        String fallback = prior.matches("[A-Za-z0-9_]{1,16}") ? prior : "Former player";
+        return DisplayText.name(engine.data.playerNames.get(id), fallback) + " - Personal account";
     }
 
     private String cachedValue(String key) {
@@ -544,8 +552,9 @@ public final class EconomyForms implements FormProvider {
         return value == null ? "; no cached valuation" : "; last valuation " + Money.format(value.value);
     }
 
-    private static String chunkLabel(Actor actor, String key) {
-        return (key.equals(actor.chunkKey()) ? "Current chunk - " : "") + key;
+    private String chunkLabel(Actor actor, String key) {
+        String territory = engine.governance.claim(key).map(display::claimTitle).map(title -> title + " - ").orElse("");
+        return (key.equals(actor.chunkKey()) ? "Current location - " : "") + territory + DisplayText.chunk(key);
     }
 
     private static FormChoice option(String value, String label, String detail) {

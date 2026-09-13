@@ -133,8 +133,10 @@ public final class ForgeTrades {
     public String command(Actor actor, List<String> args, ServerPlayer player) {
         if (active == null) throw new UserError("Trade definitions are not loaded.");
         if (args.isEmpty() || (args.size() == 1 && args.get(0).equalsIgnoreCase("list"))) {
-            return "Configured custom merchants: " + String.join(", ", new java.util.TreeSet<>(active.merchants().keySet()))
-                    + "\nOperators: /sce merchant spawn <id>. Merchants restock once per 24000 world ticks.";
+            return "Available merchants: " + active.merchants().keySet().stream().sorted()
+                    .map(dev.statecraft.api.ui.DisplayText::words).collect(java.util.stream.Collectors.joining(", "))
+                    + "\nMerchants restock once per Minecraft day."
+                    + (actor.admin() ? "\nOperator command: /sce merchant spawn <id>." : "");
         }
         EconomyEngine.requireAdmin(actor);
         if (args.size() != 2 || !args.get(0).equalsIgnoreCase("spawn")) throw new UserError("Use merchant list or merchant spawn <id>.");

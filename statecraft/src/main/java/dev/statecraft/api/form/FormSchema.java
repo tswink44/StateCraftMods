@@ -6,6 +6,7 @@ import java.util.Optional;
 
 public record FormSchema(List<FormField> fields) {
     public static final int MAX_FIELDS = 16;
+    public static final int MAX_VALUE_LENGTH = dev.statecraft.api.CommandLine.MAX_LENGTH;
     public static final int PAGE_SIZE = 20;
     public static final FormSchema EMPTY = new FormSchema(List.of());
 

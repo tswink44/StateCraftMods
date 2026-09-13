@@ -85,6 +85,16 @@ class CoreApiTest {
     }
 
     @Test
+    void unassignedNationalLandDoesNotCreateImaginaryStateOrCityBorders() {
+        var national = new TerritorySnapshot.Territory(0, 0, "nation", null, null,
+                "Nation", null, null, "nation:nation", 0, 0, "Nation");
+        var snapshot = new TerritorySnapshot("minecraft:overworld", 0, 0, 8, List.of(national));
+        assertEquals(4, BoundaryEdges.of(snapshot, BoundaryEdges.Mode.NATION).size());
+        assertEquals(0, BoundaryEdges.of(snapshot, BoundaryEdges.Mode.STATE).size());
+        assertEquals(0, BoundaryEdges.of(snapshot, BoundaryEdges.Mode.CITY).size());
+    }
+
+    @Test
     void resultRowsExposeCopyableIdsAccountsAndChunkKeys() {
         String id = "01234567-89ab-cdef-0123-456789abcdef";
         assertEquals(id, ResultSelection.identifier("Listing " + id + " at minecraft:overworld|1|2"));

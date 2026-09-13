@@ -46,6 +46,7 @@ public class GovernanceEngine implements GovernanceAccess {
     final Commerce commerce;
     final Communications communications;
     final Integrity integrity;
+    final Territory territory;
     private final Runnable dirty;
     private final Set<String> observedOperators = new HashSet<>();
     private List<String> validationProblems = List.of();
@@ -61,11 +62,12 @@ public class GovernanceEngine implements GovernanceAccess {
         this.clock = Objects.requireNonNull(clock, "clock");
         this.dirty = Objects.requireNonNull(dirty, "dirty");
         configure(config);
-        Integrity.initialize(data);
+        if (Integrity.initialize(data)) changed();
         setEconomy(economy);
         politics = new Politics(this);
         commerce = new Commerce(this);
         communications = new Communications(this);
+        territory = new Territory(this);
         integrity = new Integrity(this);
         refreshValidation();
     }
@@ -180,7 +182,7 @@ public class GovernanceEngine implements GovernanceAccess {
     }
 
     public synchronized List<String> validationIssues() {
-        Integrity.initialize(data);
+        if (Integrity.initialize(data)) changed();
         refreshValidation();
         return validationProblems;
     }
@@ -297,8 +299,7 @@ public class GovernanceEngine implements GovernanceAccess {
         if (!validationProblems.isEmpty()) return false;
         Claim claim = data.claims.get(chunkKey);
         if (player == null || !data.players.containsKey(player.toString()) || !viewableClaim(claim)) return false;
-        Government city = data.governments.get(claim.cityId);
-        return flag(city, "foreignProperty") || nationOf(player).filter(nationId(city)::equals).isPresent();
+        return flag(claimGovernment(claim), "foreignProperty") || nationOf(player).filter(claim.nationId::equals).isPresent();
     }
 
     @Override
@@ -383,33 +384,33 @@ public class GovernanceEngine implements GovernanceAccess {
         if (!canonicalChunk(chunkKey)) return false;
         if (actor.admin() && bypassEnabled(actor.id())) return true;
         Claim claim = data.claims.get(chunkKey);
-        if (claim != null && !validationProblems.isEmpty()) return false;
+        if (data.claims.containsKey(chunkKey) && (claim == null || !validationProblems.isEmpty())) return false;
         boolean pvp = action == AccessAction.PVP || (action == AccessAction.ATTACK && targetPlayer != null);
         if (claim == null) return !pvp || pvpAllowed(actor.id(), targetPlayer, null);
         if (!viewableClaim(claim)) return false;
-        Government city = data.governments.get(claim.cityId);
-        if (pvp) return pvpAllowed(actor.id(), targetPlayer, city);
+        Government jurisdiction = claimGovernment(claim);
+        if (pvp) return pvpAllowed(actor.id(), targetPlayer, jurisdiction);
         if (mayAccessAccount(actor.id(), claim.ownerAccount)) return true;
         Set<String> permits = claim.permits.get(actor.id().toString());
         if (permits != null && permits.contains(action.name())) return true;
         // Diplomatic public access must never silently open privately purchased buildings.
-        if (!account(city).equals(claim.ownerAccount)) return false;
+        if (!publicTitle(claim)) return false;
         String visitorNation = nationOf(actor.id()).orElse(null);
-        String landNation = nationId(city);
-        if (landNation.equals(visitorNation)) return flag(city, "memberAccess");
-        if (visitorNation == null) return flag(city, "foreignAccess");
+        String landNation = claim.nationId;
+        if (landNation.equals(visitorNation)) return flag(jurisdiction, "memberAccess");
+        if (visitorNation == null) return flag(jurisdiction, "foreignAccess");
         return switch (politics.relationStatus(visitorNation, landNation)) {
-            case "ALLIED" -> flag(city, "alliedAccess");
-            case "WAR" -> flag(city, "enemyAccess");
-            default -> flag(city, "foreignAccess");
+            case "ALLIED" -> flag(jurisdiction, "alliedAccess");
+            case "WAR" -> flag(jurisdiction, "enemyAccess");
+            default -> flag(jurisdiction, "foreignAccess");
         };
     }
 
     public synchronized boolean allowsExplosion(String chunkKey) {
         if (!canonicalChunk(chunkKey)) return false;
         Claim claim = data.claims.get(chunkKey);
-        return claim == null ? config.wildernessExplosions
-                : validationProblems.isEmpty() && viewableClaim(claim) && flag(data.governments.get(claim.cityId), "explosions");
+        return claim == null ? !data.claims.containsKey(chunkKey) && config.wildernessExplosions
+                : validationProblems.isEmpty() && viewableClaim(claim) && flag(claimGovernment(claim), "explosions");
     }
 
     public synchronized void recordImprovement(String chunkKey, int delta) {
@@ -431,10 +432,11 @@ public class GovernanceEngine implements GovernanceAccess {
         login(actor);
         if (!autoClaimEnabled(actor.id())) return;
         requireOperational();
-        Government city = ownGovernment(actor, Kind.CITY);
+        Government nation = ownGovernment(actor, Kind.NATION);
+        territory.nationalManager(actor, nation);
         Claim existing = data.claims.get(actor.chunkKey());
-        if (existing != null && city.id.equals(existing.cityId)) return;
-        claimChunk(actor, city, actor.chunkKey());
+        if (viewableClaim(existing) && nation.id.equals(existing.nationId)) return;
+        claimChunk(actor, nation, actor.chunkKey());
     }
 
     /** Informational only: protection also checks the current Actor.admin on every action. */
@@ -735,12 +737,13 @@ public class GovernanceEngine implements GovernanceAccess {
             case STATE -> {
                 if (!government.id.equals(player.stateId)) {
                     player.cityId = null;
-                    player.autoClaim = false;
                 }
+                if (!government.parentId.equals(player.nationId)) player.autoClaim = false;
                 player.nationId = government.parentId;
                 player.stateId = government.id;
             }
             case CITY -> {
+                if (!nationId(government).equals(player.nationId)) player.autoClaim = false;
                 player.nationId = nationId(government);
                 player.stateId = government.parentId;
                 player.cityId = government.id;
@@ -835,7 +838,9 @@ public class GovernanceEngine implements GovernanceAccess {
         List<Government> removed = subtree(government);
         Set<String> ids = removed.stream().map(g -> g.id).collect(Collectors.toSet());
         List<Claim> claims = data.claims.values().stream().filter(Objects::nonNull)
-                .filter(c -> ids.contains(c.cityId)).toList();
+                .filter(c -> ids.contains(c.nationId) || ids.contains(c.stateId) || ids.contains(c.cityId)).toList();
+        check(government.kind == Kind.NATION || claims.isEmpty(),
+                "Clear this government's state/city allocations before disbanding it. Nation land is never silently unclaimed.");
         check(cascade || (removed.size() == 1 && claims.isEmpty() && members(government).size() <= 1),
                 "Government is populated or has children/claims; explicitly use cascade.");
         for (Government current : removed) {
@@ -844,14 +849,16 @@ public class GovernanceEngine implements GovernanceAccess {
             check(!commerce.governmentLocked(current.id) && !politics.governmentLocked(current.id),
                     "Resolve active elections, bills, contracts or diplomacy before disbanding " + current.name + ".");
         }
-        for (Claim claim : claims) {
-            assertClaimFree(claim.key, null);
-            check(administrator || ("city:" + claim.cityId).equals(claim.ownerAccount),
-                    "Privately owned property must be returned to its city before disbanding.");
-        }
         Set<String> accounts = removed.stream().map(this::account).collect(Collectors.toSet());
+        for (Claim claim : claims) {
+            check(viewableClaim(claim) && government.id.equals(claim.nationId),
+                    "Repair inconsistent claims before disbanding their nation.");
+            assertClaimFree(claim.key, null);
+            check(publicTitle(claim) && accounts.contains(claim.ownerAccount),
+                    "Private or externally owned property must be returned to its nation's public ownership before disbanding.");
+        }
         check(data.claims.values().stream().filter(Objects::nonNull)
-                        .noneMatch(c -> !ids.contains(c.cityId) && accounts.contains(c.ownerAccount)),
+                        .noneMatch(c -> !claims.contains(c) && accounts.contains(c.ownerAccount)),
                 "A treasury owns property outside this subtree; transfer it first.");
         return removed;
     }
@@ -867,7 +874,8 @@ public class GovernanceEngine implements GovernanceAccess {
             data.laws.remove(id);
             data.emergencies.remove(id);
         }
-        data.claims.values().removeIf(c -> c != null && ids.contains(c.cityId));
+        if (government.kind == Kind.NATION)
+            data.claims.values().removeIf(c -> c != null && government.id.equals(c.nationId));
         data.bills.values().removeIf(b -> b != null && ids.contains(b.nationId));
         data.invitations.values().removeIf(i -> i != null && ids.contains(i.governmentId));
         history("government", government.id, "Disbanded " + government.name + (cascade ? " with descendants" : ""));
@@ -888,7 +896,7 @@ public class GovernanceEngine implements GovernanceAccess {
             player.cityId = null;
             changed();
         }
-        if (player.cityId == null && player.autoClaim) {
+        if (player.nationId == null && player.autoClaim) {
             player.autoClaim = false;
             changed();
         }
@@ -898,29 +906,48 @@ public class GovernanceEngine implements GovernanceAccess {
         String action = args.optional(1, "info");
         switch (action) {
             case "claim" -> {
-                args.between(2, 4, "chunk claim [city] [chunkKey|here]");
-                Government city = args.size() > 2 ? gov(args.get(2)) : ownGovernment(actor, Kind.CITY);
-                String key = chunkKey(actor, args.optional(3, "here"));
-                claimChunk(actor, city, key);
-                return "Claimed " + key + " for " + city.name + ".";
+                args.between(2, 4, "chunk claim [nation] [chunks|here]");
+                boolean locationOnly = args.size() == 3 && ("here".equals(args.get(2)) || args.get(2).contains("|"));
+                Government nation = args.size() > 2 && !locationOnly ? gov(args.get(2)) : ownGovernment(actor, Kind.NATION);
+                List<String> keys = territory.keys(actor, locationOnly ? args.get(2) : args.optional(3, "here"));
+                territory.claim(actor, nation, keys);
+                return "Claimed " + keys.size() + " chunk(s) for " + nation.name + "; state and city are unassigned.";
             }
             case "unclaim" -> {
-                args.between(2, 3, "chunk unclaim [chunkKey|here]");
-                String key = chunkKey(actor, args.optional(2, "here"));
-                unclaim(actor, key, false);
-                return "Unclaimed " + key + ".";
+                args.between(2, 4, "chunk unclaim [nation] [chunks|here]");
+                boolean locationOnly = args.size() == 3 && ("here".equals(args.get(2)) || args.get(2).contains("|"));
+                Government nation = args.size() > 2 && !locationOnly ? gov(args.get(2)) : ownGovernment(actor, Kind.NATION);
+                List<String> keys = territory.keys(actor, locationOnly ? args.get(2) : args.optional(3, "here"));
+                territory.unclaim(actor, nation, keys, false);
+                return "Unclaimed " + keys.size() + " chunk(s) from " + nation.name + ".";
+            }
+            case "assignstate" -> {
+                args.exactly(5, "chunk assignstate <nation> <chunks> <state_or_none>");
+                Government nation = gov(args.get(2));
+                Government target = "none".equals(args.get(4)) ? null : gov(args.get(4));
+                List<Territory.Allocation> plans = territory.statePlan(actor, nation, territory.keys(actor, args.get(3)), target);
+                territory.apply(plans, "allocation", actor);
+                return "Updated state allocation for " + plans.size() + " chunk(s); private titles and treasury balances are unchanged.";
+            }
+            case "assigncity" -> {
+                args.exactly(5, "chunk assigncity <state> <chunks> <city_or_none>");
+                Government state = gov(args.get(2));
+                Government target = "none".equals(args.get(4)) ? null : gov(args.get(4));
+                List<Territory.Allocation> plans = territory.cityPlan(actor, state, territory.keys(actor, args.get(3)), target);
+                territory.apply(plans, "allocation", actor);
+                return "Updated city allocation for " + plans.size() + " chunk(s); private titles and treasury balances are unchanged.";
             }
             case "autoclaim" -> {
                 args.exactly(3, "chunk autoclaim <on|off>");
                 check(Set.of("on", "off").contains(args.get(2)), "Use on or off.");
                 boolean enabled = "on".equals(args.get(2));
-                if (enabled) manage(actor, ownGovernment(actor, Kind.CITY));
+                if (enabled) territory.nationalManager(actor, ownGovernment(actor, Kind.NATION));
                 Player player = requirePlayer(actor.id());
                 if (player.autoClaim != enabled) {
                     player.autoClaim = enabled;
                     changed();
                 }
-                return "Automatic claiming " + (enabled ? "enabled for your resident city." : "disabled.");
+                return "Automatic claiming " + (enabled ? "enabled for your nation." : "disabled.");
             }
             case "info" -> {
                 args.between(1, 3, "chunk info [chunkKey|here]");
@@ -930,11 +957,10 @@ public class GovernanceEngine implements GovernanceAccess {
                 args.between(2, 4, "chunk list [government|all] [page]");
                 String ref = args.optional(2, "all");
                 Government government = "all".equals(ref) ? null : gov(ref);
-                Set<String> cities = government == null ? null : subtree(government).stream()
-                        .filter(g -> g.kind == Kind.CITY).map(g -> g.id).collect(Collectors.toSet());
                 List<String> rows = data.claims.values().stream().filter(this::viewableClaim)
-                        .filter(c -> cities == null || cities.contains(c.cityId)).sorted(Comparator.comparing(c -> c.key))
-                        .map(c -> c.key + " city=" + governmentName(c.cityId) + " owner=" + c.ownerAccount
+                        .filter(c -> government == null || claimInGovernment(c, government)).sorted(Comparator.comparing(c -> c.key))
+                        .map(c -> c.key + " nation=" + governmentName(c.nationId)
+                                + " state=" + governmentName(c.stateId) + " city=" + governmentName(c.cityId) + " owner=" + c.ownerAccount
                                 + " improvements=" + c.improvements).toList();
                 return page("Claims", rows, args.page(3));
             }
@@ -996,60 +1022,27 @@ public class GovernanceEngine implements GovernanceAccess {
         }
     }
 
-    void claimChunk(Actor actor, Government city, String key) {
-        validateClaim(actor, city, key);
-        Claim claim = new Claim();
-        claim.key = key;
-        claim.cityId = city.id;
-        claim.ownerAccount = account(city);
-        claim.claimedAt = now();
-        pay(List.of(claimFee(actor, city)));
-        data.claims.put(key, claim);
-        changed();
-        history("claim", key, "Claimed by " + city.id + " for " + actor.id());
+    void claimChunk(Actor actor, Government nation, String key) {
+        territory.claim(actor, nation, List.of(key));
     }
 
-    EconomyAccess.Transfer claimFee(Actor actor, Government city) {
-        return new EconomyAccess.Transfer(actor.account(), account(city), config.claimFee, "City claim");
+    EconomyAccess.Transfer claimFee(Actor actor, Government nation) {
+        return territory.claimFee(actor, nation, 1);
     }
 
-    void validateClaim(Actor actor, Government city, String key) {
-        check(city.kind == Kind.CITY, "Chunks must belong to a city.");
-        manage(actor, city);
-        check(!data.claims.containsKey(key), "This chunk is already claimed.");
-        check(data.claims.size() < config.maxTotalClaims, "World claim limit reached.");
-        Set<String> existing = cityClaims(city.id);
-        check(existing.size() < config.maxClaimsPerCity, "City claim limit reached.");
-        ChunkKey parsed = ChunkKey.parse(key);
-        if (config.requireAdjacentClaims) {
-            List<ChunkKey> dimension = existing.stream().map(ChunkKey::parse)
-                    .filter(c -> c.dimension().equals(parsed.dimension())).toList();
-            check(dimension.isEmpty() || dimension.stream().anyMatch(parsed::adjacent),
-                    "Claims must share an edge with this city's land in the same dimension.");
-        }
+    void validateClaim(Actor actor, Government nation, String key) {
+        territory.claimPlan(actor, nation, List.of(key));
     }
 
     void unclaim(Actor actor, String key, boolean force) {
-        unclaimPlan(actor, key, force);
-        data.claims.remove(key);
-        history("claim", key, "Unclaimed by " + actor.id() + (force ? " (forced)" : ""));
+        Claim claim = requiredClaim(key);
+        Government nation = force ? null : gov(claim.nationId);
+        territory.unclaim(actor, nation, List.of(key), force);
     }
 
     Claim unclaimPlan(Actor actor, String key, boolean force) {
         Claim claim = requiredClaim(key);
-        if (force) admin(actor);
-        else {
-            Government city = gov(claim.cityId);
-            manage(actor, city);
-            check(actor.admin() || mayAccessAccount(actor.id(), claim.ownerAccount), "Private property cannot be unclaimed without its owner's authority.");
-        }
-        assertClaimFree(key, null);
-        if (!force && config.requireConnectedClaims) {
-            Set<String> remaining = cityClaims(claim.cityId);
-            remaining.remove(key);
-            check(connected(remaining), "Unclaiming this chunk would split the city's territory.");
-        }
-        return claim;
+        return territory.unclaimPlan(actor, force ? null : gov(claim.nationId), List.of(key), force).get(0);
     }
 
     void assertClaimFree(String key, String ignoredTreaty) {
@@ -1092,6 +1085,16 @@ public class GovernanceEngine implements GovernanceAccess {
                 .map(c -> c.key).collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
+    Set<String> stateClaims(String stateId) {
+        return data.claims.values().stream().filter(Objects::nonNull).filter(c -> stateId.equals(c.stateId))
+                .map(c -> c.key).collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    Set<String> nationClaims(String nationId) {
+        return data.claims.values().stream().filter(Objects::nonNull).filter(c -> nationId.equals(c.nationId))
+                .map(c -> c.key).collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
     private String territoryMap(Actor actor, int radius) {
         StringBuilder result = new StringBuilder("Map " + actor.dimension()
                 + " (north up): @ you, . wilderness, C your city, N your nation, A ally, W war, # other\n");
@@ -1100,11 +1103,12 @@ public class GovernanceEngine implements GovernanceAccess {
         for (int z = actor.chunkZ() - radius; z <= actor.chunkZ() + radius; z++) {
             for (int x = actor.chunkX() - radius; x <= actor.chunkX() + radius; x++) {
                 if (x == actor.chunkX() && z == actor.chunkZ()) { result.append('@'); continue; }
-                Claim claim = data.claims.get(actor.dimension() + "|" + x + "|" + z);
-                if (claim == null) { result.append('.'); continue; }
+                String key = actor.dimension() + "|" + x + "|" + z;
+                Claim claim = data.claims.get(key);
+                if (claim == null) { result.append(data.claims.containsKey(key) ? '?' : '.'); continue; }
                 if (!viewableClaim(claim)) { result.append('?'); continue; }
-                String nation = nationId(data.governments.get(claim.cityId));
-                result.append(Objects.equals(player.cityId, claim.cityId) ? 'C'
+                String nation = claim.nationId;
+                result.append(claim.cityId != null && Objects.equals(player.cityId, claim.cityId) ? 'C'
                         : nation.equals(ownNation) ? 'N'
                         : "ALLIED".equals(politics.relationStatus(ownNation, nation)) ? 'A'
                         : "WAR".equals(politics.relationStatus(ownNation, nation)) ? 'W' : '#');
@@ -1116,11 +1120,10 @@ public class GovernanceEngine implements GovernanceAccess {
 
     String chunkInfo(String key) {
         Claim claim = data.claims.get(key);
-        if (claim == null) return key + ": wilderness.";
-        Government city = data.governments.get(claim.cityId);
+        if (claim == null && !data.claims.containsKey(key)) return key + ": wilderness.";
         if (!viewableClaim(claim)) return key + ": invalid claim; protections fail closed. Ask an operator to audit/reassign it.";
-        return key + "\nCity: " + city.name + "\nState: " + governmentName(city.parentId)
-                + "\nNation: " + governmentName(nationId(city)) + "\nPrivate title: " + claim.ownerAccount
+        return key + "\nCity: " + governmentName(claim.cityId) + "\nState: " + governmentName(claim.stateId)
+                + "\nNation: " + governmentName(claim.nationId) + "\nPrivate title: " + claim.ownerAccount
                 + "\nImprovements: " + claim.improvements + "\nClaimed: " + claim.claimedAt
                 + "\nEconomy encumbered: " + economy.isClaimEncumbered(key)
                 + "\nContract reserved: " + commerce.claimLocked(key)
@@ -1186,19 +1189,11 @@ public class GovernanceEngine implements GovernanceAccess {
                 return "Private title reassigned; political hierarchy is unchanged.";
             }
             case "reassign" -> {
-                args.exactly(4, "admin reassign <chunkKey|here> <city>");
+                args.exactly(4, "admin reassign <chunkKey|here> <government>");
                 String key = chunkKey(actor, args.get(2));
-                Claim claim = requiredClaim(key);
-                Government city = gov(args.get(3));
-                check(city.kind == Kind.CITY, "The destination must be a city.");
-                check(!city.id.equals(claim.cityId), "The chunk already belongs to that city.");
-                assertClaimFree(key, null);
-                check(cityClaims(city.id).size() < config.maxClaimsPerCity, "Destination city claim limit reached.");
-                if (("city:" + claim.cityId).equals(claim.ownerAccount)) claim.ownerAccount = account(city);
-                claim.cityId = city.id;
-                claim.permits.clear();
-                history("admin", key, "Reassigned to " + city.id + " by " + actor.id());
-                return "Political ownership reassigned; private non-city titles were preserved. Adjacency was explicitly bypassed.";
+                Territory.Allocation plan = territory.reassignPlan(actor, key, gov(args.get(3)));
+                territory.apply(List.of(plan), "admin", actor);
+                return "National ownership and optional allocations reassigned; private titles and permits were preserved. Adjacency was explicitly bypassed.";
             }
             case "diagnostics" -> {
                 args.between(2, 3, "admin diagnostics [chunkKey|here]");
@@ -1332,10 +1327,34 @@ public class GovernanceEngine implements GovernanceAccess {
 
     boolean viewableClaim(Claim claim) {
         if (claim == null || claim.key == null || data.claims.get(claim.key) != claim) return false;
+        return claimGovernment(claim) != null && claim.ownerAccount != null && canonicalChunk(claim.key);
+    }
+
+    Government claimGovernment(Claim claim) {
+        if (claim == null) return null;
+        Government nation = data.governments.get(claim.nationId);
+        if (!validHierarchy(nation) || nation.kind != Kind.NATION) return null;
+        if (claim.stateId == null) return claim.cityId == null ? nation : null;
+        Government state = data.governments.get(claim.stateId);
+        if (!validHierarchy(state) || state.kind != Kind.STATE || !nation.id.equals(state.parentId)) return null;
+        if (claim.cityId == null) return state;
         Government city = data.governments.get(claim.cityId);
-        if (!validHierarchy(city) || city.kind != Kind.CITY || claim.ownerAccount == null) return false;
-        try { ChunkKey.parse(claim.key); return true; }
-        catch (UserError e) { return false; }
+        return validHierarchy(city) && city.kind == Kind.CITY && state.id.equals(city.parentId) ? city : null;
+    }
+
+    boolean claimInGovernment(Claim claim, Government government) {
+        if (claimGovernment(claim) == null || !validHierarchy(government)) return false;
+        return switch (government.kind) {
+            case NATION -> government.id.equals(claim.nationId);
+            case STATE -> government.id.equals(claim.stateId);
+            case CITY -> government.id.equals(claim.cityId);
+        };
+    }
+
+    boolean publicTitle(Claim claim) {
+        if (claim == null || claim.ownerAccount == null) return false;
+        String[] parts = claim.ownerAccount.split(":", 2);
+        return parts.length == 2 && Set.of("nation", "state", "city").contains(parts[0]) && validUuid(parts[1]);
     }
 
     boolean member(String playerId, Government government) {
@@ -1505,15 +1524,15 @@ public class GovernanceEngine implements GovernanceAccess {
     }
 
     boolean eligibleOwner(Claim claim, String account) {
-        Government city = data.governments.get(claim.cityId);
-        if (!validHierarchy(city)) return false;
-        if (flag(city, "foreignProperty")) return true;
+        Government jurisdiction = claimGovernment(claim);
+        if (jurisdiction == null) return false;
+        if (flag(jurisdiction, "foreignProperty")) return true;
         String[] parts = account.split(":", 2);
         String nation;
         if ("player".equals(parts[0])) nation = nationOf(UUID.fromString(parts[1])).orElse(null);
         else if ("company".equals(parts[0])) nation = nationOf(UUID.fromString(data.companies.get(parts[1]).owner)).orElse(null);
         else nation = nationId(data.governments.get(parts[1]));
-        return Objects.equals(nationId(city), nation);
+        return Objects.equals(claim.nationId, nation);
     }
 
     void assertAccountDisposable(String account) {
@@ -1600,12 +1619,18 @@ public class GovernanceEngine implements GovernanceAccess {
         return normalized;
     }
 
+    public synchronized Optional<String> knownPlayerName(UUID id) {
+        Player player = data.players.get(id.toString());
+        return player == null ? Optional.empty() : Optional.ofNullable(player.name);
+    }
+
     String playerName(String id) {
         Player player = data.players.get(id);
         return player == null || player.name == null ? String.valueOf(id) : player.name;
     }
 
     String governmentName(String id) {
+        if (id == null) return "unassigned";
         Government government = data.governments.get(id);
         return government == null ? "[deleted " + id + "]" : government.name;
     }
@@ -1624,6 +1649,8 @@ public class GovernanceEngine implements GovernanceAccess {
                 + "\nLeader: " + playerName(government.leader) + "\nParent: "
                 + (government.parentId == null ? "none" : governmentName(government.parentId))
                 + "\nCitizens: " + members(government).size() + "\nOfficers: " + government.officers.size()
+                + "\nTerritory: " + data.claims.values().stream().filter(Objects::nonNull)
+                        .filter(c -> claimInGovernment(c, government)).count() + " chunk(s)"
                 + "\nTag: " + government.tag + "\nFlag: " + government.flag
                 + "\nDescription: " + government.description + "\nTreasury: " + account(government);
     }
@@ -1702,8 +1729,7 @@ public class GovernanceEngine implements GovernanceAccess {
 
     private ClaimView view(Claim claim) {
         ChunkKey key = ChunkKey.parse(claim.key);
-        Government city = data.governments.get(claim.cityId);
-        return new ClaimView(claim.key, key.dimension(), key.x(), key.z(), city.id, city.parentId,
-                nationId(city), claim.ownerAccount, claim.improvements, claim.claimedAt);
+        return new ClaimView(claim.key, key.dimension(), key.x(), key.z(), claim.cityId, claim.stateId,
+                claim.nationId, claim.ownerAccount, claim.improvements, claim.claimedAt);
     }
 }

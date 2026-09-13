@@ -10,6 +10,7 @@ import dev.statecraft.api.UserError;
 import dev.statecraft.api.ui.ActionIntent;
 import dev.statecraft.api.ui.ActionPreview;
 import dev.statecraft.api.ui.ActionSelection;
+import dev.statecraft.api.ui.DisplayText;
 import dev.statecraft.api.ui.UiText;
 import dev.statecraft.domain.GovernanceData.*;
 
@@ -30,7 +31,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static dev.statecraft.domain.GovernanceEngine.check;
-import static dev.statecraft.domain.GovernancePresentation.t;
+import static dev.statecraft.domain.GovernancePresentation.*;
 
 /** Pure validation and calculation: no execute/rollback, payment, ticking or model initialization. */
 final class GovernancePreviews {
@@ -68,7 +69,7 @@ final class GovernancePreviews {
             args.exactly(2, "gui <page>");
             check(selection.intent() == ActionIntent.NAVIGATION, "Use a registered navigation action.");
             MenuRegistry.get(args.get(1));
-            review.effect(t("effect.navigate", "Open %s without changing governance data.", args.get(1)));
+            review.effect(t("effect.navigate", "Open %s without changing governance data.", MenuRegistry.get(args.get(1)).title()));
             return review.finish();
         }
         check(actor.admin() || !e.requiresRepair() || Set.of("help", "info").contains(family),
@@ -130,7 +131,7 @@ final class GovernancePreviews {
             e.checkCreationCapacity(kind, parent);
             e.checkCreationLeader(kind, parent, leader);
             review.field("name", "Name", name);
-            review.field("level", "Government level", kind.name());
+            review.field("level", "Government level", kind.name(), DisplayText.words(kind.name()));
             review.party("leader", leader.id);
             review.membership(leader);
             review.payments(List.of(e.creationFee(actor, kind, parent)), false, true);
@@ -173,7 +174,7 @@ final class GovernancePreviews {
                 review.party("subject_player", target.id);
                 review.membership(target);
                 review.bind("membership-removal", scope.stream().sorted().toList());
-                review.effect(t("effect.leave", "Remove the selected citizenship and descendant memberships, offices and automatic claiming. Ancestor citizenship and offices remain intact."));
+                review.effect(t("effect.leave", "Remove the selected citizenship and descendant memberships and offices. Ancestor citizenship and offices remain intact. Automatic claiming ends only when national citizenship is removed."));
             }
             case "invite", "revoke", "decline" -> {
                 args.exactly("decline".equals(action) ? 3 : 4, "government invitation");
@@ -214,7 +215,7 @@ final class GovernancePreviews {
                 check(e.member(target.id, government) && !target.id.equals(government.leader), "Officers must be non-leader citizens.");
                 rosterChange(government.officers, target.id, args.get(4), e.config.maxOfficers);
                 review.party("officer", target.id);
-                review.field("operation", "Operation", args.get(4));
+                review.field("operation", "Operation", args.get(4), DisplayText.words(args.get(4)));
                 review.effect(t("effect.officer", "Change this official roster and its scoped descendant-management authority."));
             }
             case "rename", "description", "tag", "flag" -> {
@@ -239,11 +240,11 @@ final class GovernancePreviews {
                 String value = args.get(4);
                 if ("inherit".equals(value)) check(GovernanceSettings.defaults(e.config).containsKey(policy), "Unknown government policy.");
                 else value = GovernanceSettings.validate(policy, value);
-                review.field("policy", "Policy", policy);
-                review.field("previous", "Previous value", government.settings.getOrDefault(policy, "inherit"));
-                review.field("replacement", "Replacement value", value);
-                review.field("effective", "Current effective value", e.settings(government).get(policy));
-                review.field("resulting_effective", "Resulting effective value", e.previewSettings(government, policy, value).get(policy));
+                review.field("policy", "Policy", policy, policyName(policy));
+                review.policyValue("previous", "Previous value", policy, government.settings.getOrDefault(policy, "inherit"));
+                review.policyValue("replacement", "Replacement value", policy, value);
+                review.policyValue("effective", "Current effective value", policy, e.settings(government).get(policy));
+                review.policyValue("resulting_effective", "Resulting effective value", policy, e.previewSettings(government, policy, value).get(policy));
                 review.bind("policy-default", GovernanceSettings.defaults(e.config).get(policy));
                 for (Government scope : e.ancestors(government)) {
                     if (scope == government || GovernanceSettings.inherited(policy))
@@ -268,7 +269,7 @@ final class GovernancePreviews {
 
     private String targetChunk(String reference) {
         String key = e.chunkKey(actor, reference);
-        review.field("target_chunk", "Target chunk", key);
+        review.field("target_chunk", "Target chunk", key, chunkName(key));
         return key;
     }
 
@@ -276,36 +277,61 @@ final class GovernancePreviews {
         String action = args.optional(1, "info");
         switch (action) {
             case "claim" -> {
-                args.between(2, 4, "chunk claim [city] [chunk]");
-                Government city = args.size() > 2 ? e.gov(args.get(2)) : own(Kind.CITY);
-                String key = targetChunk(args.optional(3, "here"));
-                e.validateClaim(actor, city, key);
-                review.government(city);
-                review.field("chunk", "Chunk", key);
-                review.field("private_title", "Private title", e.account(city));
-                review.payments(List.of(e.claimFee(actor, city)), false, true);
-                review.effect(t("effect.claim", "Claim this unowned chunk for the city and create its public city title. The claim fee is paid now."));
+                args.between(2, 4, "chunk claim [nation] [chunks|here]");
+                boolean locationOnly = args.size() == 3 && ("here".equals(args.get(2)) || args.get(2).contains("|"));
+                Government nation = args.size() > 2 && !locationOnly ? e.gov(args.get(2)) : own(Kind.NATION);
+                List<String> keys = e.territory.keys(actor, locationOnly ? args.get(2) : args.optional(3, "here"));
+                e.territory.claimPlan(actor, nation, keys);
+                review.government(nation);
+                if (keys.size() == 1) review.field("target_chunk", "Target chunk", keys.get(0), chunkName(keys.get(0)));
+                review.field("chunks", "Selected chunks", String.join("\n", keys),
+                        keys.stream().map(GovernancePresentation::chunkName).collect(Collectors.joining("\n")));
+                review.bind("national-territory", e.nationClaims(nation.id).stream().sorted().toList());
+                review.field("public_title", "Public title", e.account(nation), account(e, e.account(nation)));
+                review.payments(List.of(e.territory.claimFee(actor, nation, keys.size())), false, true);
+                review.effect(t("effect.claim", "Claim the selected unowned chunks for the nation, with no state or city assignment. The actor pays one atomic batch of claim fees to the nation treasury."));
             }
             case "unclaim" -> {
-                args.between(2, 3, "chunk unclaim [chunk]");
-                Claim claim = e.unclaimPlan(actor, targetChunk(args.optional(2, "here")), false);
-                review.claim(claim);
-                review.effect(t("effect.unclaim", "Remove this political claim, private title and permits. Financial and workflow commitments must be clear."));
+                args.between(2, 4, "chunk unclaim [nation] [chunks|here]");
+                boolean locationOnly = args.size() == 3 && ("here".equals(args.get(2)) || args.get(2).contains("|"));
+                Government nation = args.size() > 2 && !locationOnly ? e.gov(args.get(2)) : own(Kind.NATION);
+                List<String> keys = e.territory.keys(actor, locationOnly ? args.get(2) : args.optional(3, "here"));
+                e.territory.unclaimPlan(actor, nation, keys, false);
+                review.government(nation);
+                if (keys.size() == 1) review.field("target_chunk", "Target chunk", keys.get(0), chunkName(keys.get(0)));
+                review.chunks(keys);
+                review.bind("national-territory", e.nationClaims(nation.id).stream().sorted().toList());
+                review.effect(t("effect.unclaim", "Remove the selected national claims, titles, improvements and permits. National and private-title authority, connectivity and every financial/workflow commitment must permit the entire batch."));
+            }
+            case "assignstate", "assigncity" -> {
+                args.exactly(5, "assignstate <nation> <chunks> <state_or_none> or assigncity <state> <chunks> <city_or_none>");
+                Government scope = e.gov(args.get(2));
+                Government target = "none".equals(args.get(4)) ? null : e.gov(args.get(4));
+                List<String> keys = e.territory.keys(actor, args.get(3));
+                List<Territory.Allocation> plans = "assignstate".equals(action)
+                        ? e.territory.statePlan(actor, scope, keys, target)
+                        : e.territory.cityPlan(actor, scope, keys, target);
+                review.government(scope);
+                review.chunks(keys);
+                review.field("allocation_target", "Allocation target", target == null ? "none" : target.id,
+                        target == null ? "Unassigned" : governmentLabel(e, target.id, target.kind));
+                review.allocations(plans);
+                review.effect(t("effect.allocate", "Allocate existing national land without a claim fee or treasury balance transfer. Public title and future sale proceeds follow the most-specific government; changed public titles lose old permits. Private owners and their permits remain intact. Changing a state clears an incompatible city."));
             }
             case "autoclaim" -> {
                 args.exactly(3, "chunk autoclaim <on|off>");
                 check(Set.of("on", "off").contains(args.get(2)), "Use on or off.");
                 boolean enabled = "on".equals(args.get(2));
                 Player known = e.requirePlayer(actor.id());
-                review.field("previous", "Previous value", Boolean.toString(known.autoClaim));
-                review.field("replacement", "Replacement value", Boolean.toString(enabled));
+                review.field("previous", "Previous value", Boolean.toString(known.autoClaim), known.autoClaim ? "On" : "Off");
+                review.field("replacement", "Replacement value", Boolean.toString(enabled), enabled ? "On" : "Off");
                 if (enabled) {
-                    Government city = own(Kind.CITY);
-                    e.manage(actor, city);
-                    review.government(city);
-                    review.payments(List.of(e.claimFee(actor, city)), true, false);
+                    Government nation = own(Kind.NATION);
+                    e.territory.nationalManager(actor, nation);
+                    review.government(nation);
+                    review.payments(List.of(e.claimFee(actor, nation)), true, false);
                 }
-                review.effect(t("effect.autoclaim", "Change automatic claiming for your resident city. No claim or payment happens now; each future successful claim rechecks authority, adjacency, funds and the current fee."));
+                review.effect(t("effect.autoclaim", "Change automatic claiming for your nation. No claim or payment happens now; every movement rechecks current national authority, adjacency, funds and the fee. New claims have no state or city assignment."));
             }
             case "permit" -> {
                 args.exactly(5, "chunk permit <chunk> <player> <actions>");
@@ -316,7 +342,8 @@ final class GovernancePreviews {
                 check(actions.isEmpty() || claim.permits.containsKey(target.id) || claim.permits.size() < e.config.maxPermitsPerChunk, "Chunk permit limit reached.");
                 review.claim(claim);
                 review.party("permit_holder", target.id);
-                review.field("actions", "Permitted actions", actions.stream().sorted().collect(Collectors.joining(", ")));
+                review.field("actions", "Permitted actions", actions.stream().sorted().collect(Collectors.joining(", ")),
+                        actions.isEmpty() ? "None" : actions.stream().sorted().map(GovernancePresentation::permissionName).collect(Collectors.joining(", ")));
                 review.effect(t("effect.permit", "Replace this player's explicit non-PvP permissions on this private title. Permits never override PvP rules."));
             }
             case "permits", "protection", "info" -> {
@@ -324,7 +351,7 @@ final class GovernancePreviews {
                 String key = targetChunk(args.optional(2, "here"));
                 if ("permits".equals(action)) { titleManager(e.requiredClaim(key)); args.page(3); }
                 if ("protection".equals(action) && args.size() > 3) e.resolvePlayer(args.get(3));
-                review.field("chunk", "Chunk", key);
+                review.field("chunk", "Chunk", key, chunkName(key));
                 review.readOnly();
             }
             case "list" -> {
@@ -408,7 +435,7 @@ final class GovernancePreviews {
             case "bid" -> {
                 Bid bid = e.commerce.bidPlan(actor, contract, args);
                 Government issuer = e.gov(contract.governmentId);
-                review.field("payee", "Payee account", bid.account);
+                review.field("payee", "Payee", bid.account, account(e, bid.account));
                 review.field("bid_text", "Bid description", bid.text);
                 Bid previous = contract.bids.get(player);
                 review.bind("previous-bid", bidState(previous));
@@ -435,7 +462,7 @@ final class GovernancePreviews {
                 args.exactly(4, "contract award <contract> <bidder>");
                 Commerce.AwardPlan plan = e.commerce.awardPlan(actor, contract, args.get(3));
                 review.party("contractor", plan.winner().id);
-                review.field("payee", "Payee account", plan.bid().account);
+                review.field("payee", "Payee", plan.bid().account, account(e, plan.bid().account));
                 review.field("bid_text", "Bid description", plan.bid().text);
                 review.bind("accepted-bid", bidState(plan.bid()));
                 review.chunks(contract.chunks);
@@ -499,7 +526,7 @@ final class GovernancePreviews {
                 check(!election.voting && !election.scheduleExhausted, "Registration is closed.");
                 check(!election.candidates.contains(player) && election.candidates.size() < e.config.maxMembersPerNation, "You are already registered or the candidate limit was reached.");
                 review.payments(List.of(e.politics.candidateFee(actor, nation)), false, true);
-                review.field("registration_deadline", "Registration deadline", Long.toString(election.nextStartAt));
+                review.field("registration_deadline", "Registration deadline", Long.toString(election.nextStartAt), DisplayText.date(election.nextStartAt));
                 review.effect(t("effect.candidate", "Register as a candidate and pay the current nonrefundable registration fee now."));
             }
             case "withdraw" -> {
@@ -526,7 +553,7 @@ final class GovernancePreviews {
                 review.bind("electorate", e.members(nation).stream().sorted().toList());
                 review.duration("Election interval", e.config.electionIntervalMillis);
                 review.duration("Voting duration", e.config.electionVotingMillis);
-                review.effect(t("effect.election_admin", "Operator action: %s. Closing applies the current valid result; cancellation clears the ballot without refunding candidate fees.", action));
+                review.effect(t("effect.election_admin", "Operator action: %s. Closing applies the current valid result; cancellation clears the ballot without refunding candidate fees.", DisplayText.words(action)));
             }
             default -> throw new UserError("Unknown election action.");
         }
@@ -547,8 +574,8 @@ final class GovernancePreviews {
             check(actor.admin() || e.member(player, nation) && (e.config.allowCitizenBills || e.politics.legislator(player, nation)), "You are not eligible to introduce a national bill.");
             e.politics.billCapacity(nation.id);
             review.government(nation);
-            review.field("policy", "Policy", args.get(3));
-            review.field("value", "Value", e.politics.billValue(args.get(3), args.get(4)));
+            review.field("policy", "Policy", args.get(3), policyName(args.get(3)));
+            review.policyValue("value", "Value", args.get(3), e.politics.billValue(args.get(3), args.get(4)));
             review.field("title", "Title", GovernanceEngine.text(args.get(5), 100, "Bill title"));
             review.field("text", "Text", prose(args.tail(6), "Bill text"));
             review.duration("Debate duration", e.config.debateDurationMillis);
@@ -587,14 +614,15 @@ final class GovernancePreviews {
                 args.exactly(3, "bill override <bill>");
                 check("VETOED".equals(bill.status) && e.now() < bill.decisionEndsAt && e.politics.legislator(player, nation), "Only current legislators may open an unexpired veto override.");
                 review.bind("new-electorate", e.members(nation).stream().filter(id -> e.politics.legislator(id, nation)).sorted().toList());
-                review.field("threshold", "Whole-electorate threshold (basis points)", Integer.toString(e.config.overrideThresholdBps));
+                review.field("threshold", "Whole-electorate approval required", Integer.toString(e.config.overrideThresholdBps),
+                        DisplayText.percent(e.config.overrideThresholdBps));
                 review.duration("Voting duration", e.config.legislativeVotingMillis);
                 review.effect(t("effect.bill_override", "Open a new frozen-electorate override ballot. A successful supermajority automatically enacts the bill."));
             }
             case "revise" -> {
                 args.between(6, 64, "bill revise <bill> <value> <title> <text>");
                 check(player.equals(bill.author) && "DEBATE".equals(bill.status) && bill.treatyId == null, "Only the author may revise an ordinary bill during debate.");
-                review.field("new_value", "New value", e.politics.billValue(bill.policy, args.get(3)));
+                review.policyValue("new_value", "New value", bill.policy, e.politics.billValue(bill.policy, args.get(3)));
                 review.field("new_title", "New title", GovernanceEngine.text(args.get(4), 100, "Bill title"));
                 review.field("new_text", "New text", prose(args.tail(5), "Bill text"));
                 review.duration("Restarted debate duration", e.config.debateDurationMillis);
@@ -615,7 +643,7 @@ final class GovernancePreviews {
         Government nation = e.politics.nation(bill.nationId);
         check(Set.of("VOTING", "OVERRIDE_VOTING").contains(bill.status) && e.now() < bill.voteEndsAt, "No legislative ballot is open.");
         check(bill.electorate.contains(player) && e.politics.legislator(player, nation) && !bill.votes.containsKey(player), "You have no eligible uncast legislative ballot.");
-        review.field("vote", "Vote", choice);
+        review.field("vote", "Vote", choice, DisplayText.words(choice));
         if (bill.treatyId != null) {
             DiplomaticProposal treaty = required(e.data.diplomacy, bill.treatyId, "treaty");
             review.treaty(treaty);
@@ -653,8 +681,8 @@ final class GovernancePreviews {
             check(!e.data.emergencies.containsKey(nation.id), "Rescind or await expiry of the current emergency order.");
             check(nation.lastEmergencyAt < 0 || e.now() >= nation.lastEmergencyAt && e.now() - nation.lastEmergencyAt >= e.config.emergencyCooldownMillis, "Emergency authority is on cooldown.");
             check(GovernanceEngine.deadline(e.now(), e.config.emergencyDurationMillis) > e.now(), "The world clock cannot schedule another emergency.");
-            review.field("policy", "Policy", args.get(3));
-            review.field("value", "Value", GovernanceSettings.validate(args.get(3), args.get(4)));
+            review.field("policy", "Policy", args.get(3), policyName(args.get(3)));
+            review.policyValue("value", "Value", args.get(3), GovernanceSettings.validate(args.get(3), args.get(4)));
             review.field("reason", "Reason", prose(args.tail(5), "Emergency reason"));
             review.duration("Emergency duration", e.config.emergencyDurationMillis);
             review.duration("Emergency cooldown", e.config.emergencyCooldownMillis);
@@ -663,7 +691,8 @@ final class GovernancePreviews {
             check("rescind".equals(action), "Unknown executive action.");
             args.exactly(3, "executive rescind <nation>");
             check(current != null, "No emergency order is active.");
-            review.field("order", "Current order", current.policy + "=" + current.value);
+            review.field("order", "Current order", current.policy + "=" + current.value,
+                    policyName(current.policy) + ": " + policyValue(e, current.policy, current.value));
             review.effect(t("effect.rescind", "Remove the current emergency overlay and reveal the permanent settings underneath it. Cooldown remains in force."));
         }
     }
@@ -687,7 +716,7 @@ final class GovernancePreviews {
             review.party("from_nation", e.account(from));
             review.party("to_nation", e.account(to));
             String relation = e.politics.relationStatus(from.id, to.id);
-            review.field("relation", "Current relation", relation);
+            review.field("relation", "Current relation", relation, DisplayText.words(relation));
             Relation current = e.data.relations.get(Politics.pair(from.id, to.id));
             review.bind("relation", current == null ? "" : current.status + ":" + current.truceUntil + ":" + current.warStartedAt);
             if ("war".equals(action)) {
@@ -751,11 +780,11 @@ final class GovernancePreviews {
                     e.politics.validateTreaty(proposal);
                     boolean ratification = e.politics.requiresRatification(proposal);
                     if (ratification) { e.politics.billCapacity(proposal.fromNation); e.politics.billCapacity(proposal.toNation); }
-                    review.field("ratification", "Legislative ratification required", Boolean.toString(ratification));
+                    review.field("ratification", "Legislative ratification required", Boolean.toString(ratification), DisplayText.yesNo(ratification));
                     review.payments(e.politics.treatyTransfers(proposal), ratification, true);
                     review.effect(ratification
                             ? t("effect.peace_accept_pending", "Accept the immutable proposal and introduce both ratification bills. No money or land moves now.")
-                            : t("effect.peace_settle", "Settle all monetary terms atomically, then transfer public city titles, clear their permits, end war and begin the binding truce."));
+                            : t("effect.peace_settle", "Settle all monetary terms atomically, then transfer national ownership and negotiated allocations of existing public claims. Public title follows the destination, old public permits clear, war ends and the binding truce begins."));
                     review.duration("Binding truce duration", e.config.truceDurationMillis);
                 }
             }
@@ -767,7 +796,7 @@ final class GovernancePreviews {
                 check(proposal.ratified.containsAll(List.of(proposal.fromNation, proposal.toNation)), "Both ratifications are required.");
                 review.payments(e.politics.treatyTransfers(proposal), false, true);
                 review.duration("Binding truce duration", e.config.truceDurationMillis);
-                review.effect(t("effect.peace_settle", "Settle all monetary terms atomically, then transfer public city titles, clear their permits, end war and begin the binding truce."));
+                review.effect(t("effect.peace_settle", "Settle all monetary terms atomically, then transfer national ownership and negotiated allocations of existing public claims. Public title follows the destination, old public permits clear, war ends and the binding truce begins."));
             }
             case "ratify" -> {
                 args.exactly(4, "diplomacy ratify <proposal> <vote>");
@@ -837,7 +866,7 @@ final class GovernancePreviews {
                     case "roleplay", "dissolve" -> check("-".equals(args.get(4)), "Use - for roleplay/dissolution proposals.");
                     default -> throw new UserError("Unknown shareholder proposal type.");
                 }
-                review.field("decision", "Decision", type);
+                review.field("decision", "Decision", type, decisionName(type));
                 review.field("title", "Title", GovernanceEngine.text(args.get(5), 100, "Proposal title"));
                 review.field("text", "Text", prose(args.tail(6), "Proposal text"));
                 review.bind("frozen-share-electorate", sorted(company.shares));
@@ -887,7 +916,7 @@ final class GovernancePreviews {
                 check(company.members.contains(target.id) && !target.id.equals(company.owner), "Officers must be non-owner members.");
                 rosterChange(company.officers, target.id, args.get(4), e.config.maxOfficers);
                 review.party("officer", target.id);
-                review.field("operation", "Operation", args.get(4));
+                review.field("operation", "Operation", args.get(4), DisplayText.words(args.get(4)));
                 review.effect(t("effect.company_officer", "Change this member's company treasury-management authority without changing equity."));
             }
             case "owner" -> {
@@ -934,9 +963,11 @@ final class GovernancePreviews {
 
     private void companyProposal(String action, Arguments args) {
         CompanyProposal proposal = required(e.data.companyProposals, args.get(2), "company proposal");
-        review.field("proposal", "Proposal", proposal.id);
-        review.field("company", "Company", e.companyName(proposal.companyId) + " [" + proposal.companyId + "]");
-        review.field("decision", "Decision", proposal.type + "=" + proposal.value);
+        review.field("proposal", "Proposal", proposal.id, proposal.title + " — " + DisplayText.date(proposal.createdAt));
+        review.field("company", "Company", e.companyName(proposal.companyId) + " [" + proposal.companyId + "]",
+                companyName(e, proposal.companyId) + " (company)");
+        review.field("decision", "Decision", proposal.type + "=" + proposal.value,
+                decisionName(proposal.type) + ": " + decisionValue(e, proposal.type, proposal.value));
         review.field("title", "Title", proposal.title);
         review.field("text", "Text", proposal.text);
         review.bind("proposal-stage", proposal.status + ":" + proposal.endsAt + ":" + proposal.executionEndsAt);
@@ -961,7 +992,7 @@ final class GovernancePreviews {
             check("VOTING".equals(proposal.status) && e.now() < proposal.endsAt, "The shareholder ballot is closed.");
             check(Set.of("yes", "no", "abstain").contains(args.get(3)), "Vote yes, no or abstain.");
             check(proposal.electorate.getOrDefault(player, 0L) > 0 && !proposal.votes.containsKey(player), "You have no eligible uncast shareholder ballot.");
-            review.field("vote", "Vote", args.get(3));
+            review.field("vote", "Vote", args.get(3), DisplayText.words(args.get(3)));
             review.field("weight", "Frozen voting weight", Long.toString(proposal.electorate.get(player)));
             review.effect(t("effect.company_vote", "Record one vote with the shares fixed when the ballot opened. Current share transfers cannot duplicate its voting weight."));
             return;
@@ -1032,7 +1063,8 @@ final class GovernancePreviews {
             entry = GovernancePresentation.mail(e, actor, owner + "|sent|" + id);
         }
         Mail message = entry.message();
-        review.field("message_id", "Message ID", id);
+        review.bind("message_id", id);
+        review.field("sent_at", "Sent at", Long.toString(message.sentAt), DisplayText.date(message.sentAt));
         review.field("subject", "Subject", message.subject);
         review.party("sender", message.sender);
         review.party("recipient", message.recipient);
@@ -1040,7 +1072,7 @@ final class GovernancePreviews {
         if ("read".equals(action)) {
             review.effect(t("effect.mail_read", "Open this authorized message and mark its selected mailbox copy read. Reviewing this action does not mark it read."));
         } else if ("delete".equals(action)) {
-            review.field("mailbox", "Mailbox", owner);
+            review.field("mailbox", "Mailbox", owner, account(e, owner));
             review.effect(t("effect.mail_delete", "Delete matching inbox/sent copies from this mailbox only. Other owners' copies are not removed."));
         } else {
             check(!"system".equals(message.sender), "System notifications cannot receive replies.");
@@ -1061,8 +1093,9 @@ final class GovernancePreviews {
             case "bypass" -> {
                 args.exactly(3, "admin bypass <on|off>");
                 check(Set.of("on", "off").contains(args.get(2)), "Use on or off.");
-                review.field("previous", "Previous value", Boolean.toString(e.requirePlayer(actor.id()).bypass));
-                review.field("replacement", "Replacement value", args.get(2));
+                review.field("previous", "Previous value", Boolean.toString(e.requirePlayer(actor.id()).bypass),
+                        e.requirePlayer(actor.id()).bypass ? "On" : "Off");
+                review.field("replacement", "Replacement value", args.get(2), DisplayText.words(args.get(2)));
                 review.effect(t("effect.bypass", "Change your explicit protection bypass. It remains valid only while you are currently an operator."));
             }
             case "unclaim" -> {
@@ -1090,7 +1123,7 @@ final class GovernancePreviews {
             case "rename", "leader" -> {
                 args.exactly(4, "admin rename|leader <government> <value>");
                 Government government = e.rawGovernment(args.get(2));
-                review.field("government", "Government", government.id);
+                review.field("government", "Government", government.id, governmentLabel(e, government.id, government.kind));
                 if ("rename".equals(action)) {
                     review.field("previous", "Previous value", government.name);
                     review.field("replacement", "Replacement value", e.validGovernmentName(args.get(3), government.id));
@@ -1119,12 +1152,11 @@ final class GovernancePreviews {
                     review.party("new_owner", destination);
                     review.effect(t("effect.property_owner", "Reassign only this private title and clear prior permits. Political city/state/nation and improvements remain unchanged."));
                 } else {
-                    Government city = e.gov(args.get(3));
-                    check(city.kind == Kind.CITY && !city.id.equals(claim.cityId), "Choose a different destination city.");
-                    e.assertClaimFree(key, null);
-                    check(e.cityClaims(city.id).size() < e.config.maxClaimsPerCity, "Destination city claim limit reached.");
-                    review.government(city);
-                    review.effect(t("effect.property_reassign", "Reassign political city ownership, clear permits and deliberately bypass adjacency. Old public city title follows the city; other private titles are preserved."));
+                    Government target = e.gov(args.get(3));
+                    Territory.Allocation plan = e.territory.reassignPlan(actor, key, target);
+                    review.government(target);
+                    review.allocations(List.of(plan));
+                    review.effect(t("effect.property_reassign", "Explicitly reassign national ownership and optional state/city allocations, bypassing adjacency but not obligations. Public title follows the destination. Private owners and their permits are preserved."));
                 }
             }
             case "audit", "history", "diagnostics" -> {
@@ -1137,7 +1169,7 @@ final class GovernancePreviews {
                 check(Set.of("preview", "apply").contains(args.get(2)), "Use preview or apply.");
                 if ("preview".equals(args.get(2))) review.readOnly();
                 else {
-                    check(e.data.schemaVersion == 1, "This schema needs migration, not automatic repair.");
+                    check(e.data.schemaVersion == GovernanceData.CURRENT_SCHEMA, "This schema needs migration, not automatic repair.");
                     List<String> issues = e.integrity.audit();
                     review.field("audit", "Current integrity audit", String.join("\n", issues));
                     review.bind("repair-limits", List.of(e.config.maxHistory, e.config.maxMail, e.config.maxLawsPerNation));
@@ -1161,15 +1193,21 @@ final class GovernancePreviews {
     private void disband(Government government, boolean cascade) {
         List<Government> removed = e.disbandPlan(government, cascade, actor.admin());
         Set<String> ids = removed.stream().map(g -> g.id).collect(Collectors.toSet());
-        List<Claim> claims = e.data.claims.values().stream().filter(Objects::nonNull).filter(c -> ids.contains(c.cityId)).toList();
+        List<Claim> claims = e.data.claims.values().stream().filter(Objects::nonNull)
+                .filter(c -> government.kind == Kind.NATION && government.id.equals(c.nationId)).toList();
         review.field("governments_removed", "Governments removed", Integer.toString(removed.size()));
         review.field("claims_removed", "Claims and private titles removed", Integer.toString(claims.size()));
-        review.field("private_titles", "Non-city private titles removed", Long.toString(claims.stream().filter(c -> !("city:" + c.cityId).equals(c.ownerAccount)).count()));
+        review.field("private_titles", "Private titles removed", Long.toString(claims.stream().filter(c -> !e.publicTitle(c)).count()));
+        review.field("removal_scope", "Organizations removed", removed.stream().map(g -> g.id).collect(Collectors.joining("\n")),
+                removed.stream().map(g -> governmentLabel(e, g.id, g.kind)).collect(Collectors.joining("\n")));
+        if (!claims.isEmpty()) review.field("removed_territory", "Territory and titles removed",
+                claims.stream().map(GovernancePreviews::claimState).collect(Collectors.joining("\n")),
+                claims.stream().map(c -> chunkName(c.key) + " — " + account(e, c.ownerAccount)).collect(Collectors.joining("\n")));
         removed.stream().sorted(Comparator.comparing(g -> g.id)).forEach(g -> review.bind("removed-government", g.id + ":" + g.leader + ":" + g.officers.stream().sorted().toList()));
         claims.stream().sorted(Comparator.comparing(c -> c.key)).forEach(c -> review.bind("removed-claim", claimState(c)));
         e.data.players.values().stream().filter(Objects::nonNull).filter(p -> ids.contains(p.nationId) || ids.contains(p.stateId) || ids.contains(p.cityId))
                 .sorted(Comparator.comparing(p -> p.id)).forEach(p -> review.bind("removed-membership", p.id + ":" + p.nationId + ":" + p.stateId + ":" + p.cityId));
-        review.effect(t("effect.disband", "Permanently remove the selected government scope, memberships and listed claims. No payments are made; financial balances and obligations must already permit deletion."));
+        review.effect(t("effect.disband", "Permanently remove the selected government scope and memberships. State/city allocations must already be cleared; their deletion never unclaims land. Only explicit nation cascade removes its unencumbered public claims. Private titles block national deletion, including operator deletion."));
     }
 
     private void rosterChange(Set<String> roster, String target, String operation, int limit) {
@@ -1200,7 +1238,8 @@ final class GovernancePreviews {
         return bid == null ? "" : bid.bidder + ":" + bid.account + ":" + bid.cents + ":" + bid.text + ":" + bid.createdAt;
     }
     private static String claimState(Claim claim) {
-        return claim.key + ":" + claim.cityId + ":" + claim.ownerAccount + ":" + claim.improvements + ":" + sorted(claim.permits);
+        return claim.key + ":" + claim.nationId + ":" + claim.stateId + ":" + claim.cityId
+                + ":" + claim.ownerAccount + ":" + claim.improvements + ":" + claim.claimedAt + ":" + sorted(claim.permits);
     }
     private static String emergencyState(Emergency order) {
         return order == null ? "" : order.policy + ":" + order.value + ":" + order.author + ":" + order.expiresAt + ":" + order.reason;
@@ -1231,7 +1270,7 @@ final class GovernancePreviews {
 
         Review(String command) {
             bind("actor", player + ":" + actor.admin());
-            field("command", "Command", command);
+            bind("command", command);
             party("actor", actor.account());
         }
 
@@ -1241,101 +1280,140 @@ final class GovernancePreviews {
         }
 
         void field(String key, String label, String value) {
+            field(key, label, value, value);
+        }
+
+        void field(String key, String label, String value, String display) {
             bind(key, value);
-            add(new ActionPreview.Line(t("preview." + key, label), UiText.literal(GovernancePresentation.clip(value, 4096)), true));
+            add(new ActionPreview.Line(t("preview." + key, label), UiText.literal(GovernancePresentation.clip(display, 4096)), true));
+        }
+
+        void policyValue(String key, String label, String policy, String value) {
+            field(key, label, value, GovernancePresentation.policyValue(e, policy, value));
         }
 
         void party(String key, String id) {
             String name = id;
+            String display = person(e, id);
             if (id != null && GovernanceEngine.validUuid(id)) {
                 if (e.data.players.containsKey(id)) name = e.playerName(id) + " [" + id + "]";
-                else if (e.data.governments.containsKey(id)) name = e.governmentName(id) + " [" + id + "]";
-            } else if (id != null && id.contains(":")) name = accountLabel(id);
+                else if (e.data.governments.containsKey(id)) {
+                    name = e.governmentName(id) + " [" + id + "]";
+                    display = governmentLabel(e, id, null);
+                }
+            } else if (id != null) {
+                if (id.contains(":")) name = accountState(id);
+                display = account(e, id);
+            }
             String label = switch (key) {
-                case "actor" -> "Acting account"; case "leader" -> "Leader"; case "subject_player" -> "Subject player";
+                case "actor" -> "Acting as"; case "leader" -> "Leader"; case "subject_player" -> "Subject player";
                 case "invitee" -> "Invitee"; case "previous_leader" -> "Previous leader"; case "new_leader" -> "New leader";
                 case "officer" -> "Officer"; case "permit_holder" -> "Permit holder"; case "contractor" -> "Contractor";
-                case "candidate" -> "Candidate"; case "from_nation" -> "Proposing nation account"; case "to_nation" -> "Counterparty nation account";
+                case "candidate" -> "Candidate"; case "from_nation" -> "Proposing nation"; case "to_nation" -> "Counterparty nation";
                 case "new_owner" -> "New owner"; case "employee" -> "Employee"; case "recipient" -> "Recipient";
                 case "sender" -> "Sender"; case "reply_from" -> "Reply sender"; case "reply_to" -> "Reply recipient";
                 default -> key;
             };
-            field(key, label, name);
+            field(key, label, name, display);
         }
 
-        private String accountLabel(String account) {
+        // Keep the previous material representation separate from the player-facing account name.
+        private String accountState(String account) {
             if (account.startsWith("player:")) return e.playerName(account.substring(7)) + " [" + account + "]";
             if (account.startsWith("company:")) {
                 String id = account.substring(8);
-                return e.data.companies.get(id) == null ? t("account.former_company", "Former company [%s]", account).fallback()
+                return e.data.companies.get(id) == null ? "Former company [" + account + "]"
                         : e.companyName(id) + " [" + account + "]";
             }
             if (account.startsWith("escrow:contract:"))
-                return t("preview.escrow_account", "Contract escrow [%s]", account).fallback();
+                return "Contract escrow [" + account + "]";
             if (account.startsWith("system:"))
-                return t("preview.fee_account", "System fee account [%s]", account).fallback();
+                return "System fee account [" + account + "]";
             if ("shareholders:at-execution".equals(account))
-                return t("preview.current_shareholders", "Current shareholders at execution (recipients are not fixed yet)").fallback();
+                return "Current shareholders at execution (recipients are not fixed yet)";
             String[] parts = account.split(":", 2);
             if (parts.length == 2 && Set.of("nation", "state", "city").contains(parts[0])) {
                 Government government = e.data.governments.get(parts[1]);
                 return government == null
-                        ? t("preview.former_government_account", "Former or unavailable government account [%s]", account).fallback()
+                        ? "Former or unavailable government account [" + account + "]"
                         : government.name + " [" + account + "]";
             }
             return account;
         }
 
         void duration(String label, long duration) {
-            field("duration_" + GovernancePresentation.actionKey(label), label + " (milliseconds)", Long.toString(duration));
+            field("duration_" + GovernancePresentation.actionKey(label), label, Long.toString(duration), DisplayText.duration(duration));
         }
 
         void government(Government government) {
-            field("government", "Government", government.name + " [" + government.id + "] " + government.kind);
+            field("government", "Government", government.name + " [" + government.id + "] " + government.kind,
+                    governmentLabel(e, government.id, government.kind));
             bind("government-authority", government.leader + ":" + government.parentId + ":" + government.officers.stream().sorted().toList());
         }
 
         void company(Company company) {
-            field("company", "Company", company.name + " [" + company.id + "]");
-            field("current_owner", "Current manager", company.owner);
+            field("company", "Company", company.name + " [" + company.id + "]", companyName(e, company.id) + " (company)");
+            field("current_owner", "Current manager", company.owner, person(e, company.owner));
             bind("company-authority", company.members.stream().sorted().toList() + ":" + company.officers.stream().sorted().toList());
         }
 
         void membership(Player target) {
-            field("current_membership", "Current citizenship", target.nationId + " / " + target.stateId + " / " + target.cityId);
+            field("current_membership", "Current citizenship", target.nationId + " / " + target.stateId + " / " + target.cityId,
+                    "Nation: " + governmentName(e, target.nationId, Kind.NATION)
+                            + "\nState: " + governmentName(e, target.stateId, Kind.STATE)
+                            + "\nCity: " + governmentName(e, target.cityId, Kind.CITY));
             bind("membership-player", target.id + ":" + target.autoClaim);
         }
 
         void claim(Claim claim) {
-            field("chunk", "Chunk", claim.key);
-            field("private_title", "Private title", claim.ownerAccount);
-            field("political_city", "Current political city", claim.cityId);
+            field("chunk", "Chunk", claim.key, chunkName(claim.key));
+            field("private_title", "Private title", claim.ownerAccount, account(e, claim.ownerAccount));
+            field("political_nation", "Claiming nation", claim.nationId, governmentLabel(e, claim.nationId, Kind.NATION));
+            field("political_state", "State allocation", claim.stateId, governmentName(e, claim.stateId, Kind.STATE));
+            field("political_city", "Current political city", claim.cityId, governmentLabel(e, claim.cityId, Kind.CITY));
             bind("claim", claimState(claim));
         }
 
         void chunks(List<String> keys) {
-            field("chunks", "Selected chunks", String.join("\n", keys));
+            field("chunks", "Selected chunks", String.join("\n", keys),
+                    keys.stream().map(GovernancePresentation::chunkName).collect(Collectors.joining("\n")));
             keys.stream().sorted().map(e::requiredClaim).forEach(claim -> bind("claim", claimState(claim)));
         }
 
+        void allocations(List<Territory.Allocation> plans) {
+            String material = plans.stream().map(plan -> plan.claim().key + ":" + plan.nationId() + ":"
+                    + plan.stateId() + ":" + plan.cityId() + ":" + plan.ownerAccount()).collect(Collectors.joining("\n"));
+            String display = plans.stream().map(plan -> chunkName(plan.claim().key)
+                    + " — nation: " + governmentName(e, plan.nationId(), Kind.NATION)
+                    + "; state: " + governmentName(e, plan.stateId(), Kind.STATE)
+                    + "; city: " + governmentName(e, plan.cityId(), Kind.CITY)
+                    + "; title: " + account(e, plan.ownerAccount())).collect(Collectors.joining("\n"));
+            field("allocation_result", "Resulting allocations and titles", material, display);
+        }
+
         void contract(Contract contract) {
-            field("contract", "Contract", contract.title + " [" + contract.id + "]");
-            field("status", "Current status", contract.status);
+            field("contract", "Contract", contract.title + " [" + contract.id + "]",
+                    contract.title + " — " + governmentName(e, contract.governmentId, null));
+            field("status", "Current status", contract.status, DisplayText.words(contract.status));
             bind("contract-terms", contract.governmentId + ":" + contract.winner + ":" + contract.payeeAccount + ":"
                     + contract.escrowCents + ":" + contract.submittedBy + ":" + contract.completionNote + ":" + contract.bidEndsAt
                     + ":" + contract.reviewEndsAt + ":" + contract.description + ":" + contract.chunks);
         }
 
         void bill(Bill bill) {
-            field("bill", "Bill", bill.title + " [" + bill.id + "]");
-            field("bill_terms", "Retained bill terms", bill.policy + "=" + bill.value + "\n" + bill.text);
+            field("bill", "Bill", bill.title + " [" + bill.id + "]",
+                    policyTitle(e, bill.policy, bill.value, bill.title) + " — " + governmentName(e, bill.nationId, Kind.NATION));
+            field("bill_terms", "Retained bill terms", bill.policy + "=" + bill.value + "\n" + bill.text,
+                    policyName(bill.policy) + ": " + GovernancePresentation.policyValue(e, bill.policy, bill.value)
+                            + "\n" + policyBody(e, bill.policy, bill.value, bill.text));
             bind("bill-stage", bill.status + ":" + bill.nationId + ":" + bill.author + ":" + bill.treatyId + ":"
                     + bill.amendment + ":" + bill.voteEndsAt + ":" + bill.decisionEndsAt);
         }
 
         void treaty(DiplomaticProposal proposal) {
-            field("treaty", "Diplomatic proposal", proposal.id);
-            field("status", "Current status", proposal.status);
+            field("treaty", "Diplomatic proposal", proposal.id,
+                    DisplayText.words(proposal.type) + " — " + DisplayText.date(proposal.createdAt));
+            field("status", "Current status", proposal.status, DisplayText.words(proposal.status));
             field("message", "Message", proposal.message);
             bind("treaty-stage", proposal.type + ":" + proposal.expiresAt + ":" + proposal.ratified);
             showTreatyTerms(proposal);
@@ -1350,8 +1428,14 @@ final class GovernancePreviews {
             party("from_nation", "nation:" + proposal.fromNation);
             party("to_nation", "nation:" + proposal.toNation);
             String terms = proposal.chunks == null ? "(missing terms)" : proposal.chunks.stream()
-                    .map(term -> term == null ? "(invalid term)" : term.key + ": " + term.fromCity + " -> " + term.toCity).collect(Collectors.joining("\n"));
-            field("territory_terms", "Territorial terms", terms.isEmpty() ? "—" : terms);
+                    .map(term -> term == null ? "(invalid term)" : term.key + ": " + term.fromNation + "/" + term.fromState
+                            + "/" + term.fromCity + " -> " + term.toNation + "/" + term.toState + "/" + term.toCity).collect(Collectors.joining("\n"));
+            String display = proposal.chunks == null ? "Territorial terms are unavailable." : proposal.chunks.stream()
+                    .map(term -> term == null ? "A territorial transfer is unavailable." : chunkName(term.key) + ": "
+                            + territoryScope(e, term.fromNation, term.fromState, term.fromCity)
+                            + " → " + territoryScope(e, term.toNation, term.toState, term.toCity))
+                    .collect(Collectors.joining("\n"));
+            field("territory_terms", "Territorial terms", terms.isEmpty() ? "—" : terms, display.isEmpty() ? "No territory changes" : display);
             if (proposal.chunks != null) proposal.chunks.stream().filter(Objects::nonNull).forEach(term -> {
                 Claim claim = e.data.claims.get(term.key);
                 bind("treaty-claim", claim == null ? term.key + ":missing" : claimState(claim));
@@ -1369,6 +1453,7 @@ final class GovernancePreviews {
             MessageDigest distribution = sha256();
             boolean grouped = transfers.size() > 8;
             List<String> parties = new ArrayList<>();
+            List<String> displayParties = new ArrayList<>();
             for (EconomyAccess.Transfer transfer : transfers) {
                 Money.nonNegative(transfer.cents());
                 if (requiresEconomy) e.requireEconomy(transfer.cents());
@@ -1378,24 +1463,34 @@ final class GovernancePreviews {
                 funding.merge(transfer.from(), transfer.cents(), Math::addExact);
                 terms.merge(transfer.from(), 1, Integer::sum);
                 recipients.add(transfer.to());
-                if (!grouped) parties.add(accountLabel(transfer.from()) + " → " + accountLabel(transfer.to()) + ": " + Money.format(transfer.cents()));
+                if (!grouped) {
+                    parties.add(accountState(transfer.from()) + " → " + accountState(transfer.to()) + ": " + Money.format(transfer.cents()));
+                    displayParties.add(account(e, transfer.from()) + " → " + account(e, transfer.to()) + ": " + Money.format(transfer.cents()));
+                }
                 digestValue(distribution, transfer.from());
                 digestValue(distribution, transfer.to());
                 digestValue(distribution, Long.toString(transfer.cents()));
             }
             bind("payment-distribution", HexFormat.of().formatHex(distribution.digest()));
             if (grouped) {
-                funding.entrySet().stream().limit(4).forEach(source -> parties.add(t("preview.payment_group",
-                        "%s pays %s across %s transfer terms.", accountLabel(source.getKey()), Money.format(source.getValue()),
-                        terms.get(source.getKey())).fallback()));
-                if (funding.size() > 4) parties.add(t("preview.additional_sources", "%s additional funding accounts are included.", funding.size() - 4).fallback());
-                UiText summary = t("preview.recipient_summary", "%s recipient accounts. Exact accounts and amounts are bound to this review's fingerprint.", recipients.size());
-                bind("recipient-summary", summary.fallback());
+                funding.entrySet().stream().limit(4).forEach(source -> {
+                    parties.add(String.format(Locale.ROOT, "%s pays %s across %s transfer terms.",
+                            accountState(source.getKey()), Money.format(source.getValue()), terms.get(source.getKey())));
+                    displayParties.add(t("preview.payment_group", "%s pays %s across %s transfer terms.",
+                            account(e, source.getKey()), Money.format(source.getValue()), terms.get(source.getKey())).fallback());
+                });
+                if (funding.size() > 4) {
+                    String additional = t("preview.additional_sources", "%s additional funding accounts are included.", funding.size() - 4).fallback();
+                    parties.add(additional);
+                    displayParties.add(additional);
+                }
+                UiText summary = t("preview.recipient_summary", "%s recipients. Every recipient and exact amount will be checked again before payment.", recipients.size());
+                bind("recipient-summary", recipients.size() + " recipient accounts. Exact accounts and amounts are bound to this review's fingerprint.");
                 add(new ActionPreview.Line(t("preview.distribution", "Distribution"), summary, true));
             }
             field(future ? "conditional_total" : "pay_now", future ? "Conditional future transfers (not paid now)" : "Transfers now", Money.format(total));
             field("transfer_count", "Transfer terms", Integer.toString(transfers.size()));
-            field("payment_parties", "Payment parties and amounts", String.join("\n", parties));
+            field("payment_parties", "Payment parties and amounts", String.join("\n", parties), String.join("\n", displayParties));
             bind("payment-timing", future);
             if (e.economy.available()) {
                 List<String> balances = new ArrayList<>();
@@ -1409,8 +1504,8 @@ final class GovernancePreviews {
                     }
                     long balance = e.economy.balance(account.getKey());
                     Money.nonNegative(balance);
-                    if (!future) check(balance >= -account.getValue(), "Insufficient current funds in " + account.getKey() + ".");
-                    if (visible) balances.add(accountLabel(account.getKey()) + ": " + Money.format(balance));
+                    if (!future) check(balance >= -account.getValue(), "Insufficient current funds in " + account(e, account.getKey()) + ".");
+                    if (visible) balances.add(account(e, account.getKey()) + ": " + Money.format(balance));
                     else privateBalances = true;
                 }
                 if (privateBalances) balances.add(t("preview.private_balances", "Funding balances outside your account authority are not disclosed.").fallback());

@@ -14,12 +14,12 @@ public final class CoreMenus {
     public static synchronized void register() {
         Set<String> existing = new HashSet<>();
         MenuRegistry.pages().forEach(page -> existing.add(page.id()));
-        page(existing, "main", "StateCraft", "info",
+        page(existing, "main", "StateCraft", "info", false,
                 navigation("Pending work", "statecraft:dashboard"), navigation("Governments", "statecraft:nations"),
                 navigation("Companies", "statecraft:companies"), navigation("Personal mail", "statecraft:mail"),
                 query("Help", "help <section> <page>"), query("Profile", "profile <player>"));
-        page(existing, "dashboard", "Pending Work", "info",
-                navigation("Overview", "statecraft:main"), navigation("Invitations", "statecraft:invitations"),
+        page(existing, "dashboard", "My Dashboard", "info",
+                navigation("Overview", "statecraft:main"),
                 navigation("Legislature", "statecraft:legislature"), navigation("Contracts", "statecraft:contracts"),
                 navigation("Diplomacy", "statecraft:diplomacy"), navigation("Personal mail", "statecraft:mail"));
         page(existing, "detail", "Details", "info", false,
@@ -50,26 +50,28 @@ public final class CoreMenus {
                 mutation("Flag", "city flag <city> <flag>"), query("Settings", "city settings <city>"),
                 mutation("Set policy", "city setting <city> <key> <value>"),
                 mutation("Disband", "city disband <city>"), mutation("Disband subtree", "city disband <city> cascade"));
-        page(existing, "members", "Citizens and Roles", "government list",
+        page(existing, "members", "Citizens and Roles", "government list", false,
                 query("Citizens", "government members <government> <page>"),
                 query("Roles", "government roles <government> <page>"),
                 mutation("Remove citizen", "government kick <government> <player>"),
                 mutation("Transfer leadership", "government leader <government> <player>"),
                 query("Profile", "profile <player>"));
-        page(existing, "officers", "Officers", "government list",
+        page(existing, "officers", "Officers", "government list", false,
                 query("Officers", "government officers <government> <page>"),
                 mutation("Appoint", "government officer <government> <player> add"),
                 mutation("Remove", "government officer <government> <player> remove"),
                 mutation("Transfer leadership", "government leader <government> <player>"));
-        page(existing, "invitations", "Invitations", "mail invitations",
+        page(existing, "invitations", "Invitations", "mail invitations", false,
                 query("Mine", "mail invitations <page>"), mutation("Invite", "government invite <government> <player>"),
                 query("Official invitations", "government invitations <government> <page>"),
                 mutation("Accept", "government accept <government>"), mutation("Decline", "government decline <government>"),
                 mutation("Revoke", "government revoke <government> <player>"),
                 mutation("Company accept", "company accept <company>"), mutation("Company decline", "company decline <company>"));
         page(existing, "claims", "Claims", "chunk info",
-                financial("Claim here", "chunk claim <city> here"), financial("Claim", "chunk claim <city> <chunk>"),
-                mutation("Unclaim", "chunk unclaim <chunk>"), mutation("Automatic claims on", "chunk autoclaim on"),
+                financial("Claim national land", "chunk claim <nation> <chunks>"),
+                mutation("Assign state", "chunk assignstate <nation> <chunks> <state_or_none>"),
+                mutation("Assign city", "chunk assigncity <state> <chunks> <city_or_none>"),
+                mutation("Unclaim", "chunk unclaim <nation> <chunks>"), mutation("Automatic claims on", "chunk autoclaim on"),
                 mutation("Automatic claims off", "chunk autoclaim off"), query("List claims", "chunk list <government> <page>"),
                 query("Chunk information", "chunk info <chunk>"), query("Permits", "chunk permits <chunk> <page>"),
                 mutation("Grant permit", "chunk permit <chunk> <player> <actions>"),
@@ -150,18 +152,18 @@ public final class CoreMenus {
                 mutation("Request corrections", "contract return <contract> <reason>"),
                 financial("Approve completion", "contract complete <contract>"),
                 financial("Cancel/refund", "contract cancel <contract> <reason>"));
-        page(existing, "mail", "Personal Mail", "mail inbox",
+        page(existing, "mail", "Personal Mail", "mail inbox", false,
                 query("Inbox", "mail inbox <page>"), query("Sent", "mail sent <page>"),
                 query("Read", "mail read <message>"), mutation("Compose", "mail send <recipient> <subject> <body>"),
                 mutation("Reply", "mail reply <message> <body>"), mutation("Delete my copy", "mail delete <message>"));
-        page(existing, "official_mail", "Official Mail", "government list",
+        page(existing, "official_mail", "Official Mail", "government list", false,
                 query("Inbox", "mail official inbox <government> <page>"),
                 query("Sent", "mail official sent <government> <page>"),
                 query("Read", "mail official read <government> <message>"),
                 mutation("Compose", "mail official send <government> <recipient> <subject> <body>"),
                 mutation("Reply", "mail official reply <government> <message> <body>"),
                 mutation("Delete official copy", "mail official delete <government> <message>"));
-        page(existing, "profile", "Player Profiles", "profile",
+        page(existing, "profile", "Player Profiles", "profile", false,
                 query("Profile", "profile <player>"));
         page(existing, "admin", "Operator Administration", "info",
                 mutation("Bypass on", "admin bypass on"), mutation("Bypass off", "admin bypass off"),
@@ -171,14 +173,16 @@ public final class CoreMenus {
                 mutation("Delete company", "admin delete company <company>"),
                 mutation("Appoint leader", "admin leader <government> <player>"),
                 mutation("Rename government", "admin rename <government> <name>"),
-                mutation("Political reassignment", "admin reassign <chunk> <city>"),
+                mutation("Political reassignment", "admin reassign <chunk> <government>"),
                 mutation("Private title reassignment", "admin owner <chunk> <account>"),
                 query("Diagnostics", "admin diagnostics <chunk>"),
                 query("Audit", "admin audit <page>"), query("Repair preview", "admin repair preview"),
                 mutation("Apply safe repair", "admin repair apply"), query("Audit history", "admin history <page>"),
                 mutation("Start election", "election start <nation>"), mutation("Close election", "election close <nation>"),
                 mutation("Cancel election", "election cancel <nation>"));
-        page(existing, "help", "Command Help", "help",
+        page(existing, "help", "Help", "help",
+                navigation("Commands", "statecraft:command_help"), query("Section", "help <section> <page>"));
+        page(existing, "command_help", "Command Help", "help", false,
                 query("Section", "help <section> <page>"));
     }
 

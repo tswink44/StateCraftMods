@@ -10,6 +10,8 @@ import dev.statecraft.api.form.FormChoice;
 import dev.statecraft.api.form.FormContext;
 import dev.statecraft.api.form.FormConstraints;
 import dev.statecraft.api.form.FormProvider;
+import dev.statecraft.api.form.FormSchema;
+import dev.statecraft.api.ui.DisplayText;
 import dev.statecraft.domain.GovernanceData.Bill;
 import dev.statecraft.domain.GovernanceData.Claim;
 import dev.statecraft.domain.GovernanceData.Company;
@@ -30,6 +32,9 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
+
+import static dev.statecraft.domain.GovernancePresentation.*;
 
 /** Read-only catalogs and defaults; commands remain the authoritative mutation path. */
 public final class GovernanceForms implements FormProvider {
@@ -119,6 +124,9 @@ public final class GovernanceForms implements FormProvider {
                     case "shares" -> FormConstraints.integer(1, 1_000_000_000);
                     case "amount", "offer_amount", "demand_amount" -> FormConstraints.money(0, Money.MAX);
                     case "chunk_terms_or_dash" -> FormConstraints.text(2048).or("-");
+                    case "chunks" -> FormConstraints.text("chunk".equals(family)
+                            && has(Set.of("claim", "unclaim", "assignstate", "assigncity"), action)
+                            ? FormSchema.MAX_VALUE_LENGTH : 2048);
                     default -> FormConstraints.text(2048);
                 };
                 form.constraints(key, constraint);
@@ -188,7 +196,7 @@ public final class GovernanceForms implements FormProvider {
                 default -> null;
             };
             if ("create".equals(action)) {
-                text("name", "New " + family + " name", "Enter a new unique name; not an existing ID.", "", false);
+                text("name", "New " + family + " name", "Enter a new unique name.", "", false);
                 if (kind == Kind.NATION) {
                     playerChoices("leader", p -> operational() && (actor.admin() || playerId.equals(p.id))
                             && passes(() -> engine.checkCreationLeader(Kind.NATION, null, p)), playerId);
@@ -263,13 +271,34 @@ public final class GovernanceForms implements FormProvider {
         }
 
         private void chunkForm() {
-            if ("claim".equals(action)) {
-                govChoices("city", g -> operational() && g.kind == Kind.CITY && manage(g)
-                                && engine.data.claims.size() < engine.config.maxTotalClaims
-                                && engine.cityClaims(g.id).size() < engine.config.maxClaimsPerCity,
-                        own(Kind.CITY), false);
-                choices("chunk", List.of(option("here", "Current chunk", actor.chunkKey())), "here", true,
-                        "Enter unclaimed dimension|x|z coordinates; adjacency, fees and limits are checked on execution.", "city");
+            if (has(Set.of("claim", "unclaim", "assignstate", "assigncity"), action)) {
+                boolean cityAllocation = "assigncity".equals(action);
+                String scopeKey = cityAllocation ? "state" : "nation";
+                Kind scopeKind = cityAllocation ? Kind.STATE : Kind.NATION;
+                govChoices(scopeKey, g -> operational() && g.kind == scopeKind && manage(g)
+                                && (!"claim".equals(action) || engine.data.claims.size() < engine.config.maxTotalClaims
+                                && engine.nationClaims(g.id).size() < engine.config.maxClaimsPerNation),
+                        own(scopeKind), false);
+                text("chunks", "Selected chunks",
+                        "Use here or comma-separated dimension|x|z keys in your current dimension (maximum 64). "
+                                + "The entire selection is checked before any fee or change; allocations have no claim fee.",
+                        "", false, scopeKey);
+                if (has(Set.of("assignstate", "assigncity"), action)) {
+                    Government scope = selectedGovernment(scopeKey);
+                    String targetKey = cityAllocation ? "city_or_none" : "state_or_none";
+                    Kind targetKind = cityAllocation ? Kind.CITY : Kind.STATE;
+                    List<FormChoice> options = new ArrayList<>();
+                    if (scope != null) {
+                        options.add(option("none", "Unassigned", cityAllocation
+                                ? "Clear the city; public title returns to the state."
+                                : "Clear the state and city; public title returns to the nation."));
+                        governments.stream().filter(g -> g.kind == targetKind && scope.id.equals(g.parentId))
+                                .map(this::governmentOption).forEach(options::add);
+                    }
+                    choices(targetKey, options, "", false,
+                            "Only children of the selected government are eligible. Private titles and permits are preserved; public title follows the allocation.",
+                            scopeKey, "chunks");
+                }
                 return;
             }
             if ("list".equals(action)) {
@@ -279,19 +308,21 @@ public final class GovernanceForms implements FormProvider {
             claimChoices("chunk", c -> {
                 if (has(Set.of("info", "protection"), action)) return true;
                 if (!operational()) return false;
-                if ("unclaim".equals(action)) return manage(engine.data.governments.get(c.cityId))
-                        && titleManager(c) && coreClaimFree(c.key);
                 return titleManager(c);
             }, false);
             Claim selected = selectedClaim("chunk");
             if ("permit".equals(action)) {
                 playerChoices("player", p -> selected != null && titleManager(selected), "", "chunk");
-                choices("actions", List.of(option("all", "All non-PvP actions"), option("none", "Remove permit"),
+                List<FormChoice> permissions = new ArrayList<>(List.of(option("all", "All non-PvP actions"), option("none", "Remove permit"),
                         option("BREAK", "Break blocks"), option("PLACE", "Place blocks"),
                         option("BLOCK_INTERACT", "Use blocks / containers"), option("ENTITY_INTERACT", "Interact with entities"),
                         option("ATTACK", "Attack non-player entities"), option("BREAK,PLACE", "Build"),
-                        option("BLOCK_INTERACT,ENTITY_INTERACT", "Interact")), "", true,
-                        "Comma-separated action names; permits never override player-PvP rules.", "chunk", "player");
+                        option("BLOCK_INTERACT,ENTITY_INTERACT", "Interact")));
+                if (!form.value("actions").isBlank()) permissions.add(option(form.value("actions"),
+                        java.util.Arrays.stream(form.value("actions").split(",", -1))
+                                .map(GovernancePresentation::permissionName).collect(Collectors.joining(", "))));
+                choices("actions", permissions, "", true,
+                        "Choose permissions to grant. Permits never override player-combat rules; command help explains custom combinations.", "chunk", "player");
             } else if ("protection".equals(action)) playerChoices("player", p -> true, playerId);
         }
 
@@ -337,14 +368,16 @@ public final class GovernanceForms implements FormProvider {
                 List<FormChoice> laws = new ArrayList<>();
                 if (nation != null) engine.data.laws.getOrDefault(nation.id, List.of()).stream()
                         .filter(Objects::nonNull).filter(l -> GovernanceEngine.validUuid(l.id))
-                        .forEach(l -> laws.add(option(l.id, l.title, l.roleplayOnly ? "Roleplay only" : l.policy)));
+                        .forEach(l -> laws.add(option(l.id, recordedName(policyTitle(engine, l.policy, l.value, l.title), "Untitled law"),
+                                policyName(l.policy) + " — " + DisplayText.date(l.enactedAt))));
                 choices("law", laws, "", false, "Choose a nation first; only its retained laws are listed.", "nation");
                 return;
             }
             List<Bill> eligible = engine.data.bills.values().stream().filter(Objects::nonNull)
                     .filter(b -> GovernanceEngine.validUuid(b.id) && validNation(b.nationId) != null && billEligible(b)).toList();
-            choices("bill", eligible.stream().map(b -> option(b.id, b.title,
-                    b.status + " - " + engine.governmentName(b.nationId))).toList(), "", false,
+            choices("bill", eligible.stream().map(b -> option(b.id, policyTitle(engine, b.policy, b.value, b.title),
+                    DisplayText.words(b.status) + " — " + governmentName(engine, b.nationId, Kind.NATION)
+                            + " — " + DisplayText.date(b.createdAt))).toList(), "", false,
                     "Only bills available for this action are shown.");
             Bill selected = engine.data.bills.get(form.value("bill"));
             if (form.has("bill") && selected != null && !eligible.contains(selected)) selected = null;
@@ -398,11 +431,11 @@ public final class GovernanceForms implements FormProvider {
             GovernanceSettings.defaults(engine.config).keySet().stream()
                     .filter(name -> !editing || government != null
                             && !engine.requiresNationalLegislation(actor, government, name))
-                    .forEach(name -> policies.add(option(name, FormBuilder.label(name),
-                            GovernanceSettings.RATES.contains(name) ? "0-10000 basis points"
-                                    : "baseChunkValue".equals(name) ? "Integer cents" : "true / false")));
+                    .forEach(name -> policies.add(option(name, policyName(name),
+                            GovernanceSettings.RATES.contains(name) ? "0–100%"
+                                    : "baseChunkValue".equals(name) ? "Land value before improvements" : "On / Off")));
             if (roleplay) policies.add(option("roleplay", "Roleplay only", "Records text without changing game mechanics."));
-            String hint = "Choose a supported typed policy.";
+            String hint = "Choose a policy.";
             if (editing && engine.config.requireLegislationForPolicy) {
                 hint = government != null && engine.requiresNationalLegislation(actor, government, "incomeTaxBps")
                         ? "National mechanical policies require bills; only open membership can be changed directly."
@@ -415,25 +448,43 @@ public final class GovernanceForms implements FormProvider {
         }
 
         private void policyValue(String policy, String current, String... dependencies) {
+            current = Objects.toString(current, "");
             if (has(GovernanceSettings.BOOLEANS, policy)) {
-                List<FormChoice> values = new ArrayList<>(List.of(option("true", "True"), option("false", "False")));
-                if ("setting".equals(action)) values.add(option("inherit", "Inherit / server default"));
+                List<FormChoice> values = new ArrayList<>(List.of(option("true", "On"), option("false", "Off")));
+                if ("setting".equals(action)) values.add(option("inherit", "Inherited / server default"));
                 choices("value", values, current, false,
-                        "Boolean policy value.", dependencies);
+                        "Turn this policy on or off.", dependencies);
+            } else if (has(GovernanceSettings.RATES, policy) || "baseChunkValue".equals(policy)) {
+                List<FormChoice> values = new ArrayList<>();
+                for (String value : List.of("0", "100", "500", "1000", "2500", "5000", "10000"))
+                    values.add(option(value, GovernancePresentation.policyValue(engine, policy, value)));
+                for (String value : List.of(current, form.value("value"))) {
+                    if (!value.isBlank())
+                        values.add(option(value, GovernancePresentation.policyValue(engine, policy, value)));
+                }
+                if ("setting".equals(action)) values.add(option("inherit", "Inherited / server default"));
+                choices("value", values, current, true, has(GovernanceSettings.RATES, policy)
+                        ? "Choose a rate, or enter hundredths of a percent (125 means 1.25%)."
+                        : "Choose an amount, or enter cents (100 means $1.00).", dependencies);
+            } else if ("roleplay".equals(policy)) {
+                choices("value", List.of(option("-", "Text only")), "-", false,
+                        "Records the law's text without changing a policy.", dependencies);
             } else {
-                text("value", "Policy value", "roleplay".equals(policy) ? "Use the literal - for roleplay laws."
-                                : has(GovernanceSettings.RATES, policy) ? "Integer basis points: 0-10000."
-                                : "baseChunkValue".equals(policy) ? "Non-negative integer cents." : "Choose a policy first.",
-                        "roleplay".equals(policy) ? "-" : current, false, dependencies);
+                text("value", "Policy value", "Choose a policy first.", current, false, dependencies);
             }
         }
 
         private void diplomacyForm() {
             if ("peace".equals(action)) {
-                text("chunk_terms_or_dash", "Territorial terms",
-                        "Use chunkKey=destinationCity UUID, separated by commas; at most " + engine.config.maxTreatyChunks
-                                + " chunks. Use - for no territory. The form field is limited to 2048 characters.",
-                        "-", false, "from_nation", "to_nation");
+                List<FormChoice> terms = new ArrayList<>(List.of(option("-", "No territorial transfer")));
+                String selected = form.value("chunk_terms_or_dash");
+                if (!selected.isBlank() && !"-".equals(selected)) {
+                    String display = territoryText(selected);
+                    terms.add(option(selected, display, "Territory transfers; review every destination before confirming."));
+                }
+                choices("chunk_terms_or_dash", terms, "-", true,
+                        "Choose no territory, or use command help to enter transfers. At most " + engine.config.maxTreatyChunks
+                                + " chunks and 2048 characters.", "from_nation", "to_nation");
             }
             boolean publicQuery = has(Set.of("status", "proposals"), action);
             govChoices("nation", g -> g.kind == Kind.NATION && (publicQuery || operational() && executive(g)),
@@ -447,10 +498,21 @@ public final class GovernanceForms implements FormProvider {
                     && "ALLIED".equals(engine.politics.relationStatus(from.id, g.id)), "", false, "nation");
             choices("proposal", engine.data.diplomacy.values().stream().filter(Objects::nonNull)
                     .filter(p -> GovernanceEngine.validUuid(p.id) && diplomaticProposalEligible(p))
-                    .map(p -> option(p.id, p.type + ": " + engine.governmentName(p.fromNation)
-                            + " -> " + engine.governmentName(p.toNation), p.status)).toList(), "", false,
+                    .map(p -> option(p.id, DisplayText.words(p.type) + ": " + governmentName(engine, p.fromNation, Kind.NATION)
+                            + " → " + governmentName(engine, p.toNation, Kind.NATION),
+                            DisplayText.words(p.status) + " — " + DisplayText.date(p.createdAt))).toList(), "", false,
                     "Only proposals available to you for this action are shown.");
             text("message", "Diplomatic message", "Optional narrative terms; line breaks and tabs are supported.", "", true);
+        }
+
+        private String territoryText(String value) {
+            return java.util.Arrays.stream(value.split(",", -1)).map(term -> {
+                String[] parts = term.split("=", 2);
+                if (parts.length != 2) return "Territorial transfer — review required";
+                String destination = governments.stream().filter(g -> g.id.equals(parts[1]) || g.name.equalsIgnoreCase(parts[1]))
+                        .map(g -> g.id).findFirst().orElse(parts[1]);
+                return chunkName(parts[0]) + " → " + governmentLabel(engine, destination, null);
+            }).collect(Collectors.joining("; "));
         }
 
         private boolean diplomaticPartner(Government from, Government to) {
@@ -508,17 +570,21 @@ public final class GovernanceForms implements FormProvider {
                 if ("description".equals(action)) text("description", "Description", "", company.description, true, "company");
             }
             if ("propose".equals(action)) {
-                enumChoices("type", "Shareholder proposal type", "owner", "dividend", "roleplay", "dissolve");
+                choices("type", List.of("owner", "dividend", "roleplay", "dissolve").stream()
+                        .map(type -> option(type, decisionName(type))).toList(), "", false, "Shareholder proposal type");
                 if ("owner".equals(form.value("type"))) {
                     playerChoices("value", p -> selected != null && selected.members.contains(p.id)
                             && selected.shares.getOrDefault(p.id, 0L) > 0, "", "company", "type");
-                } else text("value", "Proposal value", "dividend".equals(form.value("type"))
-                                ? "Total dividend in dollars; no payment amount is preselected." : "Use - for roleplay or dissolution.",
-                        has(Set.of("roleplay", "dissolve"), form.value("type")) ? "-" : "", false, "company", "type");
+                } else if (has(Set.of("roleplay", "dissolve"), form.value("type"))) {
+                    choices("value", List.of(option("-", "roleplay".equals(form.value("type")) ? "Text only" : "Dissolve company")),
+                            "-", false, "Review the decision and its scope before confirming.", "company", "type");
+                } else text("value", "Proposal value", "Total dividend in dollars; no payment amount is preselected.",
+                        "", false, "company", "type");
             }
             choices("proposal", engine.data.companyProposals.values().stream().filter(Objects::nonNull)
                     .filter(p -> GovernanceEngine.validUuid(p.id) && companyProposalEligible(p))
-                    .map(p -> option(p.id, p.title, p.status + " - " + engine.companyName(p.companyId))).toList(),
+                    .map(p -> option(p.id, p.title, DisplayText.words(p.status) + " — " + companyName(engine, p.companyId)
+                            + " — " + DisplayText.date(p.createdAt))).toList(),
                     "", false, "Choose an available shareholder proposal.");
         }
 
@@ -594,7 +660,8 @@ public final class GovernanceForms implements FormProvider {
             List<Contract> eligible = engine.data.contracts.values().stream().filter(Objects::nonNull)
                     .filter(c -> GovernanceEngine.validUuid(c.id) && contractEligible(c)).toList();
             choices("contract", eligible.stream().map(c -> option(c.id, c.title,
-                    c.status + " - " + engine.governmentName(c.governmentId))).toList(), "", false,
+                    DisplayText.words(c.status) + " — " + governmentName(engine, c.governmentId, null)
+                            + " — " + DisplayText.date(c.createdAt))).toList(), "", false,
                     "Only contracts available for this action are listed.");
             Contract contract = engine.data.contracts.get(form.value("contract"));
             if (contract != null && !eligible.contains(contract)) contract = null;
@@ -636,7 +703,7 @@ public final class GovernanceForms implements FormProvider {
 
         private boolean managedPublicClaim(Government government, Claim claim) {
             List<Government> scope = engine.subtree(government).stream().filter(engine::validHierarchy).toList();
-            return scope.stream().anyMatch(g -> g.id.equals(claim.cityId))
+            return engine.claimInGovernment(claim, government)
                     && scope.stream().anyMatch(g -> engine.account(g).equals(claim.ownerAccount));
         }
 
@@ -663,16 +730,19 @@ public final class GovernanceForms implements FormProvider {
             inbox.stream().filter(Objects::nonNull).filter(m -> owner.equals(m.recipient))
                     .filter(m -> !"reply".equals(operation) || !"system".equals(m.sender) && validMailSender(m.sender))
                     .filter(m -> GovernanceEngine.validUuid(m.id)).forEach(m ->
-                            messages.add(option(m.id, m.subject, "Inbox - " + m.sentAt)));
+                            messages.add(option(m.id, m.subject, "Inbox — " + DisplayText.date(m.sentAt)
+                                    + " — From: " + account(engine, m.sender))));
             if (!"reply".equals(operation)) sent.stream().filter(Objects::nonNull)
                     .filter(m -> owner.equals(m.sender) && GovernanceEngine.validUuid(m.id))
-                    .forEach(m -> messages.add(option(m.id, m.subject, "Sent - " + m.sentAt)));
-            choices("message", messages, "", false, "Only this authorized mailbox's message IDs are shown; subjects only.",
+                    .forEach(m -> messages.add(option(m.id, m.subject, "Sent — " + DisplayText.date(m.sentAt)
+                            + " — To: " + account(engine, m.recipient))));
+            choices("message", messages, "", false, "Only messages from this authorized mailbox are shown; message bodies remain private.",
                     official ? new String[]{"government"} : new String[0]);
             List<FormChoice> recipients = new ArrayList<>();
             if (!official || government != null) {
                 recipients.addAll(playerOptions(p -> true));
-                governments.forEach(g -> recipients.add(option("government:" + g.id, g.name + " (official mailbox)", g.kind.name())));
+                governments.forEach(g -> recipients.add(option("government:" + g.id, g.name + " (official mailbox)",
+                        governmentLabel(engine, g.id, g.kind))));
             }
             choices("recipient", recipients, "", false, "Known players or government mailboxes.",
                     official ? new String[]{"government"} : new String[0]);
@@ -704,10 +774,12 @@ public final class GovernanceForms implements FormProvider {
                     "", false, "Operator-only company selection.");
             List<FormChoice> claims = new ArrayList<>();
             if (actor.admin()) engine.data.claims.forEach((key, claim) -> {
-                if (claim != null && validChunk(key)) claims.add(option(key, key, engine.governmentName(claim.cityId)));
+                if (claim != null && validChunk(key)) claims.add(option(key, chunkName(key), territoryLabel(claim)));
             });
             if (actor.admin() && (engine.data.claims.containsKey(actor.chunkKey()) || "diagnostics".equals(action)))
-                claims.add(option("here", "Current chunk", actor.chunkKey()));
+                claims.add(option("here", "Current chunk", chunkName(actor.chunkKey())));
+            if (actor.admin() && "diagnostics".equals(action) && !form.value("chunk").isBlank())
+                claims.add(option(form.value("chunk"), chunkName(form.value("chunk"))));
             choices("chunk", claims, "here", "diagnostics".equals(action) && actor.admin(),
                     "Operator-only; active financial/core commitments still apply.");
             choices("account", actor.admin() ? accountOptions(false, false) : List.of(), "", false,
@@ -725,7 +797,7 @@ public final class GovernanceForms implements FormProvider {
                     case "company" -> choices(key, companies.stream()
                                     .filter(c -> has(Set.of("list", "info", "buy", "shares"), action) || companyManager(c))
                                     .map(this::companyOption).toList(), preferredCompany(), false,
-                            "Company IDs; financial commands may narrow these choices further.");
+                            "Choose a company; financial actions may narrow these choices further.");
                     case "companyaccount" -> choices(key, accountOptions(true, true), "", false,
                             "Company treasuries you manage.");
                     case "account", "fromaccount" -> choices(key, accountOptions(true, false), actor.account(), false,
@@ -741,12 +813,13 @@ public final class GovernanceForms implements FormProvider {
             List<FormChoice> options = new ArrayList<>();
             if (!onlyCompanies) {
                 players.stream().filter(p -> !managed || actor.admin() || playerId.equals(p.id))
-                        .forEach(p -> options.add(option("player:" + p.id, label(p) + " (player)", p.id)));
+                        .forEach(p -> options.add(option("player:" + p.id, label(p) + " (player)", playerContext(p))));
                 governments.stream().filter(g -> !managed || manage(g)).forEach(g ->
-                        options.add(option(engine.account(g), g.name + " (" + g.kind.name().toLowerCase(Locale.ROOT) + ")", g.id)));
+                        options.add(option(engine.account(g), g.name + " (" + g.kind.name().toLowerCase(Locale.ROOT) + ")",
+                                governmentLabel(engine, g.id, g.kind))));
             }
             companies.stream().filter(c -> !managed || companyManager(c))
-                    .forEach(c -> options.add(option("company:" + c.id, c.name + " (company)", c.id)));
+                    .forEach(c -> options.add(option("company:" + c.id, c.name + " (company)", "Manager: " + person(engine, c.owner))));
             return options;
         }
 
@@ -765,30 +838,56 @@ public final class GovernanceForms implements FormProvider {
         }
 
         private List<FormChoice> playerOptions(Predicate<Player> eligible) {
-            return players.stream().filter(eligible).map(p -> option(p.id, label(p), p.id)).toList();
+            return players.stream().filter(eligible).map(p -> option(p.id, label(p), playerContext(p))).toList();
+        }
+
+        private String playerContext(Player player) {
+            return "Nation: " + governmentName(engine, player.nationId, Kind.NATION)
+                    + "; city: " + governmentName(engine, player.cityId, Kind.CITY);
         }
 
         private void claimChoices(String key, Predicate<Claim> eligible, boolean custom, String... dependencies) {
             if (!form.has(key)) return;
             List<Claim> claims = engine.data.claims.values().stream().filter(engine::viewableClaim).filter(eligible).toList();
             List<FormChoice> options = new ArrayList<>();
-            if (claims.stream().anyMatch(c -> actor.chunkKey().equals(c.key))) options.add(option("here", "Current chunk", actor.chunkKey()));
-            claims.forEach(c -> options.add(option(c.key, c.key, engine.governmentName(c.cityId))));
+            if (claims.stream().anyMatch(c -> actor.chunkKey().equals(c.key))) options.add(option("here", "Current chunk", chunkName(actor.chunkKey())));
+            claims.forEach(c -> options.add(option(c.key, chunkName(c.key), territoryLabel(c))));
             if (has(Set.of("info", "protection"), action) && options.stream().noneMatch(c -> "here".equals(c.value())))
-                options.add(option("here", "Current chunk", actor.chunkKey()));
+                options.add(option("here", "Current chunk", chunkName(actor.chunkKey())));
+            if ((custom || has(Set.of("info", "protection"), action)) && !form.value(key).isBlank()) {
+                String selected = form.value(key);
+                options.add(option(selected, java.util.Arrays.stream(selected.split(",", -1))
+                        .map(GovernancePresentation::chunkName).collect(Collectors.joining("; ")), "Selected territory"));
+            }
             choices(key, options, "here", custom || has(Set.of("info", "protection"), action),
-                    custom ? "Choose owned chunk keys, separated by commas; at most " + engine.config.maxContractChunks
-                            + " chunks and 2048 characters. Execution revalidates all commitments."
+                    custom ? "Choose owned territory; command help explains selecting several chunks. At most " + engine.config.maxContractChunks
+                            + " chunks and 2048 characters. All commitments are checked before confirming."
                             : "Only eligible claims are shown; financial encumbrances and connectivity are checked on execution.", dependencies);
         }
 
+        private String territoryLabel(Claim claim) {
+            return "Nation: " + governmentName(engine, claim.nationId, Kind.NATION)
+                    + "; state: " + governmentName(engine, claim.stateId, Kind.STATE)
+                    + "; city: " + governmentName(engine, claim.cityId, Kind.CITY);
+        }
+
         private void enumChoices(String key, String hint, String... values) {
-            choices(key, List.of(values).stream().map(value -> option(value, FormBuilder.label(value))).toList(),
+            choices(key, List.of(values).stream().map(value -> option(value, DisplayText.words(value))).toList(),
                     "", false, hint);
         }
 
         private void choices(String key, Collection<FormChoice> options, String preferred, boolean custom, String hint, String... dependencies) {
-            if (form.has(key)) form.choice(key, FormBuilder.label(key), hint, options,
+            String label = switch (key) {
+                case "key", "policy" -> "Policy";
+                case "yes_no_abstain" -> "Vote";
+                case "chunk_terms_or_dash" -> "Territorial terms";
+                case "chunk" -> "Location";
+                case "chunks" -> "Territory";
+                case "state_or_none" -> "State allocation";
+                case "city_or_none" -> "City allocation";
+                default -> FormBuilder.label(key);
+            };
+            if (form.has(key)) form.choice(key, label, hint, options,
                     preferred == null ? "" : preferred, List.of(dependencies), custom);
         }
 
@@ -844,15 +943,15 @@ public final class GovernanceForms implements FormProvider {
         }
 
         private FormChoice governmentOption(Government government) {
-            return option(government.id, government.name, government.kind.name() + " - " + government.id);
+            return option(government.id, recordedName(government.name, "Former government"), governmentLabel(engine, government.id, government.kind));
         }
 
         private FormChoice companyOption(Company company) {
-            return option(company.id, company.name, "Owner: " + engine.playerName(company.owner));
+            return option(company.id, recordedName(company.name, "Former company"), "Owner: " + person(engine, company.owner));
         }
 
         private String label(Player player) {
-            return player.name == null || player.name.isBlank() ? player.id : player.name;
+            return person(engine, player.id);
         }
 
         private String fieldAt(int index) {
@@ -886,7 +985,7 @@ public final class GovernanceForms implements FormProvider {
 
     private static FormChoice option(String value, String label, String detail) {
         String safeLabel = clip(label, 128).replaceAll("\\p{Cntrl}", " ");
-        return new FormChoice(value, safeLabel.isBlank() ? clip(value, 128) : safeLabel,
+        return new FormChoice(value, safeLabel.isBlank() ? "Untitled record" : safeLabel,
                 clip(detail, 256).replaceAll("\\p{Cntrl}", " "));
     }
 

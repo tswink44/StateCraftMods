@@ -13,6 +13,7 @@ import dev.statecraft.api.form.FormValidation;
 import dev.statecraft.api.ui.ActionIntent;
 import dev.statecraft.api.ui.ActionPreview;
 import dev.statecraft.api.ui.ActionSelection;
+import dev.statecraft.api.ui.DisplayText;
 import dev.statecraft.api.ui.EntityRef;
 import dev.statecraft.api.ui.UiContext;
 import dev.statecraft.api.ui.UiQuery;
@@ -74,7 +75,7 @@ public final class EconomyPresentationScenarios {
                 && output.contains("automatic payments=true"), "current mode and historical consent were conflated");
         eq(original, w.data.loans.get(id).terms);
         UiView detail = detail(w, BUYER, EntityRef.Kind.LOAN, id);
-        check(detail.body().fallback().contains("Current automatic payments: false"), "loan panel omitted the current mode");
+        check(detail.body().fallback().contains("Current automatic payments: No"), "loan panel omitted the current mode");
         check(detail.actions().stream().anyMatch(action -> action.template().equals("loan autopay <loanId> true") && action.enabled()),
                 "manual loan lacks an enabled autopay action");
         check(detail.actions().stream().anyMatch(action -> action.template().equals("loan autopay <loanId> false") && !action.enabled()),
@@ -148,7 +149,7 @@ public final class EconomyPresentationScenarios {
         eq(6, second.rows().size()); check(!second.more(), "last dashboard page promised more tasks");
         eq(26, rowIds(first, second).size());
         eq(ids.get(25), ui.dashboard(OWNER, ids.get(25), 0).rows().get(0).entity().id());
-        check(first.rows().stream().noneMatch(row -> row.title().fallback().contains("diamond")), "another seller's task leaked");
+        check(first.rows().stream().noneMatch(row -> row.title().fallback().contains("Diamond")), "another seller's task leaked");
         String bank = w.bank(10_000, 0, 0);
         w.engine.banking.associate(BUYER, bank);
         String application = w.engine.banking.requestLoan(BUYER, bank, 500, 4, null, false, false, false);
@@ -168,7 +169,7 @@ public final class EconomyPresentationScenarios {
         w.engine.banking.close(OWNER, bank);
         w.governance.companies.remove("co");
         UiView view = detail(w, BUYER, EntityRef.Kind.LOAN, loan);
-        check(view.body().fallback().contains("REPAID") && view.body().fallback().contains("Original agreement"), "legitimate retained history was unavailable");
+        check(view.body().fallback().contains("Repaid") && view.body().fallback().contains("Original agreement"), "legitimate retained history was unavailable");
         check(view.actions().stream().noneMatch(action -> action.enabled()), "closed historical loan offers financial actions");
         validateActions(view);
     }
@@ -498,8 +499,8 @@ public final class EconomyPresentationScenarios {
         ActionPreview crossDimension = preview(w, dimensionChanged, "property", template, here, InventoryPort.NONE);
         check(!first.fingerprint().equals(next.fingerprint()), "here silently retargeted an equally priced/owned adjacent claim");
         check(!first.fingerprint().equals(crossDimension.fingerprint()), "here omitted the dimension from its material identity");
-        eq(CLAIM, first.lines().stream().filter(line -> line.label().fallback().equals("Property") && line.material()).findFirst().orElseThrow().value().fallback());
-        eq(otherDimension, crossDimension.lines().stream().filter(line -> line.label().fallback().equals("Property")).findFirst().orElseThrow().value().fallback());
+        eq(DisplayText.chunk(CLAIM), first.lines().stream().filter(line -> line.label().fallback().equals("Property") && line.material()).findFirst().orElseThrow().value().fallback());
+        eq(DisplayText.chunk(otherDimension), crossDimension.lines().stream().filter(line -> line.label().fallback().equals("Property")).findFirst().orElseThrow().value().fallback());
         Map<String, String> explicit = Map.of("chunkKeyOrHere", CLAIM);
         eq(preview(w, origin, "property", template, explicit, InventoryPort.NONE).fingerprint(),
                 preview(w, dimensionChanged, "property", template, explicit, InventoryPort.NONE).fingerprint());
@@ -568,7 +569,7 @@ public final class EconomyPresentationScenarios {
             ActionPreview first = preview(w, OWNER, page, template, values, inventory);
             ActionPreview next = preview(w, moved, page, template, values, inventory);
             check(!first.fingerprint().equals(next.fingerprint()), "listing tax origin silently changed: " + template);
-            eq(BUYER_CLAIM, next.lines().stream().filter(line -> line.label().fallback().equals("Source tax location")).findFirst().orElseThrow().value().fallback());
+            eq(DisplayText.chunk(BUYER_CLAIM), next.lines().stream().filter(line -> line.label().fallback().equals("Source tax location")).findFirst().orElseThrow().value().fallback());
             w.engine.execute(moved, ActionSelection.form("economy:" + page, template, values).rendered(), inventory);
         }
         eq(BUYER_CLAIM, w.data.market.values().iterator().next().sourceChunk);

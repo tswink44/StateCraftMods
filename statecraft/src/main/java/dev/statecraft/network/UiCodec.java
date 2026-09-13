@@ -1,6 +1,7 @@
 package dev.statecraft.network;
 
 import dev.statecraft.api.ui.*;
+import dev.statecraft.api.form.FormSchema;
 import io.netty.handler.codec.DecoderException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -166,7 +167,7 @@ final class UiCodec {
             int total = 0;
             for (int index = 0; index < count; index++) {
                 String key = string(64);
-                String value = string(2048);
+                String value = string(FormSchema.MAX_VALUE_LENGTH);
                 total += value.length();
                 if (values.putIfAbsent(key, value) != null || total > 4096) {
                     throw new DecoderException("Invalid UI action values.");

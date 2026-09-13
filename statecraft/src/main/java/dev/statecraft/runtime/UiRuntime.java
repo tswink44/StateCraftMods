@@ -8,8 +8,8 @@ import dev.statecraft.api.UserError;
 import dev.statecraft.api.form.FormQuery;
 import dev.statecraft.api.form.FormValidation;
 import dev.statecraft.api.ui.*;
+import dev.statecraft.domain.GovernmentOverviewService;
 import java.io.IOException;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -149,7 +149,14 @@ public final class UiRuntime {
                     "This operation must be reconciled using its original inputs, not reused for a query.");
             if (intent == ActionIntent.NAVIGATION) return new ServerRuntime.Reply(ActionOutcome.REJECTED, "Use the navigation action to open that section.");
             validateForm(player, selection);
-            return runtime.invoke(player, selection.namespace(), selection.rendered());
+            ServerRuntime.Reply reply = runtime.invoke(player, selection.namespace(), selection.rendered());
+            UiProvider provider = providers.get(selection.namespace());
+            if (reply.success() && !selection.template().isEmpty() && provider != null) {
+                String displayed = java.util.Objects.requireNonNull(provider.queryText(actor, selection, reply.text()));
+                if (displayed.length() > 28_000) displayed = displayed.substring(0, 27_900) + "\nUse the next page for more results.";
+                return new ServerRuntime.Reply(reply.outcome(), displayed);
+            }
+            return reply;
         }
         if (!operation.present()) return new ServerRuntime.Reply(ActionOutcome.REVIEW_REQUIRED, "Review this action before submitting it.");
         var playerQuotes = quotes.get(player.getUUID());
@@ -212,7 +219,8 @@ public final class UiRuntime {
         if (runtime.isWritable()) runtime.saveNow();
         if (!runtime.isWritable()) return new ServerRuntime.Reply(ActionOutcome.UNCERTAIN,
                 "The action may have completed, but its result is not confirmed on disk. Restore saving and check this operation; do not repeat it.");
-        return result;
+        return new ServerRuntime.Reply(result.outcome(),
+                ActionDisplay.feedback(intent, summary(selection), result.outcome(), result.text()));
     }
 
     private ServerRuntime.Reply recordNoExecution(Actor actor, OperationRef operation, CachedReview review,
@@ -254,9 +262,7 @@ public final class UiRuntime {
         if (!receipt.requestHash().equals(requestHash)) return new ServerRuntime.Reply(ActionOutcome.UNCERTAIN,
                 "This operation ID belongs to different inputs. Reconcile the original operation instead of resubmitting.");
         ActionOutcome outcome = receipt.outcome(runtime.store().revision());
-        return new ServerRuntime.Reply(outcome, outcome.uncertain()
-                ? "The operation has no confirmed final outcome. Do not repeat it; inspect the related history and ask an operator to reconcile it."
-                : receipt.text());
+        return new ServerRuntime.Reply(outcome, OperationPresentation.result(receipt, runtime.store().revision()));
     }
 
     private ServerRuntime.Reply unknown() {
@@ -274,7 +280,12 @@ public final class UiRuntime {
         thread();
         MenuRegistry.get(query.page());
         Actor actor = ServerRuntime.actor(player);
-        if (query.entity().kind() == EntityRef.Kind.OPERATION) return operationView(actor, operationId(query.entity().id()));
+        if (query.page().equals("statecraft:official_mail") && query.entity().kind() == EntityRef.Kind.GOVERNMENT) {
+            return new GovernmentOverviewService(runtime.engine(), runtime.economy()).officialMailbox(actor,
+                    query.entity().id(), query.search(), query.offset());
+        }
+        if (query.entity().kind() == EntityRef.Kind.OPERATION) return operationView(actor, operationId(query.entity().id()),
+                query.page().equals("statecraft:admin_operations"));
         if (query.page().equals("statecraft:operations") || query.page().equals("statecraft:admin_operations")) {
             return operationList(actor, query.page().equals("statecraft:admin_operations"), query.search(), query.offset());
         }
@@ -293,45 +304,53 @@ public final class UiRuntime {
         return result;
     }
 
+    public PersonalDashboard personalDashboard(ServerPlayer player, PersonalDashboard.Request request) {
+        thread();
+        return personalDashboard(ServerRuntime.actor(player), request);
+    }
+
+    public GovernmentOverview governmentOverview(ServerPlayer player, GovernmentOverview.Request request) {
+        thread();
+        return new GovernmentOverviewService(runtime.engine(), runtime.economy()).describe(ServerRuntime.actor(player), request);
+    }
+
+    private PersonalDashboard personalDashboard(Actor actor, PersonalDashboard.Request request) {
+        UiProvider economy = providers.get("economy");
+        PersonalDashboard.Page accounts = economy == null ? PersonalDashboard.Page.EMPTY
+                : economy.personalAccounts(actor, request.accounts());
+        UiText notice = runtime.isWritable() ? UiText.EMPTY
+                : text("dashboard.paused", "Server saving is paused. Account actions may be unavailable; contact an operator.");
+        return new PersonalDashboardService(runtime.governance()).describe(actor, request, economy != null, accounts, notice);
+    }
+
     private UiView dashboard(Actor actor, UiQuery query) {
-        var rows = new ArrayList<UiRow>();
-        boolean more = false;
-        if (runtime.isWritable()) {
-            try (var decision = runtime.clock().freeze()) {
-                runtime.advanceGovernance();
-                for (UiProvider provider : providers.values()) {
-                    UiView section = validateView(provider.dashboard(actor, query.search(), query.offset()));
-                    if (section.rows().size() > UiView.PAGE_SIZE) throw new IllegalStateException("Dashboard providers must page their own tasks.");
-                    rows.addAll(section.rows());
-                    more |= section.more();
-                }
-            } finally {
-                if (runtime.isWritable()) runtime.flush();
-            }
+        PersonalDashboard dashboard = personalDashboard(actor, PersonalDashboard.Request.FIRST);
+        var entries = new ArrayList<PersonalDashboard.Entry>();
+        for (var citizenship : new PersonalDashboard.Entry[]{dashboard.nation(), dashboard.state(), dashboard.city()}) {
+            if (citizenship != null) entries.add(citizenship);
         }
-        UiView operationPage = operationList(actor, false, query.search(), query.offset());
-        rows.addAll(operationPage.rows());
-        more |= operationPage.more();
-        return new UiView(text("dashboard.title", "Your dashboard"),
-                runtime.isWritable() ? text("dashboard.body", "Authorized pending work and your recent operations. Select a row to inspect it.")
-                        : text("dashboard.paused", "World saving is paused. Operation status remains available; ask an operator to restore saving."),
-                rows, List.of(new UiAction("statecraft:operations", "gui statecraft:dashboard",
-                        text("dashboard.home", "Dashboard"), Map.of())), query.offset(), more,
-                text("dashboard.empty", "No matching pending work or recent operations."));
+        entries.addAll(dashboard.accounts().entries());
+        entries.addAll(dashboard.companies().entries());
+        entries.addAll(dashboard.propertyCities().entries());
+        return new UiView(text("dashboard.title", "My Dashboard"), UiText.literal(dashboard.name()),
+                entries.stream().map(entry -> new UiRow(entry.name(), entry.detail(), entry.target().entity())).toList(),
+                List.of(new UiAction("statecraft:dashboard", "gui statecraft:mail",
+                        text("dashboard.inbox", "Personal inbox"), Map.of())),
+                0, false, UiText.EMPTY);
     }
 
     private UiView operationList(Actor actor, boolean all, String search, int offset) {
         List<UiOperations.Receipt> entries = operations.list(actor, all, search, offset, UiView.PAGE_SIZE + 1);
         List<UiRow> rows = entries.stream().limit(UiView.PAGE_SIZE).map(receipt -> new UiRow(
-                receipt.summary(), receipt.outcome(runtime.store().revision()) + " | "
-                + receipt.ownerName() + " | " + Instant.ofEpochMilli(receipt.createdAt()),
+                receipt.summary(), OperationPresentation.row(receipt, runtime.store().revision(), all),
                 new EntityRef("statecraft", EntityRef.Kind.OPERATION, receipt.operation().id().toString()))).toList();
         return new UiView(text(all ? "operations.admin_title" : "operations.title", all ? "Operation administration" : "Your operations"),
-                text("operations.help", "Receipts are bounded. An unknown or uncertain ID is never automatically executed again."),
+                text("operations.help", "Your recent actions and their status. Ask an operator about any action that needs attention."),
                 rows, List.of(), offset, entries.size() > UiView.PAGE_SIZE, text("operations.empty", "No matching operations."));
     }
 
-    private UiView operationView(Actor actor, UUID id) {
+    private UiView operationView(Actor actor, UUID id, boolean diagnostics) {
+        if (diagnostics && !actor.admin()) throw new UserError("Operator permission level 2 is required.");
         var receipt = operations.inspect(actor, id).orElseThrow(() -> new UserError("This operation is not available to you."));
         var actions = new ArrayList<UiAction>();
         if (receipt.unresolved() && actor.admin()) {
@@ -342,10 +361,9 @@ public final class UiRuntime {
                     text("operations.resolve_rejected", "Confirm not executed after audit"),
                     Map.of("operation", id.toString(), "resolution", "not_executed")));
         }
-        String body = receipt.summary() + "\nOperation: " + id + "\nOwner: " + receipt.ownerName()
-                + "\nOutcome: " + receipt.outcome(runtime.store().revision()) + "\nCreated: " + Instant.ofEpochMilli(receipt.createdAt())
-                + "\n" + receiptReply(receipt, receipt.requestHash()).text();
-        return new UiView(text("operations.detail", "Operation details"), UiText.literal(body), List.of(), actions, 0, false, UiText.EMPTY);
+        return new UiView(text("operations.detail", "Action details"),
+                OperationPresentation.body(receipt, runtime.store().revision(), diagnostics),
+                List.of(), actions, 0, false, UiText.EMPTY);
     }
 
     private ActionPreview reconciliationPreview(Actor actor, ActionSelection selection) {
@@ -418,7 +436,7 @@ public final class UiRuntime {
     }
 
     private String summary(ActionSelection selection) {
-        return selection.template().isEmpty() ? "Advanced command" : selection.registeredAction().label();
+        return ActionDisplay.title(selection);
     }
 
     private long nextRevision() { return Math.addExact(runtime.store().revision(), 1); }

@@ -188,11 +188,11 @@ class GovernanceReviewRegressionTest extends DomainFixture {
         Map<String, Long> balances = Map.copyOf(economy.balances);
         List<Consumer<DiplomaticProposal>> corruptions = List.of(
                 p -> p.chunks.set(0, null),
-                p -> p.chunks.get(0).fromCity = null,
+                p -> p.chunks.get(0).fromNation = null,
                 p -> p.chunks.get(0).fromCity = "",
                 p -> p.chunks.get(0).fromCity = alpha.state(),
                 p -> p.chunks.get(0).fromCity = UUID.randomUUID().toString(),
-                p -> p.chunks.get(0).toCity = null,
+                p -> p.chunks.get(0).toNation = null,
                 p -> p.chunks.get(0).toCity = beta.nation(),
                 p -> p.chunks.get(0).toCity = alpha.city(),
                 p -> p.chunks.get(0).toCity = UUID.randomUUID().toString(),
@@ -230,10 +230,10 @@ class GovernanceReviewRegressionTest extends DomainFixture {
         run(alice, "diplomacy ratify " + treaty + " yes");
         run(dave, "diplomacy ratify " + treaty + " yes");
         DiplomaticProposal proposal = data.diplomacy.get(treaty);
-        proposal.chunks.get(0).fromCity = null;
+        proposal.chunks.get(0).fromNation = null;
         assertDoesNotThrow(() -> advance(config.legislativeVotingMillis));
         assertEquals("READY", proposal.status);
-        assertTrue(proposal.lastError.contains("fromCity"));
+        assertTrue(proposal.lastError.contains("fromNation"));
         assertTrue(proposal.lastError.contains("operator repair"));
         assertEquals(alpha.city(), data.claims.get(key).cityId);
         assertEquals(1_000, economy.balance("nation:" + alpha.nation()));
@@ -241,8 +241,8 @@ class GovernanceReviewRegressionTest extends DomainFixture {
         assertEquals("WAR", engine.politics.relationStatus(alpha.nation(), beta.nation()));
         assertEquals(0, economy.attempts);
         UserError error = assertThrows(UserError.class, () -> run(operator, "diplomacy execute " + treaty));
-        assertTrue(error.getMessage().contains("fromCity"));
-        proposal.chunks.get(0).fromCity = alpha.city();
+        assertTrue(error.getMessage().contains("fromNation"));
+        proposal.chunks.get(0).fromNation = alpha.nation();
         run(dave, "diplomacy execute " + treaty);
         assertEquals("ENACTED", proposal.status);
         assertEquals("", proposal.lastError);

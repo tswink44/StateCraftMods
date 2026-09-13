@@ -1,6 +1,8 @@
 # World data and recovery
 
-StateCraft uses `<world>\statecraft\world.json`, a human-readable JSON snapshot with `schemaVersion`, `revision`, `savedAt`, and named `sections`. The snapshot schema remains **1** in mod version **2.2.0**. Existing governance/economy models remain readable. The core now also owns a versioned `ui_operations` section with a stable world UUID and bounded operation receipts.
+StateCraft uses `<world>\statecraft\world.json`, a human-readable JSON snapshot with `schemaVersion`, `revision`, `savedAt`, and named `sections`. The outer snapshot schema remains **1** in mod version **2.3.0**. The governance section migrates from schema **1 to 2** for nationally owned claims with optional state/city assignments; the economy section remains compatible. The core also owns a versioned `ui_operations` section with a stable world UUID and bounded operation receipts. Hiding identifiers in ordinary screens does not remove them from these records or alter their ownership.
+
+Before migrating an existing snapshot, the server copies its exact persisted bytes to a `before-national-claims-v2-...json` file under `statecraft\backups`. This upgrade backup does not serialize partially migrated models and is not pruned by the daily ten-backup rotation. Existing valid city claims retain their nation/state/city allocation, private/public title, permits and improvements. Invalid legacy references are not guessed away. Do not downgrade a migrated world without restoring an appropriate full-world backup.
 
 Both mods register their mutable models with the core world store. Governance, economy, share reservations, integration locks, and UI operation results are serialized into **one snapshot**, so a save cannot update the stock ledger in one mod file while retaining a different government/share state in another. Sections belonging to an absent optional module are retained unchanged.
 

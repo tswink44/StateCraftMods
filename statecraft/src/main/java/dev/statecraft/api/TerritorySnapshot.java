@@ -17,5 +17,21 @@ public record TerritorySnapshot(String dimension, int centerX, int centerZ, int 
 
     public record Territory(int x, int z, String nationId, String stateId, String cityId,
                             String nationName, String stateName, String cityName,
-                            String ownerAccount, int color, int improvements) {}
+                            String ownerAccount, int color, int improvements, String ownerName) {
+        public Territory {
+            java.util.Objects.requireNonNull(nationId);
+            java.util.Objects.requireNonNull(nationName);
+            java.util.Objects.requireNonNull(ownerAccount);
+            stateId = java.util.Objects.requireNonNullElse(stateId, "");
+            cityId = java.util.Objects.requireNonNullElse(cityId, "");
+            stateName = java.util.Objects.requireNonNullElse(stateName, "");
+            cityName = java.util.Objects.requireNonNullElse(cityName, "");
+            ownerName = java.util.Objects.requireNonNullElse(ownerName, "Private owner");
+        }
+
+        public Territory(int x, int z, String nationId, String stateId, String cityId,
+                         String nationName, String stateName, String cityName, String ownerAccount, int color, int improvements) {
+            this(x, z, nationId, stateId, cityId, nationName, stateName, cityName, ownerAccount, color, improvements, "Private owner");
+        }
+    }
 }

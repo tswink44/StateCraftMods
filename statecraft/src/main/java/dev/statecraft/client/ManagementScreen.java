@@ -12,27 +12,34 @@ import dev.statecraft.api.ui.UiQuery;
 import dev.statecraft.api.ui.UiText;
 import dev.statecraft.api.ui.UiView;
 import dev.statecraft.client.state.PendingOperations;
+import dev.statecraft.client.state.SectionFilter;
+import dev.statecraft.client.state.SectionLayout;
+import dev.statecraft.client.state.UiPresentation;
 import dev.statecraft.client.state.UiScope;
 import dev.statecraft.client.state.ViewState;
 import dev.statecraft.network.SuiteNetwork;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.WeakHashMap;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 
-public final class ManagementScreen extends Screen {
+public class ManagementScreen extends Screen {
+    private static final Map<ViewState, SectionFilter> FILTERS = new WeakHashMap<>();
     private final ViewState state;
     private final MenuPage page;
     private final UiScope scope;
+    private final SectionFilter filter;
     private RetainedEditBox search;
     private RetainedEditBox command;
     private TextPanel results;
     private Button status;
-    private Button operations;
+    private Button navigationAction;
     private Button previous;
     private Button next;
     private Button open;
@@ -52,6 +59,7 @@ public final class ManagementScreen extends Screen {
         this.state = state;
         page = MenuRegistry.get(state.query().page());
         scope = ClientHooks.scope();
+        filter = FILTERS.computeIfAbsent(state, value -> new SectionFilter(value.query().search(), value.searchSelection()));
     }
     MenuPage page() { return page; }
     ViewState state() { return state; }
@@ -59,79 +67,111 @@ public final class ManagementScreen extends Screen {
     @Override
     protected void init() {
         saveEditors();
+        search = null;
+        command = null;
+        run = null;
         int full = width - 24;
-        int small = (full - 12) / 4;
-        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.back", "Back"), ignored -> onClose())
-                .bounds(12, 8, small, 20).build());
-        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.sections", "Sections"), ignored -> ClientHooks.sections(null))
-                .bounds(16 + small, 8, small, 20).build());
-        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.dashboard", "My dashboard"),
+        var navigation = SectionLayout.row(12, full, 4, 4);
+        SectionLayout layout = SectionLayout.of(height, filter.open(), state.advancedOpen());
+        addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.back", "Back"), ignored -> onClose())
+                .bounds(navigation.get(0).x(), 8, navigation.get(0).width(), 20).build());
+        addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.sections", "Sections"), ignored -> ClientHooks.sections(null))
+                .bounds(navigation.get(1).x(), 8, navigation.get(1).width(), 20).build());
+        addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.dashboard", "My dashboard"),
                         ignored -> ClientHooks.navigate(UiQuery.page("statecraft:dashboard")))
-                .bounds(20 + small * 2, 8, small, 20).build());
-        operations = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.operations.count", "Operations (%s)",
-                        ClientHooks.pendingCount()), ignored -> ClientHooks.operations(this))
-                .bounds(24 + small * 3, 8, small, 20).build());
-        status = addRenderableWidget(Button.builder(Component.empty(), ignored -> minecraft.setScreen(
+                .bounds(navigation.get(2).x(), 8, navigation.get(2).width(), 20).build());
+        navigationAction = addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.close", "Close"), ignored -> {
+                    if (ClientHooks.needsAttention()) ClientHooks.operations(this);
+                    else minecraft.setScreen(null);
+                })
+                .bounds(navigation.get(3).x(), 8, navigation.get(3).width(), 20).build());
+        addRenderableWidget(UiButton.create(filter.open() ? ClientText.tr("gui.statecraft.filter.hide", "Hide filter")
+                        : state.query().search().isEmpty() ? ClientText.tr("gui.statecraft.filter.show", "Filter")
+                        : ClientText.tr("gui.statecraft.filter.active", "Filtered"), ignored -> {
+                    saveEditors();
+                    filter.toggle();
+                    rebuildWidgets();
+                }).bounds(width - 90, 31, 78, 16).build());
+        status = addRenderableWidget(UiButton.create(Component.empty(), ignored -> minecraft.setScreen(
                         new InformationScreen(this, ClientText.tr("gui.statecraft.status", "Status"), statusMessage())))
-                .bounds(12, 46, full, 12).build());
-        search = new RetainedEditBox(font, 12, 62, Math.max(80, full - 76), 20,
-                ClientText.tr("gui.statecraft.search.section", "Search this section"));
-        search.setMaxLength(80);
-        search.setHint(ClientText.tr("gui.statecraft.search.section_hint", "Filter names or IDs..."));
-        search.setValue(state.query().search());
-        search.restore(state.searchSelection());
-        addRenderableWidget(search);
-        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.search", "Search"), ignored -> search())
-                .bounds(width - 84, 62, 72, 20).build());
-        results = addRenderableWidget(new TextPanel(font, 12, 87, full, height - 189,
+                .bounds(12, 50, full, 16).build());
+        if (filter.open()) {
+            search = new RetainedEditBox(font, 12, 72, full - 76, 20,
+                    ClientText.tr("gui.statecraft.search.section", "Search this section"));
+            search.setMaxLength(80);
+            search.setHint(ClientText.tr("gui.statecraft.search.section_hint", "Search by name..."));
+            search.setValue(filter.text());
+            search.restore(filter.selection());
+            search.setResponder(filter::text);
+            addRenderableWidget(search);
+            addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.filter.apply", "Apply"), ignored -> search())
+                    .bounds(width - 84, 72, 72, 20).primary().build());
+        }
+        results = addRenderableWidget(new TextPanel(font, 12, layout.contentTop(), full, layout.contentHeight(),
                 entry -> state.select(entry.entity(), entry.copy()), ClientHooks::openEntity, state::scroll));
-        previous = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.previous", "Previous"), ignored -> page(-UiView.PAGE_SIZE))
-                .bounds(12, height - 97, small, 20).build());
-        next = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.next", "Next"), ignored -> page(UiView.PAGE_SIZE))
-                .bounds(16 + small, height - 97, small, 20).build());
-        open = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.open_details", "Open details"), ignored -> results.openSelected())
-                .bounds(20 + small * 2, height - 97, small, 20).build());
-        copy = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.copy_row", "Copy row"), ignored -> results.copySelected())
-                .bounds(24 + small * 3, height - 97, small, 20).build());
-        int tool = (full - 16) / 5;
-        refresh = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.refresh", "Refresh"), ignored -> refresh())
-                .bounds(12, height - 73, tool, 20).build());
-        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.actions", "Actions"), ignored ->
+        previous = addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.previous", "Previous"), ignored -> page(-UiView.PAGE_SIZE))
+                .bounds(navigation.get(0).x(), layout.pagingY(), navigation.get(0).width(), 20).build());
+        next = addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.next", "Next"), ignored -> page(UiView.PAGE_SIZE))
+                .bounds(navigation.get(1).x(), layout.pagingY(), navigation.get(1).width(), 20).build());
+        open = addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.open_details", "Open details"), ignored -> results.openSelected())
+                .bounds(navigation.get(2).x(), layout.pagingY(), navigation.get(2).width(), 20).build());
+        copy = addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.copy_row", "Copy row"), ignored -> results.copySelected())
+                .bounds(navigation.get(3).x(), layout.pagingY(), navigation.get(3).width(), 20).build());
+        int tools = state.advancedOpen() ? 6 : 4;
+        var tool = SectionLayout.row(12, full, tools, 4);
+        addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.actions", "Actions"), ignored ->
                         minecraft.setScreen(new ActionPickerScreen(this, page)))
-                .bounds(16 + tool, height - 73, tool, 20).build());
-        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.map", "Map"), ignored ->
+                .bounds(tool.get(0).x(), layout.toolsY(), tool.get(0).width(), 20).primary().build());
+        refresh = addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.refresh", "Refresh"), ignored -> refresh())
+                .bounds(tool.get(1).x(), layout.toolsY(), tool.get(1).width(), 20).build());
+        addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.map", "Map"), ignored ->
                         minecraft.setScreen(new TerritoryMapScreen(this)))
-                .bounds(20 + tool * 2, height - 73, tool, 20).build());
-        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.copy_all", "Copy all"), ignored -> results.copyAll())
-                .bounds(24 + tool * 3, height - 73, tool, 20).build());
-        addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.copy_id", "Copy ID"), ignored -> results.copyId())
-                .bounds(28 + tool * 4, height - 73, tool, 20).build());
-        command = new RetainedEditBox(font, 12, height - 49, full - 88, 20,
+                .bounds(tool.get(2).x(), layout.toolsY(), tool.get(2).width(), 20).build());
+        addRenderableWidget(UiButton.create(ClientText.tr(state.advancedOpen() ? "gui.statecraft.advanced.hide" : "gui.statecraft.advanced.show",
+                        state.advancedOpen() ? "Less" : "Advanced"), ignored -> {
+                    saveEditors();
+                    state.advancedOpen(!state.advancedOpen());
+                    rebuildWidgets();
+                }).bounds(tool.get(3).x(), layout.toolsY(), tool.get(3).width(), 20).build());
+        if (state.advancedOpen()) {
+            addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.copy_all", "Copy all"), ignored -> results.copyAll())
+                    .bounds(tool.get(4).x(), layout.toolsY(), tool.get(4).width(), 20).build());
+            addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.copy_id", "Copy ID"), ignored -> results.copyId())
+                    .bounds(tool.get(5).x(), layout.toolsY(), tool.get(5).width(), 20).build());
+            command = new RetainedEditBox(font, 12, layout.commandY(), full - 88, 20,
                 ClientText.tr("gui.statecraft.advanced.command", "Advanced command"));
-        command.setMaxLength(4096);
-        command.setHint(ClientText.tr("gui.statecraft.advanced.hint", "Advanced command without /sc or /sce"));
-        command.setValue(state.advanced());
-        command.restore(state.advancedSelection());
-        command.setResponder(state::advanced);
-        addRenderableWidget(command);
-        run = addRenderableWidget(Button.builder(ClientText.tr("gui.statecraft.advanced.run", "Review / run"),
-                        ignored -> submit(command.getValue())).bounds(width - 96, height - 49, 84, 20).build());
+            command.setMaxLength(4096);
+            command.setHint(ClientText.tr("gui.statecraft.advanced.hint", "Advanced command without /sc or /sce"));
+            command.setValue(state.advanced());
+            command.restore(state.advancedSelection());
+            command.setResponder(state::advanced);
+            addRenderableWidget(command);
+            run = addRenderableWidget(UiButton.create(ClientText.tr("gui.statecraft.advanced.run", "Review / run"),
+                    ignored -> submit(command.getValue())).bounds(width - 96, layout.commandY(), 84, 20).build());
+        }
         rebuildContent();
-        if (state.advancedSelection().focused()) setInitialFocus(command);
-        else if (state.searchSelection().focused()) setInitialFocus(search);
+        if (command != null && state.advancedSelection().focused()) setInitialFocus(command);
+        else if (search != null && filter.selection().focused()) setInitialFocus(search);
         else setInitialFocus(results);
         if (state.automaticRefresh()) ClientHooks.refresh(state);
         controls();
     }
 
     private void saveEditors() {
-        if (search != null) state.searchSelection(search.selection());
+        if (search != null) {
+            filter.text(search.getValue());
+            filter.selection(search.selection());
+            state.searchSelection(search.selection());
+        }
         if (command != null) {
             state.advanced(command.getValue());
             state.advancedSelection(command.selection());
         }
     }
     private void search() {
+        if (search == null) return;
+        filter.text(search.getValue());
+        filter.selection(search.selection());
         state.searchSelection(search.selection());
         state.query(new UiQuery(state.query().page(), state.query().entity(), search.getValue(), 0));
         ClientHooks.requestView(state);
@@ -191,28 +231,37 @@ public final class ManagementScreen extends Screen {
 
     private void rebuildContent() {
         var entries = new ArrayList<TextPanel.Entry>();
-        results.legacyCopy(state.content() != ViewState.Content.TYPED);
+        results.legacyCopy(state.advancedOpen() && state.content() == ViewState.Content.RAW);
         if (state.content() != ViewState.Content.TYPED) {
-            for (String line : state.output().split("\\R", -1)) entries.add(TextPanel.Entry.text(Component.literal(line)));
+            String template = state.content() == ViewState.Content.QUERY && state.explicit() != null
+                    ? state.explicit().template() : "";
+            for (String line : state.output().split("\\R", -1)) entries.add(TextPanel.Entry.text(Component.literal(line),
+                    UiPresentation.taxTone(page.id(), template, line)));
         } else if (state.view() == null) {
             entries.add(TextPanel.Entry.text(ClientText.of(state.placeholder())));
         } else {
             UiView view = state.view();
             if (!view.body().fallback().isEmpty() || !view.body().key().isEmpty()) {
-                entries.add(TextPanel.Entry.text(ClientText.of(view.body())));
+                String[] bodyLines = ClientText.of(view.body()).getString().split("\\R", -1);
+                for (int index = 0; index < bodyLines.length; index++) {
+                    String line = bodyLines[index];
+                    int separator = line.indexOf(": ");
+                    UiPresentation.Tone tone = UiPresentation.detailTone(state.query().entity(), view.body(), index, bodyLines.length, line);
+                    if (separator > 0 && separator < 48) {
+                        entries.add(TextPanel.Entry.field(Component.literal(line.substring(0, separator)),
+                                Component.literal(line.substring(separator + 2)), tone));
+                    } else entries.add(TextPanel.Entry.text(Component.literal(line)));
+                }
             }
             for (var row : view.rows()) {
-                Component caption = ClientText.of(row.title()).copy().append("\n").append(ClientText.of(row.detail()));
-                String text = caption.getString() + (row.entity().present() ? "\n" + row.entity().id() : "");
-                entries.add(new TextPanel.Entry(caption, text, row.entity()));
+                Component caption = ClientText.of(row.title()).copy().append("\n").append(
+                        ClientText.of(row.detail()).copy().withStyle(style -> style.withColor(UiTheme.MUTED & 0xFFFFFF)));
+                String text = caption.getString();
+                entries.add(new TextPanel.Entry(caption, text, row.entity(), UiPresentation.entityTone(page.id(), row.entity()),
+                        UiPresentation.icon(row.entity().kind())));
             }
             if (view.rows().isEmpty() && !view.emptyHint().fallback().isEmpty()) {
                 entries.add(TextPanel.Entry.text(ClientText.of(view.emptyHint())));
-            }
-            for (var action : view.actions()) {
-                if (!action.enabled()) entries.add(TextPanel.Entry.text(ClientText.tr("gui.statecraft.action.unavailable",
-                        "Unavailable: %s — %s", ClientText.of(action.label()).getString(),
-                        ClientText.of(action.disabledReason()).getString())));
             }
             if (entries.isEmpty()) entries.add(TextPanel.Entry.text(ClientText.tr("gui.statecraft.results.empty", "No matching entries.")));
         }
@@ -223,8 +272,9 @@ public final class ManagementScreen extends Screen {
         shownPlaceholder = state.placeholder();
     }
     private void controls() {
-        status.setMessage(statusMessage());
-        operations.setMessage(ClientText.tr("gui.statecraft.operations.count", "Operations (%s)", ClientHooks.pendingCount()));
+        UiTheme.status(status, statusMessage());
+        navigationAction.setMessage(ClientHooks.needsAttention() ? ClientText.tr("gui.statecraft.attention", "Attention")
+                : ClientText.tr("gui.statecraft.close", "Close"));
         previous.active = state.content() == ViewState.Content.TYPED && state.pending() < 0 && state.query().offset() > 0;
         next.active = state.content() == ViewState.Content.TYPED && state.pending() < 0 && state.view() != null && state.view().more()
                 && state.query().offset() < 100_000;
@@ -234,29 +284,37 @@ public final class ManagementScreen extends Screen {
         refresh.setMessage(state.content() == ViewState.Content.RAW
                 ? ClientText.tr("gui.statecraft.review.again", "Review again") : ClientText.tr("gui.statecraft.refresh", "Refresh"));
         PendingOperations.Entry raw = rawPending();
-        command.setEditable(raw == null);
-        if (raw != null && !command.getValue().equals(raw.selection().command())) command.setValue(raw.selection().command());
-        run.active = raw == null && state.pending() < 0 && !command.getValue().isBlank();
+        if (command != null) {
+            command.setEditable(raw == null);
+            if (raw != null && !command.getValue().equals(raw.selection().command())) command.setValue(raw.selection().command());
+            run.active = raw == null && state.pending() < 0 && !command.getValue().isBlank();
+        }
     }
     @Override
     public void tick() {
         if (!ClientHooks.current(scope)) { minecraft.setScreen(null); return; }
-        search.tick();
-        command.tick();
+        if (search != null) search.tick();
+        if (command != null) command.tick();
         if (shownView != state.view() || !java.util.Objects.equals(shownOutput, state.output()) || shownContent != state.content()
                 || state.view() == null && !java.util.Objects.equals(shownPlaceholder, state.placeholder())) rebuildContent();
         controls();
     }
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
-        renderBackground(graphics);
-        graphics.fill(0, 0, width, height, 0xEC121923);
+        UiTheme.background(graphics, width, height);
         Component heading = state.content() == ViewState.Content.TYPED && state.view() != null
                 ? ClientText.of(state.view().title()) : title;
-        graphics.drawString(font, font.plainSubstrByWidth(heading.getString(), width - 24), 12, 33, 0x71D6C1, false);
+        UiTheme.header(graphics, heading, width - 84, 34);
         Component hint = results.copied() ? ClientText.tr("gui.statecraft.copied", "Copied. Control+V to paste.")
-                : ClientText.tr("gui.statecraft.advanced.review_hint", "Advanced mutations require server review. Back never cancels a submitted operation.");
-        graphics.drawString(font, font.plainSubstrByWidth(hint.getString(), width - 24), 12, height - 20, 0xA8BECE, false);
+                : page.id().equals("economy:tax") && state.content() != ViewState.Content.RAW ? Component.empty()
+                        .append(ClientText.tr("gui.statecraft.tax.legend.paid", "Paid").copy().withStyle(style -> style.withColor(UiTheme.POSITIVE & 0xFFFFFF)))
+                        .append("  ·  ")
+                        .append(ClientText.tr("gui.statecraft.tax.legend.assessed", "Assessed").copy().withStyle(style -> style.withColor(UiTheme.WARNING & 0xFFFFFF)))
+                        .append("  ·  ")
+                        .append(ClientText.tr("gui.statecraft.tax.legend.outstanding", "Outstanding").copy().withStyle(style -> style.withColor(UiTheme.NEGATIVE & 0xFFFFFF)))
+                : ClientText.tr("gui.statecraft.results.open_hint", "Select an entry to view its details and available actions.");
+        var hintLines = font.split(hint, width - 24);
+        if (!hintLines.isEmpty()) graphics.drawString(font, hintLines.get(0), 12, height - 12, UiTheme.MUTED, false);
         super.render(graphics, mouseX, mouseY, delta);
     }
     @Override
@@ -264,8 +322,8 @@ public final class ManagementScreen extends Screen {
     @Override
     public boolean keyPressed(int key, int scan, int modifiers) {
         if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
-            if (search.isFocused()) { search(); return true; }
-            if (command.isFocused()) { submit(command.getValue()); return true; }
+            if (search != null && search.isFocused()) { search(); return true; }
+            if (command != null && command.isFocused()) { submit(command.getValue()); return true; }
         }
         return super.keyPressed(key, scan, modifiers);
     }

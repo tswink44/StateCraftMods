@@ -22,6 +22,24 @@ import static dev.statecraft.economy.TestWorld.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class EconomyFormsTest {
+    @Test void propertyChoicesNameOnlyAssignedTiersAndKeepCanonicalLocations() {
+        TestWorld world = new TestWorld();
+        EconomyDisplay display = new EconomyDisplay(world.engine);
+        for (int depth = 0; depth < 3; depth++) {
+            world.governance.allocation(CLAIM, depth > 0 ? "s1" : null, depth == 2 ? "c1" : null);
+            String title = List.of("Unassigned region (Nation One)", "Unassigned city (State One / Nation One)",
+                    "[City One] (State One / Nation One)").get(depth);
+            assertEquals(title, display.claimTitle(world.governance.claims.get(CLAIM)));
+            FormBuilder choices = form(world, OWNER, "property", "property list <chunkKeyOrHere> <price>", Map.of(), FormQuery.INITIAL);
+            FormChoice selected = choices.choices("chunkKeyOrHere").stream().filter(c -> c.value().equals(CLAIM)).findFirst().orElseThrow();
+            assertTrue(selected.label().contains(title));
+            assertTrue(selected.label().contains("Chunk 0, 0 (Overworld)"));
+            assertEquals(CLAIM, choices.value("chunkKeyOrHere"));
+            assertFalse(selected.label().contains("null"));
+        }
+        assertEquals("Unclaimed land", display.claimTitle(null));
+    }
+
     @Test void sourceAccountsAreFilteredAndRevokedSelectionsAreCleared() {
         TestWorld world = new TestWorld();
         world.set("nation:n1", 1000);
@@ -129,7 +147,7 @@ final class EconomyFormsTest {
         assertEquals(Set.of(own.id, expired.id), values(form(world, BUYER, "market", "market cancel <listingId>", Map.of(), FormQuery.INITIAL), "listingId"));
         assertEquals(Set.of(own.id, live.id), values(form(world, BUYER, "market", "market inspect <listingId>", Map.of(), FormQuery.INITIAL), "listingId"));
         assertTrue(field(buying, "listingId").choices().get(0).detail().contains("$1.50"));
-        assertTrue(field(buying, "listingId").choices().get(0).label().contains("minecraft:wheat"));
+        assertTrue(field(buying, "listingId").choices().get(0).label().contains("Wheat"));
     }
 
     @Test void stockSelectorsRespectReservationsAndSelfPurchaseRules() {

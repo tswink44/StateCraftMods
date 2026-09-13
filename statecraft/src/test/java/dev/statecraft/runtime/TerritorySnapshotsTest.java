@@ -85,6 +85,37 @@ class TerritorySnapshotsTest {
         assertEquals(3, governmentReads);
     }
 
+    @Test
+    void ownerLabelsAreResolvedWithoutExposingTheAccountOrLosingItsIdentity() {
+        hierarchy();
+        claim("minecraft:overworld", 0, 0);
+        var snapshot = TerritorySnapshots.around(actor(0, 0), governance, key -> fail(key), id -> Optional.of("Alice"));
+        var territory = snapshot.territories().get(0);
+        assertEquals("Alice", territory.ownerName());
+        assertEquals("player:" + player, territory.ownerAccount());
+        assertFalse(territory.ownerName().contains(player.toString()));
+        assertEquals(3, governmentReads);
+        assertEquals("Former player", TerritorySnapshots.around(actor(0, 0), governance, key -> fail(key),
+                id -> Optional.of(player.toString())).territories().get(0).ownerName());
+    }
+
+    @Test
+    void nationOnlyAndStateOnlyClaimsRemainVisibleWithoutPhantomCities() {
+        hierarchy();
+        String national = "minecraft:overworld|0|0";
+        String state = "minecraft:overworld|1|0";
+        claims.put(national, new ClaimView(national, "minecraft:overworld", 0, 0, null, null, "n", "nation:n", 0, 1));
+        claims.put(state, new ClaimView(state, "minecraft:overworld", 1, 0, null, "s", "n", "state:s", 0, 1));
+        var snapshot = TerritorySnapshots.around(actor(0, 0), governance, key -> fail("Valid unassigned claim omitted: " + key));
+        assertEquals(2, snapshot.territories().size());
+        assertEquals("", snapshot.territories().get(0).stateId());
+        assertEquals("", snapshot.territories().get(0).cityId());
+        assertEquals("s", snapshot.territories().get(1).stateId());
+        assertEquals("", snapshot.territories().get(1).cityId());
+        assertEquals(2, governmentReads);
+        assertEquals("Nation (Nation)", snapshot.territories().get(0).ownerName());
+    }
+
     private Actor actor(int x, int z) {
         return new Actor(player, "Viewer", false, "minecraft:overworld", x, z);
     }

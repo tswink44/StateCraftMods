@@ -327,6 +327,12 @@ tax is recorded and paid separately. Invalid settings cause a visible error,
 not an implicit zero. Combined withholding/fees greater than sale proceeds
 reject that sale.
 
+Every claim belongs to a **nation**; allocation to a state, then a city, is
+optional. Tax quotes, withholding, and reports include only the tiers actually
+assigned to that claim, once each. Missing states/cities neither copy a parent's
+tax rate nor cause a fallback to the actor's nation. Only unclaimed locations
+use the actor's nation as a fallback.
+
 Market/property/stock buyer sales tax uses the buyer's current government tiers,
 falling back to their nation outside claims. A foreign-origin purchase also
 pays the buyer nation's tariff when seller origin and buyer nation differ.
@@ -334,6 +340,10 @@ Seller income or corporate withholding uses the seller's recorded listing
 location/nation. Government-owned property proceeds are not treated as personal
 income. General wallet transfers are not automatically classified as wages or
 taxable sales.
+Item/share listings record the source claim's nation even when it has no city
+or state and the seller has different or no citizenship. Wilderness listings
+use the seller's nation instead. That recorded origin does not change when the
+seller moves, changes citizenship, or the source is later allocated locally.
 
 ```text
 tax rates
@@ -367,6 +377,12 @@ StateCraft decides seller/official and buyer eligibility. Payment goes to the
 claim's actual `ownerAccount`, including a private company or government
 treasury. The private owner changes **only after successful payment**;
 nation/state/city claim ownership does not change.
+For public land, the title and sale proceeds belong to the most-specific
+allocated treasury: nation, state, or city. Allocating public land changes that
+public title; allocating privately held land never rewrites its player/company
+title. A listing whose actual title changed must be delisted and relisted before
+payment. Property/collateral choices show the assigned hierarchy or an explicit
+unassigned region/city label, while retaining the original chunk key.
 
 Funding uses the wallet first. `cash` deposits all eligible physical cash as
 part of the same transaction, retaining unused value in the wallet. A specified
@@ -376,17 +392,21 @@ inventory, and governance transfer are preflighted together. Refusal by the
 inventory/governance participant rolls back payment; a failure does not consume
 cash or a bank deposit.
 
-Sale listings and requested/active/defaulted secured loans encumber their exact
-claims. StateCraft uses `EconomyAccess.isClaimEncumbered` to block unclaiming or
-ownership changes. A seller cannot list pledged collateral or pledge an already
-listed property.
+Sale listings, requested/active/defaulted secured loans, and unpaid property-tax
+liens encumber their exact claims. StateCraft uses `EconomyAccess.isClaimEncumbered`
+to block unclaiming, territorial allocation, and external ownership changes.
+A seller cannot newly list or pledge a property carrying one of these holds.
+An already-authorized economy sale or consented repossession can settle only
+the title while leaving assessed taxes with their original payer; the lien
+still blocks territorial reassignment until paid. Other account taxes do not
+create a territorial lien.
 
 ### Valuation and recurring assessment
 
 Valuation uses:
 
-* The most specific government's configured `baseChunkValue`, otherwise the
-  configured default.
+* The most specific **present** government's configured `baseChunkValue`,
+  otherwise the configured default. No city or state is required.
 * A spawn-distance bonus: `locationBonusBps / (1 + distanceChunks / 64)`.
 * Loaded surface biome factors: plains 110%, forest 105%, swamp 95%,
   desert/badlands 90%, ocean 80%, other 100%.
@@ -398,7 +418,9 @@ Valuation uses:
 Multipliers use integer arithmetic; the final valuation is capped at the money
 maximum. Looking up a biome never force-loads a chunk. When a chunk is unloaded,
 its last known biome factor is preserved; a property with no observation starts
-neutral. Values and next recalculation/assessment times are persistent.
+neutral. Values and next recalculation/assessment times are persistent. A changed
+allocation invalidates the cached territorial base without resetting the
+assessment schedule or the core's improvement count.
 
 Property taxes become explicit obligations even when the owner cannot pay.
 `mandatoryPropertyTaxes=true` automatically pays what is available without
@@ -421,8 +443,15 @@ overdue assessment periods against the previous owner before changing the tax
 owner; buying a claim does not inherit the seller's already-due tax. If another
 trusted integration changes private ownership, the last recorded tax owner
 remains responsible for unprocessed periods until the change is observed.
-Assessment uses the government rates/value available when processed, not a
-historical policy-price database. New economy records begin their assessment
+Within an unchanged allocation, assessment uses the government rates/value
+available when processed, not a historical policy-price database. Valuations
+also persist their last property-tax jurisdiction and per-period amounts.
+When a territorial allocation change is observed, unprocessed overdue periods use
+that previous basis and payer, never a newly assigned state's/city's rates or
+treasury. Subsequent periods use the new allocation and actual owner; already
+recorded obligations are not rewritten. Older valuations without this optional
+snapshot field are initialized on observation (a retained former public title
+identifies its old hierarchy). New economy records begin their assessment
 schedule when first observed, not before the economy was installed.
 
 ## Companies, dividends, and shares
@@ -781,7 +810,8 @@ restore the **entire world**, and do not promise cash/inventory crash atomicity
 by restoring only a StateCraft JSON file. See [WORLD_DATA.md](WORLD_DATA.md).
 
 `EconomyAccess.isAccountInUse` considers balances, unpaid obligations, marketplace/
-property/share listings, queued item escrow, bank identities/liabilities, and live loans. Core
+property/share listings and their national origins, queued item escrow, bank
+identities/liabilities, live loans, and outstanding saved property-tax bases. Core
 deletion/unclaim/transfer guards must honor these checks; there is no operator
 "forget debt" button in this module.
 

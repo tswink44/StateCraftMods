@@ -11,6 +11,8 @@ import java.util.Set;
 
 /** The persistence boundary. All times are UTC epoch milliseconds and all money is in cents. */
 public class GovernanceData {
+    public static final int CURRENT_SCHEMA = 2;
+    // Gson uses this legacy default when older sections omit the version field.
     public int schemaVersion = 1;
     public long lastTick;
     public boolean economySeen;
@@ -63,6 +65,8 @@ public class GovernanceData {
 
     public static class Claim {
         public String key;
+        public String nationId;
+        public String stateId;
         public String cityId;
         public String ownerAccount;
         public int improvements;
@@ -158,7 +162,11 @@ public class GovernanceData {
 
     public static class ChunkTerm {
         public String key;
+        public String fromNation;
+        public String fromState;
         public String fromCity;
+        public String toNation;
+        public String toState;
         public String toCity;
     }
 

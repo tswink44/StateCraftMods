@@ -10,6 +10,7 @@ import dev.statecraft.api.UserError;
 import dev.statecraft.api.ui.ActionIntent;
 import dev.statecraft.api.ui.ActionPreview;
 import dev.statecraft.api.ui.ActionSelection;
+import dev.statecraft.api.ui.DisplayText;
 import dev.statecraft.api.ui.UiText;
 
 import java.math.BigInteger;
@@ -25,8 +26,9 @@ import static dev.statecraft.economy.EconomyPresentation.*;
 /** Discardable quote/plan construction only; no commit, command execution, or temporary model rollback. */
 final class EconomyPreview {
     private final EconomyEngine e;
+    private final EconomyDisplay display;
 
-    EconomyPreview(EconomyEngine engine) { e = engine; }
+    EconomyPreview(EconomyEngine engine) { e = engine; display = new EconomyDisplay(engine); }
 
     ActionPreview preview(Actor actor, ActionSelection selection, InventoryPort inventory) {
         e.ledger.thread();
@@ -34,7 +36,7 @@ final class EconomyPreview {
         var action = selection.registeredAction();
         List<String> args = CommandLine.split(selection.rendered());
         Review review = new Review();
-        review.line("action", "Action", selection.rendered(), true);
+        review.identity("action", "Action", selection.rendered(), action.label());
         if (action.intent() != ActionIntent.MUTATION) {
             review.effect("query", "Query or navigation only; no financial submission.", false);
             return review.finish();
@@ -66,12 +68,15 @@ final class EconomyPreview {
                 review.amount("total", "Total debit", quote.paid(), true);
                 review.line("remaining", "Remaining obligations", money(e.taxes.arrears(account).subtract(BigInteger.valueOf(quote.paid()))), false);
                 review.line("allocation", "Allocation", shorten(quote.payments().entrySet().stream()
-                        .map(entry -> entry.getKey().kind + " -> " + entry.getKey().recipient + ": " + Money.format(entry.getValue()))
+                        .map(entry -> EconomyDisplay.tax(entry.getKey().kind) + " → " + display.account(entry.getKey().recipient)
+                                + ": " + Money.format(entry.getValue()))
                         .collect(Collectors.joining("; ")), 3800), true);
+                review.bind("allocation", quote.payments().entrySet().stream()
+                        .map(entry -> entry.getKey().id + ":" + entry.getValue()).collect(Collectors.joining("|")));
             }
             case "account" -> {
                 if (!operation.equals("select")) throw new UserError("No mutation review exists for this account action.");
-                review.line("account", "Account", e.requireAccount(actor, args.get(2)), true);
+                account(review, "account", "Account", e.requireAccount(actor, args.get(2)));
                 review.amount("total", "Total debit", 0, true);
                 review.effect("account", "Changes your selected account; it grants no new permissions.", true);
             }
@@ -93,7 +98,7 @@ final class EconomyPreview {
             review.amount("total", "Total debit", quote.cents(), true);
             review.amount("cash_remainder", "Unissued amount staying electronic", requested - quote.cents(), true);
         } else throw new UserError("Unknown cash operation.");
-        review.line("account", "Account", quote.account(), true);
+        account(review, "account", "Account", quote.account());
         review.line("denominations", "Physical denominations", denominations(before, quote.items().slots()), true);
         available(review, actor, quote.account());
         review.bind("inventory", inventory.selectedSlot() + ":" + before);
@@ -105,7 +110,7 @@ final class EconomyPreview {
             int quantity = integer(args.get(2));
             Commerce.HubQuote quote = e.commerce.quoteHub(actor, quantity, inventory);
             item(review, quote.held(), quantity, inventory);
-            review.line("recipient", "Recipient", actor.account(), true);
+            account(review, "recipient", "Recipient", actor.account());
             review.amount("gross", "Gross amount", quote.sale().gross(), true);
             review.amount("taxes", "Taxes", quote.sale().taxes(), true);
             review.amount("net", "Net received", quote.sale().net(), true);
@@ -131,11 +136,11 @@ final class EconomyPreview {
                 Commerce.MarketOffer quote = e.commerce.quoteListMarket(actor, quantity, price, inventory);
                 item(review, quote.held(), quantity, inventory);
                 listingOrigin(review, actor);
-                review.line("seller", "Seller", actor.account(), true);
+                account(review, "seller", "Seller", actor.account());
                 review.amount("unit_price", "Unit price", price, true);
                 review.amount("future_gross", "Future gross if all units sell", Money.multiply(price, quantity), true);
                 review.amount("fee", "Fee payable now", e.config.marketListingFeeCents, true);
-                review.line("recipient", "Fee recipient", "system:fees", true);
+                account(review, "recipient", "Fee recipient", "system:fees");
                 review.effect("market_listing", "Items enter persistent escrow. Sale taxes and commission are calculated when a buyer purchases.", true);
                 available(review, actor, actor.account());
                 review.physical = true;
@@ -145,7 +150,7 @@ final class EconomyPreview {
                 if (listing == null) throw new UserError("Unknown marketplace listing.");
                 int quantity = args.get(3).equalsIgnoreCase("all") ? listing.remaining : integer(args.get(3));
                 Commerce.MarketPurchase quote = e.commerce.quoteBuyMarket(actor, listing.id, quantity);
-                review.line("item", "Item", listing.item.item(), true);
+                itemDescription(review, listing.item);
                 review.line("quantity", "Quantity", "" + quantity, true);
                 review.bind("escrow-item", itemIdentity(listing.item));
                 settlement(review, actor, listing.sellerAccount, quote.settlement());
@@ -155,19 +160,20 @@ final class EconomyPreview {
                 EconomyData.MarketListing listing = e.data.market.get(args.get(2));
                 if (listing == null) throw new UserError("Unknown marketplace listing.");
                 if (!actor.admin() && !listing.seller.equals(actor.id().toString())) throw new UserError("Only the seller may cancel this listing.");
-                review.line("recipient", "Return recipient", listing.sellerAccount, true);
-                review.line("item", "Item", listing.item.item(), true);
+                account(review, "recipient", "Return recipient", listing.sellerAccount);
+                itemDescription(review, listing.item);
                 review.line("quantity", "Quantity returned to delivery queue", "" + listing.remaining, true);
                 review.bind("escrow-item", itemIdentity(listing.item));
                 review.effect("market_cancel", "Unsold items return to the seller's delivery queue. Listing fees are not refunded.", true);
             }
             case "collect" -> {
                 Commerce.CollectionQuote quote = e.commerce.quoteCollect(actor, inventory);
-                review.line("recipient", "Recipient", actor.account(), true);
+                account(review, "recipient", "Recipient", actor.account());
                 review.line("quantity", "Items collected now", "" + quote.total(), true);
                 review.delivery("collection", "Inspects at most 32 queued entries. Anything that does not fit remains queued.", false);
                 review.line("items", "Collection contents", shorten(quote.collected().entrySet().stream()
-                        .map(entry -> entry.getValue() + " x " + entry.getKey().item.item()).collect(Collectors.joining("; ")), 3800), true);
+                        .map(entry -> entry.getValue() + " × " + display.item(entry.getKey().item)
+                                + " — " + display.itemDetails(entry.getKey().item)).collect(Collectors.joining("; ")), 3800), true);
                 review.bind("deliveries", quote.collected().entrySet().stream()
                         .map(entry -> entry.getKey().id + ":" + itemIdentity(entry.getKey().item) + ":" + entry.getValue()).collect(Collectors.joining("|")));
                 review.bind("inventory", inventory.selectedSlot() + ":" + inventory.snapshot());
@@ -179,7 +185,7 @@ final class EconomyPreview {
 
     private void property(Actor actor, List<String> args, InventoryPort inventory, Review review) {
         String key = args.get(2).equalsIgnoreCase("here") ? actor.chunkKey() : ChunkKey.parse(args.get(2)).toString();
-        review.line("property", "Property", key, true);
+        review.line("property", "Property", DisplayText.chunk(key), true);
         review.bind("property", key);
         switch (args.get(1)) {
             case "buy" -> {
@@ -193,7 +199,7 @@ final class EconomyPreview {
                 review.amount("bank_funding", "Bank withdrawal to wallet", bankAmount, true);
                 review.amount("bank_fee", "Bank withdrawal fee", funding == null ? 0 : funding.fee(), true);
                 if (funding != null) {
-                    review.line("bank", "Funding bank account", funding.transfer().from(), true);
+                    account(review, "bank", "Funding bank account", funding.transfer().from());
                     review.amount("deposit_debit", "Total bank-deposit debit", funding.debit(), true);
                     review.amount("funded_deposit", "Available funded deposit", funding.balanceBefore(), false);
                 }
@@ -210,14 +216,14 @@ final class EconomyPreview {
             case "list" -> {
                 long price = amount(args.get(3));
                 GovernanceAccess.ClaimView claim = e.property.quoteList(actor, key, price);
-                review.line("seller", "Seller", claim.ownerAccount(), true);
+                account(review, "seller", "Seller", claim.ownerAccount());
                 review.amount("unit_price", "Asking price", price, true);
                 review.amount("total", "Total debit now", 0, true);
                 review.effect("property_listing", "Creates a property offer and ownership lock. No sale proceeds are paid until a purchase.", true);
             }
             case "delist" -> {
                 EconomyData.PropertyListing listing = e.property.quoteDelist(actor, key);
-                review.line("seller", "Seller", listing.ownerAccount, true);
+                account(review, "seller", "Seller", listing.ownerAccount);
                 review.amount("unit_price", "Removed asking price", listing.price, true);
                 review.effect("property_delist", "Removes this offer without selling the title or moving money.", true);
             }
@@ -251,7 +257,7 @@ final class EconomyPreview {
                 if (listing == null) throw new UserError("Unknown stock listing.");
                 long quantity = args.get(3).equalsIgnoreCase("all") ? listing.remaining : whole(args.get(3));
                 Commerce.Settlement quote = e.commerce.quoteBuyStock(actor, listing.id, quantity);
-                review.line("company", "Company identity", listing.company, true);
+                review.identity("company", "Company", listing.company, display.company(listing.company));
                 review.line("quantity", "Shares", "" + quantity, true);
                 settlement(review, actor, "player:" + listing.seller, quote);
             }
@@ -260,7 +266,7 @@ final class EconomyPreview {
                 GovernanceAccess.CompanyView company = e.commerce.quoteListStock(actor, args.get(2), quantity, price);
                 listingOrigin(review, actor);
                 transfers(review, List.of(new Transfer(actor.account(), "system:fees", e.config.stockListingFeeCents, "Stock listing fee")), actor, actor.account());
-                review.line("company", "Company identity", company.id(), true);
+                review.identity("company", "Company", company.id(), display.company(company.id()));
                 review.line("quantity", "Shares reserved", "" + quantity, true);
                 review.amount("unit_price", "Unit price", price, true);
                 review.amount("future_gross", "Future gross if all shares sell", Money.multiply(price, quantity), true);
@@ -271,8 +277,8 @@ final class EconomyPreview {
                 EconomyData.StockListing listing = e.data.stocks.get(args.get(2));
                 if (listing == null) throw new UserError("Unknown stock listing.");
                 if (!actor.admin() && !listing.seller.equals(actor.id().toString())) throw new UserError("Only the shareholder may cancel this listing.");
-                review.line("company", "Company identity", listing.company, true);
-                review.line("recipient", "Shareholder", "player:" + listing.seller, true);
+                review.identity("company", "Company", listing.company, display.company(listing.company));
+                account(review, "recipient", "Shareholder", "player:" + listing.seller);
                 review.line("quantity", "Shares released", "" + listing.remaining, true);
                 review.effect("stock_cancel", "Releases only the unsold reservation. Listing fees are not refunded.", true);
             }
@@ -285,8 +291,9 @@ final class EconomyPreview {
             case "create" -> {
                 long capital = amount(args.get(4));
                 EconomyData.Bank bank = e.banking.quoteCreate(actor, args.get(2), args.get(3), capital, integer(args.get(5)), integer(args.get(6)));
-                transfers(review, e.banking.creationTransfers(bank, capital), actor, "company:" + bank.company);
-                review.line("bank", "New bank identity and name", bank.id + " — " + bank.name, true);
+                transfers(review, e.banking.creationTransfers(bank, capital), actor, "company:" + bank.company,
+                        Map.of(bank.account(), bank.name + " - Bank assets"));
+                review.identity("bank", "New bank", bank.id, bank.name);
                 review.amount("capital", "Seed capital", capital, true);
                 review.amount("fee", "Creation fee", e.config.bankCreationFeeCents, true);
                 review.amount("total", "Total debit", Money.add(capital, e.config.bankCreationFeeCents), true);
@@ -300,14 +307,16 @@ final class EconomyPreview {
                 review.amount("fee", "Deposit fee retained by bank", quote.bank().depositFeeCents, true);
                 review.amount("credited", "Deposit credit", quote.credited(), true);
                 EconomyData.Deposit existing = quote.bank().deposits.get(actor.id().toString());
-                review.line("rate", "Deposit contract rate and period", (existing != null && existing.principal > 0
-                        ? existing.rateBps + " bps / " + existing.periodMillis : quote.bank().depositInterestBps + " bps / " + quote.bank().interestPeriodMillis) + " ms", true);
+                int rate = existing != null && existing.principal > 0 ? existing.rateBps : quote.bank().depositInterestBps;
+                long period = existing != null && existing.principal > 0 ? existing.periodMillis : quote.bank().interestPeriodMillis;
+                review.identity("rate", "Deposit contract rate and period", rate + ":" + period,
+                        DisplayText.percent(rate) + " per " + DisplayText.duration(period));
             }
             case "withdraw" -> {
                 Banking.WalletFunding quote = e.banking.quoteWalletFunding(actor, args.get(3), amount(args.get(2)));
                 e.ledger.prepare(List.of(quote.transfer()), List.of(), true, quote.reserveOverrides());
-                review.line("source", "Source bank", quote.transfer().from(), true);
-                review.line("recipient", "Recipient", actor.account(), true);
+                account(review, "source", "Source bank", quote.transfer().from());
+                account(review, "recipient", "Recipient", actor.account());
                 review.amount("net", "Wallet credit", quote.transfer().cents(), true);
                 review.amount("fee", "Withdrawal fee retained by bank", quote.fee(), true);
                 review.amount("total", "Total deposit debit", quote.debit(), true);
@@ -319,14 +328,14 @@ final class EconomyPreview {
                 int deposit = integer(args.get(3)), loan = integer(args.get(4)), origination = integer(args.get(5));
                 long depositFee = amount(args.get(6)), withdrawalFee = amount(args.get(7));
                 e.banking.checkRates(deposit, loan, origination);
-                review.line("bank", "Bank identity", bank.id, true);
+                review.identity("bank", "Bank", bank.id, display.bank(bank.id));
                 bankRates(review, deposit, loan, origination, depositFee, withdrawalFee, bank.interestPeriodMillis);
                 review.amount("total", "Total debit now", 0, true);
                 review.effect("bank_terms", "Updates future interest contracts and current voluntary deposit/withdrawal fees. Existing interest contracts remain unchanged.", true);
             }
             case "associate" -> {
                 EconomyData.Bank bank = e.banking.bank(args.get(2), true);
-                review.line("bank", "Associated bank", bank.id, true);
+                review.identity("bank", "Associated bank", bank.id, display.bank(bank.id));
                 review.effect("bank_association", "Changes a preference only. Existing deposits and loans are not transferred.", true);
             }
             default -> throw new UserError("Unknown bank mutation.");
@@ -350,13 +359,13 @@ final class EconomyPreview {
         }
         EconomyData.Loan loan = e.banking.loan(args.get(2));
         Banking.LoanSummary summary = e.banking.previewLoan(actor, loan.id);
-        review.line("loan", "Loan identity", loan.id, true);
+        review.identity("loan", "Loan", loan.id, display.loan(loan));
         switch (operation) {
             case "approve" -> {
                 Banking.LoanFunding quote = e.banking.quoteApproval(actor, loan.id);
                 e.ledger.prepare(List.of(quote.transfer()), List.of(), true, quote.reserves());
-                review.line("source", "Source bank", quote.transfer().from(), true);
-                review.line("recipient", "Borrower wallet", quote.transfer().to(), true);
+                account(review, "source", "Source bank", quote.transfer().from());
+                account(review, "recipient", "Borrower wallet", quote.transfer().to());
                 review.amount("total", "Bank cash debit / borrower credit", quote.transfer().cents(), true);
                 loanTerms(review, loan);
                 review.amount("balance", "Current bank cash", e.balance(quote.transfer().from()), false);
@@ -380,9 +389,9 @@ final class EconomyPreview {
                 if (!loan.borrower.equals(actor.id().toString())) throw new UserError("Only the borrower may change automatic-payment consent.");
                 if (!Set.of("REQUESTED", "ACTIVE", "DEFAULTED").contains(loan.status)) throw new UserError("This loan is closed.");
                 if (!Set.of("true", "false").contains(args.get(3))) throw new UserError("Choose true or false.");
-                review.line("autopay_current", "Current automatic payments", "" + loan.autoPay, true);
-                review.line("autopay_new", "New automatic payments", args.get(3), true);
-                review.line("account", "Future payment source", actor.account(), true);
+                review.line("autopay_current", "Current automatic payments", DisplayText.yesNo(loan.autoPay), true);
+                review.line("autopay_new", "New automatic payments", DisplayText.yesNo(Boolean.parseBoolean(args.get(3))), true);
+                account(review, "account", "Future payment source", actor.account());
                 review.amount("currently_due", "Currently due", summary.currentlyDue(), false);
                 review.amount("total", "Total debit now", 0, true);
                 review.effect("autopay", "Changes future scheduled payments only. It does not add recovery consent or rewrite the original agreement.", true);
@@ -390,7 +399,8 @@ final class EconomyPreview {
             case "cancel" -> {
                 if (!loan.borrower.equals(actor.id().toString())) e.banking.requireManager(actor, e.banking.bank(loan.bank, true));
                 if (!loan.status.equals("REQUESTED")) throw new UserError("Only a pending application can be cancelled.");
-                review.line("collateral", "Collateral released", loan.collateral == null ? "None" : loan.collateral, true);
+                review.identity("collateral", "Collateral released", loan.collateral == null ? "" : loan.collateral,
+                        loan.collateral == null ? "None" : DisplayText.chunk(loan.collateral));
                 review.effect("loan_cancel", "Cancels an unfunded application; no loan disbursement or repayment occurs.", true);
             }
             default -> throw new UserError("Unknown loan mutation.");
@@ -398,22 +408,27 @@ final class EconomyPreview {
     }
 
     private void loanTerms(Review review, EconomyData.Loan loan) {
-        review.line("source", "Funding bank", "bank:" + loan.bank, true);
-        review.line("recipient", "Borrower", "player:" + loan.borrower, true);
+        account(review, "source", "Funding bank", "bank:" + loan.bank);
+        account(review, "recipient", "Borrower", "player:" + loan.borrower);
         review.amount("principal", "Contract principal", loan.originalPrincipal, true);
         review.amount("fee", "Origination fee retained if funded", loan.originationFee, true);
         review.amount("interest_cap", "Lifetime interest cap", loan.interestCap, true);
-        review.line("rate", "Simple interest", loan.rateBps + " bps / " + loan.periodMillis + " ms", true);
+        review.identity("rate", "Simple interest", loan.rateBps + ":" + loan.periodMillis,
+                DisplayText.percent(loan.rateBps) + " per " + DisplayText.duration(loan.periodMillis) + " on outstanding principal");
         review.line("periods", "Repayment periods", "" + loan.periods, true);
-        review.line("collateral", "Specifically pledged property", loan.collateral == null ? "None — unsecured" : loan.collateral, true);
-        review.line("consent", "Balance recovery / repossession consent", loan.consentBalanceSeizure + " / " + loan.consentRepossession, true);
-        review.line("autopay_current", "Current automatic payments", "" + loan.autoPay, true);
-        review.line("original_terms", "Original agreement", loan.terms, true);
+        review.identity("collateral", "Specifically pledged property", loan.collateral == null ? "" : loan.collateral,
+                loan.collateral == null ? "None — unsecured" : DisplayText.chunk(loan.collateral));
+        review.line("consent", "Balance recovery / repossession consent",
+                DisplayText.yesNo(loan.consentBalanceSeizure) + " / " + DisplayText.yesNo(loan.consentRepossession), true);
+        review.line("autopay_current", "Current automatic payments", DisplayText.yesNo(loan.autoPay), true);
+        review.identity("original_terms", "Original agreement",
+                loan.terms + "|" + loan.defaultMissedPayments + "|" + loan.graceMillis, display.agreement(loan));
     }
 
     private void bankRates(Review review, int deposit, int loan, int origination, long depositFee, long withdrawalFee, long period) {
-        review.line("rates", "Deposit / loan / origination basis points", deposit + " / " + loan + " / " + origination, true);
-        review.line("period", "Interest period (ms)", "" + period, true);
+        review.line("rates", "Deposit / loan / origination rates",
+                DisplayText.percent(deposit) + " / " + DisplayText.percent(loan) + " / " + DisplayText.percent(origination), true);
+        review.identity("period", "Interest period", "" + period, DisplayText.duration(period));
         review.amount("deposit_fee", "Future deposit fee", depositFee, true);
         review.amount("withdrawal_fee", "Future withdrawal fee", withdrawalFee, true);
     }
@@ -424,8 +439,8 @@ final class EconomyPreview {
     }
 
     private void settlementLines(Review review, Actor actor, String seller, Commerce.Settlement quote) {
-        review.line("source", "Buyer wallet", actor.account(), true);
-        review.line("seller", "Seller", seller, true);
+        account(review, "source", "Buyer wallet", actor.account());
+        account(review, "seller", "Seller", seller);
         review.amount("gross", "Sale price before buyer taxes", quote.buyerCost() - quote.taxes().buyerTotal(), true);
         review.amount("buyer_taxes", "Buyer taxes and tariffs", quote.taxes().buyerTotal(), true);
         review.amount("seller_taxes", "Seller taxes", quote.taxes().sellerTotal(), true);
@@ -442,17 +457,24 @@ final class EconomyPreview {
     private void charges(Review review, List<Taxation.Charge> charges) {
         if (charges.isEmpty()) return;
         review.line("tax_recipients", "Tax recipients", shorten(charges.stream()
-                .map(charge -> charge.kind() + " -> " + charge.account() + ": " + Money.format(charge.cents()))
+                .map(charge -> EconomyDisplay.tax(charge.kind()) + " → " + display.account(charge.account()) + ": " + Money.format(charge.cents()))
                 .collect(Collectors.joining("; ")), 3800), true);
+        review.bind("taxes", charges.stream().map(charge -> charge.government() + "|" + charge.account()
+                + "|" + charge.kind() + "|" + charge.cents()).collect(Collectors.joining(";")));
     }
 
     private void transfers(Review review, List<Transfer> transfers, Actor actor, String source) {
+        transfers(review, transfers, actor, source, Map.of());
+    }
+
+    private void transfers(Review review, List<Transfer> transfers, Actor actor, String source, Map<String, String> newAccounts) {
         e.ledger.prepare(transfers);
-        review.line("source", "Source account", source, true);
+        account(review, "source", "Source account", source);
         Map<String, Long> recipients = new LinkedHashMap<>();
         transfers.stream().filter(transfer -> transfer.cents() > 0 && !transfer.from().equals(transfer.to()))
                 .forEach(transfer -> recipients.merge(transfer.to(), transfer.cents(), Money::add));
-        String parties = recipients.entrySet().stream().limit(20).map(entry -> entry.getKey() + ": " + Money.format(entry.getValue()))
+        String parties = recipients.entrySet().stream().limit(20)
+                .map(entry -> newAccounts.getOrDefault(entry.getKey(), display.account(entry.getKey())) + ": " + Money.format(entry.getValue()))
                 .collect(Collectors.joining("; "));
         if (recipients.size() > 20) parties += "; " + (recipients.size() - 20) + " additional recipients in the current share/tax register";
         review.line("recipients", "Recipients", shorten(parties.isEmpty() ? "No current payment" : parties, 3800), true);
@@ -467,16 +489,25 @@ final class EconomyPreview {
     }
 
     private void item(Review review, ItemLot held, int quantity, InventoryPort inventory) {
-        review.line("item", "Item", held.item(), true);
+        itemDescription(review, held);
         if (quantity > 0) review.line("quantity", "Quantity", "" + quantity, true);
         review.bind("held", inventory.selectedSlot() + ":" + held.count() + ":" + itemIdentity(held));
     }
 
+    private void itemDescription(Review review, ItemLot item) {
+        review.line("item", "Item", display.item(item), true);
+        review.line("item_attributes", "Item attributes", display.itemDetails(item), true);
+    }
+
+    private void account(Review review, String key, String label, String account) {
+        review.identity(key, label, account, display.account(account));
+    }
+
     private void listingOrigin(Review review, Actor actor) {
         String chunk = actor.chunkKey();
-        String nation = e.governance.nationOf(actor.id()).orElse("");
-        review.line("source_chunk", "Source tax location", chunk, true);
-        review.line("source_nation", "Seller nation", nation, true);
+        String nation = e.taxes.originNation(chunk, e.governance.nationOf(actor.id()).orElse(""));
+        review.line("source_chunk", "Source tax location", DisplayText.chunk(chunk), true);
+        review.line("source_nation", "Seller nation", display.government(nation), true);
         review.bind("listing-origin", chunk + "|" + nation);
     }
 
@@ -485,7 +516,7 @@ final class EconomyPreview {
         for (ItemLot lot : before) if (lot.snbt().isEmpty() && e.values.currency().containsKey(lot.item())) changes.merge(lot.item(), -(long) lot.count(), Long::sum);
         for (ItemLot lot : after) if (lot.snbt().isEmpty() && e.values.currency().containsKey(lot.item())) changes.merge(lot.item(), (long) lot.count(), Long::sum);
         return shorten(changes.entrySet().stream().filter(entry -> entry.getValue() != 0)
-                .map(entry -> entry.getKey() + ": " + (entry.getValue() > 0 ? "+" : "") + entry.getValue())
+                .map(entry -> EconomyDisplay.registry(entry.getKey()) + ": " + (entry.getValue() > 0 ? "+" : "") + entry.getValue())
                 .collect(Collectors.joining("; ")), 3800);
     }
 
@@ -514,6 +545,10 @@ final class EconomyPreview {
         void line(String key, String label, String value, boolean material) {
             String labelKey = label.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]+", "_").replaceAll("_$", "");
             lines.add(new ActionPreview.Line(t("review." + key + "." + labelKey, label), UiText.literal(shorten(value, 4096)), material));
+        }
+        void identity(String key, String label, String identity, String display) {
+            bind(key, identity);
+            line(key, label, display, true);
         }
         void amount(String key, String label, long cents, boolean material) { line(key, label, Money.format(cents), material); }
         void effect(String key, String explanation, boolean material) {

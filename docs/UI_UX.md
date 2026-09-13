@@ -2,13 +2,31 @@
 
 ## Entry points and navigation
 
-**N still opens the categorized StateCraft menu.** The menu also has prominent **My dashboard** and **Operations** buttons. The dashboard (`statecraft:dashboard`) displays the server's authorized pending-work summary; it does not download unrestricted domain models. Categories only contain listed pages. Hidden detail pages remain accessible through typed links.
+Version 2.3 introduces dedicated personal and government blades. These do not use the generic search/results panel described below for legacy and auxiliary sections.
+
+**My Dashboard** shows name (not clickable), actual nation/state/city citizenship, personal wallet and bank-deposit accounts, positive company shareholdings, and distinct cities containing privately owned chunks. City labels use `[CITY] (State/Nation)`. Clicking citizenship, a company or a property city opens that exact overview; clicking a balance opens its scoped ATM, never the bank company's asset account. Property outside a city is labeled explicitly and links to its state or nation. Each holdings section pages independently, and Back retains those page selections. Personal mail and invitation acceptance are available from the dashboard's **Personal inbox** button.
+
+**Government overviews** contain name, saved flag/description, leadership, permitted treasury information, child governments or claims, and officers. States show cities; cities show their territory. Treasury amounts retain existing access controls. Actions are grouped by the actual government's powers. Invitation and officer management are inside **Settings**, which is visible only to authorized government managers. The old Citizens & Roles, Officers, Invitations and Communications tabs are hidden; their command definitions remain for compatibility and authorization.
+
+Official mail is reached through the selected government's **Official inbox**, and each request rechecks authority over that particular mailbox. Personal inbox data remains private even from operators.
+
+**National territory maps** offer claim, nation-to-state allocation and state-to-city allocation modes. They display player-centered, loaded surface terrain with ownership overlays. Unloaded terrain is identified rather than guessed or force-loaded. Cell selection itself performs no mutation; reviewed batches are sent to the server with exact hidden identifiers.
+
+**Crafting recipes** have a graphical guide with ingredient/output item slots and live grid layouts, rather than generated command text. Shared buttons, cards, headers, hover/focus states and financial color cues are used across auxiliary screens. Color does not replace text, keyboard access or status explanations.
+
+**N still opens the categorized StateCraft menu.** **Overview & Help** now lists only **My Dashboard** and **Help**. Help opens command help and crafting recipes as sub-pages, not separate category entries. StateCraft, Player Profiles, Your Operations and Economy Pending Work are hidden from navigation, and there is no permanent Activity tab. The dashboard (`statecraft:dashboard`) requests bounded, sender-scoped personal overview data; it does not download unrestricted domain models. Internal profile/receipt/detail routes remain available where needed.
+
+### Player-facing information
+
+Ordinary views, dropdowns, maps and reviews display names, roles, readable coordinates, percentages and dates instead of UUIDs, account keys, raw enum values or millisecond timestamps. Missing historical names use descriptive fallbacks, not identifiers. Private message and law text is not scrubbed or rewritten.
+
+Identity remains separate from presentation: selecting a row or dropdown still sends its exact hidden reference. Two records with the same name are not merged, and changing a displayed label does not change authorization or monetary ownership. Technical details remain available in explicit operator diagnostics and the optional Advanced controls.
 
 Sections and detail panels share the management screen:
 
 - **Search** applies a server-side, bounded name/ID filter. Previous/Next preserve that filter.
 - Select a row and choose **Open details**, double-click it, or focus the results panel and press Enter. The client sends `UiQuery.detail(row.entity())`; it does not extract action targets from display text.
-- **Actions** includes the server's contextual, prefilled actions before the section's registered actions. A prefilled action uses its exact page, template, and values. An unavailable action opens its explanation instead of submitting anything. Reasons also appear in the detail panel.
+- **Actions** includes the server's contextual, prefilled actions before the section's registered actions, without repeating the same generic action. A prefilled action uses its exact page, template, and values. An unavailable action opens its explanation instead of submitting anything. These explanations stay in the action picker rather than cluttering the ordinary results.
 - **Back** restores the preceding category, page, or entity, including committed search, pagination, scroll, selected row, advanced input, and intentional query output. **Sections** returns to categorized navigation without removing the previous view from history.
 - **Close** in categorized navigation returns directly to the game without discarding its workspace or pending operations.
 - **My dashboard** remains available from sections. Loan links use the same typed detail flow: the server supplies current autopay mode, next due date, principal/interest/status, separately labeled original terms, and authorized repayment/autopay actions. The client never infers current autopay from historical agreement prose.
@@ -27,9 +45,9 @@ The GUI distinguishes action intent rather than guessing success from English re
 | Mutation | Requires a server quote, followed by explicit confirmation of those terms. Completion updates a separate status banner and refreshes the same current read-only query without clearing its filter, pagination, or selection. |
 | Advanced/raw | Conservatively requires server review unless the command is the registered section query. Raw results remain inspectable and copyable. “Review again” requests another review; it never automatically repeats the command. |
 
-The advanced command box remains available at the bottom of every management screen. Enter in that box follows the same review/query rules as its button. Registered action forms do not render arbitrary replacement templates.
+The **Advanced** toggle reveals the command box and technical copy tools; they are collapsed by default to leave more room for results. Hiding the controls preserves their draft and selection. Enter in the command box follows the same review/query rules as its button. Registered action forms do not render arbitrary replacement templates.
 
-Typed results have **Copy row**, **Copy ID**, and **Copy all** controls. Right-click copies the complete row, including its stable entity ID. Advanced/query text results retain the older left-click identifier copy and right-click full-row copy behavior. Wrapping does not truncate the copied source row.
+Typed results offer **Copy row**, which copies the displayed information without an appended ID. Right-click does the same. **Advanced** reveals **Copy ID** and **Copy all** for diagnostic or command use. Left-click identifier copying is restricted to deliberately opened raw/advanced results. Wrapping does not truncate the copied source row.
 
 ## Forms and review cards
 
@@ -42,7 +60,7 @@ Forms retain values while moving between action pickers, choice pickers, custom-
 - Server `FormConstraints` set input limits and local whole-number, money, range, required-field, and alternative-token checks (including `all` where offered). These checks supplement server validation; they do not grant eligibility.
 - Field errors appear directly below their fields. The focusable status button opens full validation/prerequisite explanations when the inline text is too long. Refresh choices explicitly clears stale preview field errors and asks for current metadata.
 
-**Review action** obtains a server quote; it does not execute the action. The review card shows every supplied line, labeled **Material** or **Information**, plus warnings. This preserves parties, quantities, fees, taxes, totals, funds, and inventory caveats supplied by the domain provider. The captured request is immutable.
+**Review action** obtains a server quote; it does not execute the action. The review card shows parties, quantities, fees, taxes, totals, funds and warnings with readable labels, without repetitive **Material**/**Information** tags or operation UUIDs. All supplied terms remain available; the material flags and exact identities still participate in the unchanged confirmation checks. The captured request is immutable.
 
 Quotes expire after the server's 30-second validity window. The client uses the server-time offset, disables confirmation at expiry, and refreshes a stale session clock. A quote is never silently refreshed and confirmed. **Refresh quote** is explicit; changed material terms are labeled and must be read and confirmed again. Rejection, changed eligibility, and repricing preserve the original form. Server field errors return to the corresponding fields.
 
@@ -54,9 +72,9 @@ Submission first retains the exact in-memory selection and writes its minimal re
 
 All request watches time out from the central client tick, including forms and views that are no longer visible. A submitted-action timeout is **uncertain**, not an ordinary rejected form. A late terminal receipt can still reconcile the operation, independently of the original page or screen.
 
-**Operations** is available from the menu, sections, forms, and reviews:
+**Attention** is shown only when an action is pending or recovery storage needs attention. It is available from navigation, sections and affected forms/reviews; healthy navigation has no Activity entry.
 
-The local recovery screen's **Server receipts** button opens `statecraft:operations`, also listed under Overview & Help. Operators can open `statecraft:admin_operations` from Administration. Inspecting another player's authorized receipt does not adopt it as the inspector's pending operation. The server supplies reconciliation actions and eligible-operation choices; ordinary players cannot use administrative resolution.
+The recovery screen's **Server receipts** button opens the internal `statecraft:operations` route, which is not listed under Overview & Help. Operators can open `statecraft:admin_operations` from Administration. Inspecting another player's authorized receipt does not adopt it as the inspector's pending operation. The server supplies reconciliation actions and eligible-operation choices; ordinary players cannot use administrative resolution.
 
 | Server outcome | Client behavior |
 | --- | --- |
@@ -65,7 +83,7 @@ The local recovery screen's **Server receipts** button opens `statecraft:operati
 | `REVIEW_REQUIRED` | Known not executed. Preserve the form and request new terms only when the player explicitly asks for another review. |
 | `UNCERTAIN` | Keep the reference and locked inputs. Offer **Check status**, not a new submission. |
 | `UNKNOWN` | Keep the reference and locked inputs. An unknown/evicted receipt is not evidence that the action failed. Do not repeat it. |
-| `READY` | The original cached operation has not executed. **Retry same ID** is enabled only when this client still holds its exact original selection. It sends the same operation ID and values, never a newly invented operation. |
+| `READY` | The original cached operation has not executed. **Retry safely** is enabled only when this client still holds its exact original selection. It sends the same operation ID and values, never a newly invented operation. |
 
 Check status is read-only. Reconnect schedules bounded status checks for restored references, never automatic retries. The client retains up to 128 pending operations and 64 terminal session receipts. It refuses to start another mutation when the pending bound is reached instead of forgetting unresolved purchases.
 
@@ -92,12 +110,12 @@ After a restart, the client can reconcile a stored reference but deliberately ca
 
 ### Recovering an unknown or evicted receipt
 
-1. Select the unresolved operation in **Operations** and choose **Copy reference**. This copies the **world UUID, player UUID, and operation UUID**, never the private command or form body. Give all three IDs to the operator.
+1. Open **Attention**, select the unresolved action, and choose **Copy support details**. This copies the hidden **world UUID, player UUID, and operation UUID**, never the private command or form body. Give the copied details to the operator; they are not printed in normal navigation.
 2. The operator verifies the world and audits the relevant account, inventory, and world history. Existing unresolved receipts use **Reconcile operation**. For a missing or evicted receipt, **Recover unknown receipt** uses the registered template `admin operation recover <player> <operation> <resolution> <reason>`. The player must be an explicit UUID; the audited resolution is `completed` or `not_executed`, with a reason.
 3. Recovery creates a durable, owner-scoped terminal tombstone and invalidates any live cached review for that owner/ID. It **never executes, repeats, refunds, or undoes the original command**. Existing final receipts and mismatched owners cannot be overwritten.
 4. The affected player then chooses **Check status** on the original local reference. Only that original operation's known terminal receipt clears its lock. Completion of the operator's separate recovery action does not itself dismiss a player's UNKNOWN reference.
 
-UNKNOWN is never dismissed automatically and never enables Retry same ID. Do not delete the local reference or repeat the purchase through chat; deleting a local file does not cancel or undo server effects.
+UNKNOWN is never dismissed automatically and never enables Retry safely. Do not delete the local reference or repeat the purchase through chat; deleting a local file does not cancel or undo server effects.
 
 ### Important save boundary
 
@@ -116,7 +134,7 @@ The nearby map uses `ChunkKey.MAX_COORDINATE` for selectable cells. Unsupported 
 - **Map:** arrow keys select supported nearby cells; right-click copies a valid chunk.
 - **Escape / Back:** return to the previous screen or navigation entry; submitted operations remain owned globally.
 
-Status text is not conveyed by color alone. Review lines use text tags, selected rows use a marker, outcomes have explicit names, and disabled actions expose keyboard-accessible explanations. Standard controls, text panels, and multiline fields supply narration messages. Full status/validation screens also support copying.
+Status text is not conveyed by color alone. Review lines have readable labels, selected rows use a marker, outcomes have explicit names, and disabled actions expose keyboard-accessible explanations. Standard controls, text panels, and multiline fields supply narration messages. Full status/validation screens also support copying.
 
 ## Localization and extension contracts
 
@@ -129,7 +147,7 @@ English framework/menu entries are in `tools\translations\client.json`; the reso
 
 `UiText` keys and string arguments are rendered with `Component.translatable` when the key exists. Its fallback is already fully rendered and is used literally otherwise; the client does not format the fallback again. Player names and server domain prose remain literal unless the server supplies a `UiText` key.
 
-Integration hooks are `ClientHooks.session`, `reply`, `formReply`, `viewReply`, `previewReply`, `open`, and `territory`. The retained legacy watch hooks remain available. The client uses protocol 4's world-scoped `SuiteNetwork` request, preview, view, and operation-status contracts. Client and server modules must agree on the protocol. Presentation providers own entity rows and contextual action eligibility; the client never derives mutation commands by parsing those rows.
+Integration hooks include `ClientHooks.session`, `reply`, `formReply`, `viewReply`, `previewReply`, `dashboardReply`, `governmentReply`, `open`, and `territory`. The retained legacy watch hooks remain available. Protocol **6** adds bounded personal/government overview responses and represents absent state/city allocations explicitly while retaining national identity and named owners. Client and server modules must agree on the protocol. Presentation providers own entity rows, contextual eligibility and friendly guided-query text; the client never derives mutation commands by parsing those rows.
 
 ## Regression coverage
 

@@ -4,7 +4,7 @@ import java.util.Collection;
 import java.util.List;
 
 public enum MenuCategory {
-    OVERVIEW("Overview & Help", "World information, profiles and guides"),
+    OVERVIEW("Overview & Help", "Your dashboard, commands and recipes"),
     GOVERNMENTS("Governments", "Nations, states, cities and membership"),
     TERRITORY("Territory", "Claims, borders and property"),
     POLITICS("Politics", "Elections, laws, executive powers and diplomacy"),
@@ -31,7 +31,7 @@ public enum MenuCategory {
 
     public static MenuCategory of(String page) {
         return switch (page) {
-            case "statecraft:main", "statecraft:profile", "statecraft:help", "statecraft:dashboard", "economy:guide",
+            case "statecraft:main", "statecraft:profile", "statecraft:help", "statecraft:command_help", "statecraft:dashboard", "economy:guide",
                  "economy:dashboard", "statecraft:operations" -> OVERVIEW;
             case "statecraft:nations", "statecraft:states", "statecraft:cities", "statecraft:members",
                  "statecraft:officers", "statecraft:invitations" -> GOVERNMENTS;

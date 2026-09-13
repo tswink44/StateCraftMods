@@ -869,13 +869,13 @@ final class Commerce {
 
     void validateContractChunks(Contract contract) {
         Government government = e.gov(contract.governmentId);
-        Set<String> scope = e.subtree(government).stream().map(g -> g.id).collect(Collectors.toSet());
         Set<String> governmentAccounts = e.subtree(government).stream().map(e::account).collect(Collectors.toSet());
         check(!contract.chunks.isEmpty(), "Invalid contract chunk selection.");
         check(new HashSet<>(contract.chunks).size() == contract.chunks.size(), "Contract chunk selection contains duplicates.");
         for (String key : contract.chunks) {
             Claim claim = e.requiredClaim(key);
-            check(scope.contains(claim.cityId), "Contract chunks must lie within the issuing government's territory.");
+            check(e.viewableClaim(claim) && e.claimInGovernment(claim, government),
+                    "Contract chunks must lie within the issuing government's national territory or explicit state/city allocation.");
             check(governmentAccounts.contains(claim.ownerAccount), "Contract chunks must be government-owned, not privately owned.");
             check(!e.economy.isClaimEncumbered(key), "A selected contract chunk is encumbered by the economy.");
             check(!e.politics.claimLocked(key, null), "A selected contract chunk is reserved in a treaty.");

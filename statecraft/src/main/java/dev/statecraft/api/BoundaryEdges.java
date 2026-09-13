@@ -30,6 +30,7 @@ public final class BoundaryEdges {
                 .forEach(t -> chunks.put(new Coordinate(t.x(), t.z()), t));
         Map<Segment, Edge> edges = new LinkedHashMap<>();
         for (TerritorySnapshot.Territory territory : chunks.values()) {
+            if (mode == Mode.CITY && absent(territory.cityId()) || mode == Mode.STATE && absent(territory.stateId())) continue;
             int x = territory.x() * 16;
             int z = territory.z() * 16;
             if (boundaryAt(snapshot, chunks, territory, territory.x() - 1, territory.z(), mode)) {
@@ -66,10 +67,12 @@ public final class BoundaryEdges {
             return true;
         }
         return switch (mode) {
-            case CITY -> !first.cityId().equals(other.cityId());
-            case STATE -> !first.stateId().equals(other.stateId());
+            case CITY -> !java.util.Objects.equals(first.cityId(), other.cityId());
+            case STATE -> !java.util.Objects.equals(first.stateId(), other.stateId());
             case NATION -> !first.nationId().equals(other.nationId());
             default -> false;
         };
     }
+
+    private static boolean absent(String id) { return id == null || id.isEmpty(); }
 }
